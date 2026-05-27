@@ -1,0 +1,281 @@
+:root {
+  --background: #f6f7f9;
+  --foreground: #16202a;
+  --muted: #657282;
+  --panel: #ffffff;
+  --line: #dde3ea;
+  --primary: #0f766e;
+  --primary-dark: #115e59;
+  --accent: #b45309;
+  --danger: #b91c1c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #101418;
+    --foreground: #eef2f5;
+    --muted: #9aa7b4;
+    --panel: #171d24;
+    --line: #2a3541;
+    --primary: #14b8a6;
+    --primary-dark: #0d9488;
+    --accent: #f59e0b;
+    --danger: #f87171;
+  }
+}
+
+html {
+  height: 100%;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+body {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.workspace {
+  width: min(1120px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 40px 0;
+}
+
+.entry-layout {
+  min-height: calc(100vh - 80px);
+  display: grid;
+  grid-template-columns: 1fr 360px;
+  align-items: center;
+  gap: 40px;
+}
+
+.entry-copy h1,
+.room-topbar h1 {
+  margin-top: 8px;
+  font-size: clamp(32px, 5vw, 64px);
+  line-height: 1.05;
+}
+
+.lead {
+  max-width: 620px;
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.eyebrow {
+  color: var(--primary-dark);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 24px;
+  box-shadow: 0 8px 26px rgb(22 32 42 / 8%);
+}
+
+.entry-panel,
+.join-form {
+  display: grid;
+  gap: 18px;
+}
+
+.join-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+}
+
+input {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--foreground);
+  padding: 12px 14px;
+}
+
+.button {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 12px 16px;
+  cursor: pointer;
+  font-weight: 700;
+  transition: transform 120ms ease, background 120ms ease;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+}
+
+.button.primary {
+  background: var(--primary);
+  color: white;
+}
+
+.button.secondary {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--foreground);
+}
+
+.button.full {
+  width: 100%;
+}
+
+.room-topbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 12px;
+  color: var(--muted);
+  background: var(--panel);
+}
+
+.status-pill span,
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+
+.status-pill.connected span,
+.dot.online {
+  background: var(--primary);
+}
+
+.dot.offline {
+  background: var(--danger);
+}
+
+.room-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 340px);
+  gap: 18px;
+}
+
+.device-panel {
+  grid-column: 1 / -1;
+}
+
+.panel h2 {
+  margin: 8px 0 18px;
+  font-size: 28px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.code-line {
+  display: block;
+  margin: 6px 0 18px;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+
+.role-actions,
+.role-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.role-links a {
+  color: var(--primary-dark);
+  font-weight: 700;
+}
+
+.stat-row,
+.device-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--line);
+  padding: 14px 0;
+}
+
+.stat-row:first-of-type,
+.device-row:first-child {
+  border-top: 0;
+}
+
+.device-list {
+  margin-top: 10px;
+}
+
+.device-row code {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.device-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+@media (max-width: 760px) {
+  .workspace {
+    width: min(100vw - 24px, 1120px);
+    padding: 24px 0;
+  }
+
+  .entry-layout,
+  .room-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .room-topbar,
+  .device-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
