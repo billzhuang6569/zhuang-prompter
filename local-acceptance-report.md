@@ -1,6 +1,6 @@
 # Local Acceptance Report
 
-Generated: 2026-05-27T14:11:45.370Z
+Generated: 2026-05-27T14:18:38.930Z
 
 Overall: PASS
 
@@ -8,7 +8,7 @@ Overall: PASS
 | --- | --- | --- |
 | contract tests | PASS | 0s |
 | lint | PASS | 1s |
-| typecheck/build | PASS | 6s |
+| typecheck/build | PASS | 7s |
 | smoke:network | PASS | 0s |
 | smoke:m0 | PASS | 1s |
 | smoke:m2 | PASS | 1s |

@@ -83,6 +83,17 @@ type NetworkOrigin = {
   kind: "local" | "lan";
 };
 
+type WakeLockSentinelLike = EventTarget & {
+  released: boolean;
+  release: () => Promise<void>;
+};
+
+type WakeLockNavigator = Navigator & {
+  wakeLock?: {
+    request: (type: "screen") => Promise<WakeLockSentinelLike>;
+  };
+};
+
 export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const socketRef = useRef<WebSocket | null>(null);
   const sessionIdRef = useRef<string | null>(null);
@@ -90,6 +101,9 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const serverSeqRef = useRef(0);
   const playbackPositionRef = useRef(0);
   const clientSeqRef = useRef(0);
+  const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
+  const wakeLockReleaseHandlerRef = useRef<(() => void) | null>(null);
+  const wakeLockWantedRef = useRef(false);
   const [connection, setConnection] = useState<ConnectionState>("joining");
   const [joinResult, setJoinResult] = useState<RoomJoinResult | null>(null);
   const [roomState, setRoomState] = useState<RoomState | null>(null);
@@ -105,6 +119,9 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [playerFontScale, setPlayerFontScale] = useState(1);
   const [playerOverlayHidden, setPlayerOverlayHidden] = useState(false);
   const [fullscreenActive, setFullscreenActive] = useState(false);
+  const [wakeLockWanted, setWakeLockWanted] = useState(false);
+  const [wakeLockActive, setWakeLockActive] = useState(false);
+  const [wakeLockStatus, setWakeLockStatus] = useState("");
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
   const selectedRole = preferredRole(mode);
@@ -550,6 +567,95 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     return () => document.removeEventListener("fullscreenchange", updateFullscreenState);
   }, [mode]);
 
+  const detachWakeLock = useCallback(() => {
+    const sentinel = wakeLockRef.current;
+    const handler = wakeLockReleaseHandlerRef.current;
+    if (sentinel && handler) {
+      sentinel.removeEventListener("release", handler);
+    }
+    wakeLockRef.current = null;
+    wakeLockReleaseHandlerRef.current = null;
+  }, []);
+
+  const releaseWakeLock = useCallback(async () => {
+    const sentinel = wakeLockRef.current;
+    detachWakeLock();
+    if (sentinel && !sentinel.released) {
+      await sentinel.release().catch(() => undefined);
+    }
+  }, [detachWakeLock]);
+
+  const requestWakeLock = useCallback(async () => {
+    const wakeLock = (navigator as WakeLockNavigator).wakeLock;
+    if (!wakeLock) {
+      setWakeLockActive(false);
+      setWakeLockStatus("当前浏览器不支持保持亮屏");
+      return false;
+    }
+
+    try {
+      await releaseWakeLock();
+      const sentinel = await wakeLock.request("screen");
+      const handleRelease = () => {
+        detachWakeLock();
+        setWakeLockActive(false);
+        setWakeLockStatus(wakeLockWantedRef.current ? "亮屏权限已暂停，回到页面后会重试" : "保持亮屏已关闭");
+      };
+
+      wakeLockRef.current = sentinel;
+      wakeLockReleaseHandlerRef.current = handleRelease;
+      sentinel.addEventListener("release", handleRelease);
+      setWakeLockActive(true);
+      setWakeLockStatus("保持亮屏已开启");
+      return true;
+    } catch {
+      setWakeLockActive(false);
+      setWakeLockStatus("保持亮屏开启失败，请先与页面互动后重试");
+      return false;
+    }
+  }, [detachWakeLock, releaseWakeLock]);
+
+  useEffect(() => {
+    if (mode !== "player") {
+      return;
+    }
+
+    function retryWakeLockWhenVisible() {
+      if (document.visibilityState === "visible" && wakeLockWantedRef.current && !wakeLockRef.current) {
+        void requestWakeLock();
+      }
+    }
+
+    document.addEventListener("visibilitychange", retryWakeLockWhenVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", retryWakeLockWhenVisible);
+      wakeLockWantedRef.current = false;
+      setWakeLockWanted(false);
+      setWakeLockActive(false);
+      void releaseWakeLock();
+    };
+  }, [mode, releaseWakeLock, requestWakeLock]);
+
+  async function toggleWakeLock() {
+    if (wakeLockWantedRef.current) {
+      wakeLockWantedRef.current = false;
+      setWakeLockWanted(false);
+      setWakeLockActive(false);
+      setWakeLockStatus("保持亮屏已关闭");
+      await releaseWakeLock();
+      return;
+    }
+
+    wakeLockWantedRef.current = true;
+    setWakeLockWanted(true);
+    setWakeLockStatus("正在请求保持亮屏");
+    const granted = await requestWakeLock();
+    if (!granted) {
+      wakeLockWantedRef.current = false;
+      setWakeLockWanted(false);
+    }
+  }
+
   async function toggleFullscreen() {
     if (document.fullscreenElement) {
       await document.exitFullscreen();
@@ -598,6 +704,10 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             <button className="player-tool-button" type="button" onClick={() => void toggleFullscreen()}>
               {fullscreenActive ? "退出全屏" : "全屏"}
             </button>
+            <button className="player-tool-button" type="button" aria-pressed={wakeLockWanted} onClick={() => void toggleWakeLock()}>
+              {wakeLockActive ? "亮屏中" : "保持亮屏"}
+            </button>
+            {wakeLockStatus && <small className="player-wake-status">{wakeLockStatus}</small>}
             <button className="player-tool-button" type="button" onClick={() => setPlayerOverlayHidden(true)}>
               隐藏状态
             </button>

@@ -46,6 +46,7 @@ Observed flow:
 - Room code and connection state remained visible as a compact top overlay.
 - CJK headline, marker, stage cue, and body text were readable at shooting size.
 - Player font control changed the stage from `100%` to `110%`.
+- Player `保持亮屏` control was visible in Safari room `114210`; after clicking it, the control changed to `亮屏中` and showed `保持亮屏已开启`.
 - Hide status left only a compact `显示状态` reveal button over the stage.
 - Device, RoomState, and same-network entry panels remained available below the stage.
 
@@ -74,12 +75,13 @@ Observed flow:
 7. Confirm both devices are online in the control device list.
 8. Press Play, Pause, Speed, and each marker jump from control.
 9. Press `回退 160px` and `前进 160px`, then confirm the player view moves without jumping back to the top.
-10. Confirm the player view updates without reloading and the control view shows player playback reports.
-11. Edit the markdown draft, save the draft, save a version, and restore the version.
-12. Confirm the player page receives saved draft/version/restore changes without refreshing.
-13. Refresh the player page and confirm it rejoins with the full RoomState.
-14. Keep the session running for 10 minutes before a real shoot.
-15. During a device pass, briefly toggle Wi-Fi off/on or background/foreground iPad Safari and confirm the status returns to `已连接` without refreshing.
+10. On the player page, press `保持亮屏`; confirm the browser either enters `亮屏中` or shows a graceful unsupported/permission message.
+11. Confirm the player view updates without reloading and the control view shows player playback reports.
+12. Edit the markdown draft, save the draft, save a version, and restore the version.
+13. Confirm the player page receives saved draft/version/restore changes without refreshing.
+14. Refresh the player page and confirm it rejoins with the full RoomState.
+15. Keep the session running for 10 minutes before a real shoot.
+16. During a device pass, briefly toggle Wi-Fi off/on or background/foreground iPad Safari and confirm the status returns to `已连接` without refreshing.
 
 For an automated 10-minute stability pass, run `pnpm smoke:m5:session:10min` while `pnpm dev` is running.
 

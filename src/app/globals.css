@@ -577,6 +577,7 @@ input {
 .player-stage-controls {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   color: #d4d4d4;
   font-size: 13px;
@@ -598,6 +599,12 @@ input {
   z-index: 30;
   top: 14px;
   right: 14px;
+}
+
+.player-wake-status {
+  max-width: 180px;
+  color: #a3a3a3;
+  line-height: 1.25;
 }
 
 .player-overlay-hidden .room-topbar {
@@ -705,6 +712,11 @@ input {
 
   .player-tool-button {
     padding: 8px 10px;
+  }
+
+  .player-wake-status {
+    max-width: min(100%, 240px);
+    text-align: center;
   }
 
   .teleprompter-content {
