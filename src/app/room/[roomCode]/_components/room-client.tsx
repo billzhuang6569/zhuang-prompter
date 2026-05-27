@@ -434,6 +434,43 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     sendEvent("playback.setScrollClock", payload);
   }
 
+  function currentControlOffset() {
+    const clock = roomState?.scrollClock;
+    if (clock?.state === "playing") {
+      const elapsedSeconds = Math.max(0, Date.now() - clock.issuedAt) / 1000;
+      return Math.max(0, clock.offsetPx + elapsedSeconds * clock.velocityPxPerSecond);
+    }
+    if (clock) {
+      return Math.max(0, clock.offsetPx);
+    }
+    const reportedPosition = playerReports[0]?.playbackState?.positionPx;
+    if (typeof reportedPosition === "number") {
+      return Math.max(0, reportedPosition);
+    }
+    return Math.max(0, playbackPositionPx);
+  }
+
+  function pauseAtCurrentOffset() {
+    const offset = currentControlOffset();
+    setPlaybackPositionPx(offset);
+    playbackPositionRef.current = offset;
+    sendScrollClock("paused", offset, 0);
+  }
+
+  function playFromCurrentOffset(nextSpeed = speed) {
+    const offset = currentControlOffset();
+    setPlaybackPositionPx(offset);
+    playbackPositionRef.current = offset;
+    sendScrollClock("playing", offset, nextSpeed);
+  }
+
+  function nudgePlayback(deltaPx: number) {
+    const offset = Math.max(0, currentControlOffset() + deltaPx);
+    setPlaybackPositionPx(offset);
+    playbackPositionRef.current = offset;
+    sendScrollClock("paused", offset, 0);
+  }
+
   function jumpToMarker(markerId: string) {
     const marker = bundle?.markerIndex.find((item) => item.markerId === markerId);
     if (!marker) {
@@ -697,10 +734,10 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             <p className="eyebrow">M2 Playback Intent</p>
             <h2>播放控制</h2>
             <div className="role-actions">
-              <button className="button primary" onClick={() => sendScrollClock("playing")}>
+              <button className="button primary" onClick={() => playFromCurrentOffset()}>
                 播放
               </button>
-              <button className="button secondary" onClick={() => sendScrollClock("paused", playbackPositionPx, 0)}>
+              <button className="button secondary" onClick={pauseAtCurrentOffset}>
                 暂停
               </button>
               <button
@@ -708,10 +745,18 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
                 onClick={() => {
                   const nextSpeed = speed === DEFAULT_SPEED ? 96 : DEFAULT_SPEED;
                   setSpeed(nextSpeed);
-                  sendScrollClock("playing", playbackPositionPx, nextSpeed);
+                  playFromCurrentOffset(nextSpeed);
                 }}
               >
                 速度 {speed}px/s
+              </button>
+            </div>
+            <div className="marker-buttons">
+              <button className="button secondary" onClick={() => nudgePlayback(-160)}>
+                回退 160px
+              </button>
+              <button className="button secondary" onClick={() => nudgePlayback(160)}>
+                前进 160px
               </button>
             </div>
             <div className="marker-buttons">

@@ -100,17 +100,50 @@ async function main() {
   );
   await sleep(250);
 
+  const pauseOffset = 260;
+  controlSocket.send(
+    makeEvent("playback.setScrollClock", created.deviceId, "sess_control", 3, 0, {
+      scrollClock: {
+        ...scrollClock,
+        scrollClockId: `clk_${crypto.randomUUID()}`,
+        state: "paused",
+        offsetPx: pauseOffset,
+        velocityPxPerSecond: 0,
+        issuedAt: Date.now(),
+      },
+    }),
+  );
+  await sleep(150);
+
+  const nudgeOffset = 420;
+  controlSocket.send(
+    makeEvent("playback.setScrollClock", created.deviceId, "sess_control", 4, 0, {
+      scrollClock: {
+        ...scrollClock,
+        scrollClockId: `clk_${crypto.randomUUID()}`,
+        state: "paused",
+        offsetPx: nudgeOffset,
+        velocityPxPerSecond: 0,
+        issuedAt: Date.now(),
+      },
+    }),
+  );
+  await sleep(150);
+
   controlSocket.close();
   playerSocket.close();
 
   const latest = [...seen].reverse().find(([, event]) => event.state?.scrollClock)?.[1].state;
   const reports = latest ? Object.values(latest.devices).filter((device) => device.playbackState) : [];
 
-  if (!latest?.scrollClock || latest.scrollClock.state !== "playing") {
+  if (!latest?.scrollClock || latest.scrollClock.state !== "paused") {
     throw new Error("ScrollClock was not accepted into RoomState.");
   }
   if (reports.length === 0) {
     throw new Error("No PlaybackState report was observed in RoomState.");
+  }
+  if (latest.scrollClock.offsetPx !== nudgeOffset || latest.scrollClock.velocityPxPerSecond !== 0) {
+    throw new Error("Manual pause/nudge ScrollClock offset was not preserved in RoomState.");
   }
 
   console.log(
@@ -119,6 +152,7 @@ async function main() {
         ok: true,
         roomCode: created.roomCode,
         scrollClockState: latest.scrollClock.state,
+        scrollClockOffsetPx: latest.scrollClock.offsetPx,
         roomRevision: latest.roomRevision,
         serverSeq: latest.serverSeq,
         reports: reports.map((device) => ({

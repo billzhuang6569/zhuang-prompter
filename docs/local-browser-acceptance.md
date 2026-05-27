@@ -73,12 +73,13 @@ Observed flow:
 6. If using iPad Safari, type the LAN player URL from the room page or the terminal output. `localhost` only works on the Mac itself.
 7. Confirm both devices are online in the control device list.
 8. Press Play, Pause, Speed, and each marker jump from control.
-9. Confirm the player view updates without reloading and the control view shows player playback reports.
-10. Edit the markdown draft, save the draft, save a version, and restore the version.
-11. Confirm the player page receives saved draft/version/restore changes without refreshing.
-12. Refresh the player page and confirm it rejoins with the full RoomState.
-13. Keep the session running for 10 minutes before a real shoot.
-14. During a device pass, briefly toggle Wi-Fi off/on or background/foreground iPad Safari and confirm the status returns to `已连接` without refreshing.
+9. Press `回退 160px` and `前进 160px`, then confirm the player view moves without jumping back to the top.
+10. Confirm the player view updates without reloading and the control view shows player playback reports.
+11. Edit the markdown draft, save the draft, save a version, and restore the version.
+12. Confirm the player page receives saved draft/version/restore changes without refreshing.
+13. Refresh the player page and confirm it rejoins with the full RoomState.
+14. Keep the session running for 10 minutes before a real shoot.
+15. During a device pass, briefly toggle Wi-Fi off/on or background/foreground iPad Safari and confirm the status returns to `已连接` without refreshing.
 
 For an automated 10-minute stability pass, run `pnpm smoke:m5:session:10min` while `pnpm dev` is running.
 

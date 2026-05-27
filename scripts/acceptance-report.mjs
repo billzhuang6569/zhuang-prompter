@@ -98,7 +98,7 @@ ${results.map(summarize).join("\n")}
 - M0 room, role, device identity, presence.
 - Local network entry discovery for same-Wi-Fi device testing.
 - M1 Markdown RenderBundle contract.
-- M2 ScrollClock intent and PlaybackState report loop.
+- M2 ScrollClock play, pause, nudge intent, and PlaybackState report loop.
 - M3 draft save, version save, list, restore, and room broadcast without deleting history.
 - M4 active voice source, transcript match, locked voiceFollow ScrollClock.
 - M5 reconnect full-state recovery and configurable stability session.

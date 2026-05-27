@@ -39,6 +39,8 @@ Control and player clients automatically retry the WebSocket connection after a 
 
 Script draft, version save, and version restore actions broadcast the updated RoomState to connected room clients so the player can refresh without a manual reload.
 
+Control playback uses the current ScrollClock position for pause, speed changes, and 160px forward/back nudges, so live adjustments do not jump back to a stale local offset.
+
 ## Verification
 
 ```bash
