@@ -12,12 +12,12 @@ import type {
   SetScrollClockPayload,
 } from "@/shared/protocol";
 import type { RenderBundle } from "@/modules/script-engine";
+import { parseMarkdown } from "@/modules/script-engine";
 import { RenderBundleView } from "./render-bundle-view";
 
 type RoomClientProps = {
   roomCode: string;
   mode: "select-role" | "control" | "player";
-  bundle?: RenderBundle;
 };
 
 type ConnectionState = "joining" | "connecting" | "connected" | "disconnected" | "not-found";
@@ -69,7 +69,15 @@ function currentTime() {
   return Date.now();
 }
 
-export function RoomClient({ roomCode, mode, bundle }: RoomClientProps) {
+type VersionSummary = {
+  versionId: string;
+  message?: string;
+  createdAt: number;
+  markerCount: number;
+  markdownLength: number;
+};
+
+export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const socketRef = useRef<WebSocket | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const roomRevisionRef = useRef(0);
@@ -81,10 +89,20 @@ export function RoomClient({ roomCode, mode, bundle }: RoomClientProps) {
   const [lastAck, setLastAck] = useState<string>("尚未发送事件");
   const [playbackPositionPx, setPlaybackPositionPx] = useState(0);
   const [speed, setSpeed] = useState(DEFAULT_SPEED);
+  const [markdown, setMarkdown] = useState("");
+  const [draftStatus, setDraftStatus] = useState("草稿未加载");
+  const [versionMessage, setVersionMessage] = useState("");
+  const [versions, setVersions] = useState<VersionSummary[]>([]);
 
   const selectedRole = preferredRole(mode);
   const selfDevice = roomState && joinResult ? roomState.devices[joinResult.deviceId] : null;
   const playerReports = devicesWithPlayback(roomState);
+  const bundle = useMemo<RenderBundle | undefined>(() => {
+    if (!markdown) {
+      return undefined;
+    }
+    return parseMarkdown(markdown, { scriptVersionId: roomState?.currentScriptVersionId ?? "draft" });
+  }, [markdown, roomState?.currentScriptVersionId]);
 
   const sendEvent = useCallback(
     <TPayload,>(type: ClientEnvelope<TPayload>["type"], payload: TPayload) => {
@@ -152,6 +170,82 @@ export function RoomClient({ roomCode, mode, bundle }: RoomClientProps) {
       alive = false;
     };
   }, [roomCode]);
+
+  const loadDraftAndVersions = useCallback(async () => {
+    const [draftResponse, versionsResponse] = await Promise.all([
+      fetch(`/api/rooms/${roomCode}/script/draft`),
+      fetch(`/api/rooms/${roomCode}/script/versions`),
+    ]);
+    if (draftResponse.ok) {
+      const draft = (await draftResponse.json()) as { markdown: string; draftRevision: number; parseStatus: string };
+      setMarkdown(draft.markdown);
+      setDraftStatus(`draft rev ${draft.draftRevision} · ${draft.parseStatus}`);
+    }
+    if (versionsResponse.ok) {
+      const data = (await versionsResponse.json()) as { versions: VersionSummary[] };
+      setVersions(data.versions);
+    }
+  }, [roomCode]);
+
+  useEffect(() => {
+    if (!joinResult) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void loadDraftAndVersions();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [joinResult, loadDraftAndVersions]);
+
+  async function saveDraft() {
+    if (!joinResult) {
+      return;
+    }
+    const response = await fetch(`/api/rooms/${roomCode}/script/draft`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ deviceId: joinResult.deviceId, markdown }),
+    });
+    if (response.ok) {
+      const data = (await response.json()) as { roomState: RoomState };
+      setRoomState(data.roomState);
+      setDraftStatus(`draft rev ${data.roomState.scriptDraft.draftRevision} · ${data.roomState.scriptDraft.parseStatus}`);
+    }
+  }
+
+  async function saveVersion() {
+    if (!joinResult) {
+      return;
+    }
+    await saveDraft();
+    const response = await fetch(`/api/rooms/${roomCode}/script/versions`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ deviceId: joinResult.deviceId, message: versionMessage || "现场保存" }),
+    });
+    if (response.ok) {
+      setVersionMessage("");
+      await loadDraftAndVersions();
+    }
+  }
+
+  async function restoreVersion(versionId: string) {
+    if (!joinResult) {
+      return;
+    }
+    const response = await fetch(`/api/rooms/${roomCode}/script/restore`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ deviceId: joinResult.deviceId, versionId }),
+    });
+    if (response.ok) {
+      const data = (await response.json()) as { roomState: RoomState; draft: { markdown: string } };
+      setRoomState(data.roomState);
+      setMarkdown(data.draft.markdown);
+      setDraftStatus(`restored · draft rev ${data.roomState.scriptDraft.draftRevision}`);
+      await loadDraftAndVersions();
+    }
+  }
 
   useEffect(() => {
     if (!joinResult) {
@@ -390,7 +484,54 @@ export function RoomClient({ roomCode, mode, bundle }: RoomClientProps) {
             <span>ScrollClock</span>
             <strong>{roomState?.scrollClock?.state ?? "-"}</strong>
           </div>
+          <div className="stat-row">
+            <span>Draft</span>
+            <strong>{roomState?.scriptDraft.draftRevision ?? "-"}</strong>
+          </div>
+          <div className="stat-row">
+            <span>Version</span>
+            <strong>{roomState?.currentScriptVersionId ? "saved" : "draft"}</strong>
+          </div>
         </div>
+
+        {mode === "control" && (
+          <div className="panel editor-panel">
+            <p className="eyebrow">M3 Script Draft</p>
+            <h2>文稿编辑与版本</h2>
+            <p className="muted">{draftStatus}</p>
+            <textarea value={markdown} onChange={(event) => setMarkdown(event.target.value)} />
+            <div className="role-actions">
+              <button className="button secondary" onClick={saveDraft}>
+                保存草稿
+              </button>
+              <input
+                aria-label="版本备注"
+                value={versionMessage}
+                onChange={(event) => setVersionMessage(event.target.value)}
+                placeholder="版本备注"
+              />
+              <button className="button primary" onClick={saveVersion}>
+                保存版本
+              </button>
+            </div>
+            <div className="version-list">
+              {versions.map((version) => (
+                <div className="version-row" key={version.versionId}>
+                  <div>
+                    <strong>{version.message ?? "未命名版本"}</strong>
+                    <small>
+                      {new Date(version.createdAt).toLocaleTimeString("zh-CN")} · {version.markerCount} markers ·{" "}
+                      {version.markdownLength} chars
+                    </small>
+                  </div>
+                  <button className="button secondary" onClick={() => restoreVersion(version.versionId)}>
+                    恢复
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {mode === "control" && bundle && (
           <div className="panel playback-panel">

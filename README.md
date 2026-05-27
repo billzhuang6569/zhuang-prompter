@@ -32,6 +32,7 @@ pnpm typecheck
 pnpm test:contracts
 pnpm smoke:m0
 pnpm smoke:m2
+pnpm smoke:m3
 ```
 
 Run smoke tests while `pnpm dev` is running.

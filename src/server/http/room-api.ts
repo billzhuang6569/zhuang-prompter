@@ -1,5 +1,13 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { createRoom, joinRoom } from "../../modules/room-sync/room-store";
+import {
+  createRoom,
+  getScriptDraft,
+  joinRoom,
+  listScriptVersions,
+  restoreScriptVersion,
+  saveScriptVersion,
+  updateScriptDraft,
+} from "../../modules/room-sync/room-store";
 
 async function readJson(request: IncomingMessage) {
   const chunks: Buffer[] = [];
@@ -42,6 +50,74 @@ export async function handleRoomApi(request: IncomingMessage, response: ServerRe
     }
 
     writeJson(response, 200, result);
+    return true;
+  }
+
+  const draftMatch = url.pathname.match(/^\/api\/rooms\/([^/]+)\/script\/draft$/);
+  if (draftMatch && request.method === "GET") {
+    const draft = getScriptDraft(draftMatch[1]);
+    if (!draft) {
+      writeJson(response, 404, { message: "Room not found." });
+      return true;
+    }
+    writeJson(response, 200, draft);
+    return true;
+  }
+
+  if (draftMatch && request.method === "POST") {
+    const body = await readJson(request);
+    const state = updateScriptDraft({
+      roomCode: draftMatch[1],
+      deviceId: typeof body.deviceId === "string" ? body.deviceId : "unknown",
+      markdown: typeof body.markdown === "string" ? body.markdown : "",
+    });
+    if (!state) {
+      writeJson(response, 404, { message: "Room not found." });
+      return true;
+    }
+    writeJson(response, 200, { draft: state.scriptDraft, roomState: state });
+    return true;
+  }
+
+  const versionsMatch = url.pathname.match(/^\/api\/rooms\/([^/]+)\/script\/versions$/);
+  if (versionsMatch && request.method === "GET") {
+    const versions = listScriptVersions(versionsMatch[1]);
+    if (!versions) {
+      writeJson(response, 404, { message: "Room not found." });
+      return true;
+    }
+    writeJson(response, 200, { versions });
+    return true;
+  }
+
+  if (versionsMatch && request.method === "POST") {
+    const body = await readJson(request);
+    const version = saveScriptVersion({
+      roomCode: versionsMatch[1],
+      deviceId: typeof body.deviceId === "string" ? body.deviceId : "unknown",
+      message: typeof body.message === "string" ? body.message : undefined,
+    });
+    if (!version) {
+      writeJson(response, 404, { message: "Room not found." });
+      return true;
+    }
+    writeJson(response, 201, { version });
+    return true;
+  }
+
+  const restoreMatch = url.pathname.match(/^\/api\/rooms\/([^/]+)\/script\/restore$/);
+  if (restoreMatch && request.method === "POST") {
+    const body = await readJson(request);
+    const state = restoreScriptVersion({
+      roomCode: restoreMatch[1],
+      deviceId: typeof body.deviceId === "string" ? body.deviceId : "unknown",
+      versionId: typeof body.versionId === "string" ? body.versionId : "",
+    });
+    if (!state) {
+      writeJson(response, 404, { message: "Version not found." });
+      return true;
+    }
+    writeJson(response, 200, { draft: state.scriptDraft, roomState: state });
     return true;
   }
 

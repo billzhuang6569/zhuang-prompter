@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import remarkDirective from "remark-directive";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
@@ -349,7 +348,12 @@ function normalizeSpeech(value: string) {
 }
 
 function hashText(value: string) {
-  return createHash("sha1").update(value).digest("hex").slice(0, 12);
+  let hash = 0x811c9dc5;
+  for (const char of value) {
+    hash ^= char.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(12, "0").slice(0, 12);
 }
 
 function warnLongTokens(text: string, sourceRange: SourceRange, warnings: ParseWarning[]) {

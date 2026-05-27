@@ -42,6 +42,33 @@ export type PlaybackState = {
   serverReceivedAt?: number;
 };
 
+export type ScriptDraft = {
+  draftId: string;
+  roomId: string;
+  markdown: string;
+  updatedBy: string;
+  updatedAt: number;
+  draftRevision: number;
+  parseStatus: "valid" | "warning" | "error";
+};
+
+export type ScriptVersion = {
+  versionId: string;
+  roomId: string;
+  markdown: string;
+  message?: string;
+  displayConfigSnapshot: null;
+  markerIndexSnapshot: Array<{
+    markerId: string;
+    type: string;
+    label?: string;
+    note?: string;
+  }>;
+  contentHash: string;
+  createdBy: string;
+  createdAt: number;
+};
+
 export type DevicePresence = {
   deviceId: string;
   sessionId: string | null;
@@ -64,8 +91,10 @@ export type RoomState = {
   roomId: string;
   roomCode: string;
   status: "active" | "closed";
-  currentScriptVersionId: null;
-  currentDraftId: null;
+  currentScriptVersionId: string | null;
+  currentDraftId: string;
+  scriptDraft: ScriptDraft;
+  scriptVersions: ScriptVersion[];
   currentControlMode: ControlMode;
   displayConfig: null;
   scrollClock: ScrollClock | null;

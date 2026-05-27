@@ -1,4 +1,14 @@
-import type { DevicePresence, DeviceRole, PlaybackState, RoomJoinResult, RoomState, ScrollClock } from "../../domain/room/types";
+import type {
+  DevicePresence,
+  DeviceRole,
+  PlaybackState,
+  RoomJoinResult,
+  RoomState,
+  ScriptDraft,
+  ScriptVersion,
+  ScrollClock,
+} from "../../domain/room/types";
+import { extensionSpecFixture, parseMarkdown } from "../script-engine";
 
 const OFFLINE_AFTER_MS = 30_000;
 
@@ -43,6 +53,39 @@ function createDevicePresence(deviceId: string, at: number): DevicePresence {
   };
 }
 
+function hashContent(markdown: string) {
+  let hash = 0x811c9dc5;
+  for (const char of markdown) {
+    hash ^= char.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function createDraft(roomId: string, deviceId: string, at: number, markdown = extensionSpecFixture): ScriptDraft {
+  return {
+    draftId: `draft_${crypto.randomUUID()}`,
+    roomId,
+    markdown,
+    updatedBy: deviceId,
+    updatedAt: at,
+    draftRevision: 1,
+    parseStatus: "valid",
+  };
+}
+
+function summarizeVersion(version: ScriptVersion) {
+  return {
+    versionId: version.versionId,
+    message: version.message,
+    createdBy: version.createdBy,
+    createdAt: version.createdAt,
+    contentHash: version.contentHash,
+    markerCount: version.markerIndexSnapshot.length,
+    markdownLength: version.markdown.length,
+  };
+}
+
 function cloneState(state: RoomState): RoomState {
   return structuredClone(state);
 }
@@ -79,12 +122,15 @@ export function createRoom(): RoomJoinResult {
   const roomId = `room_${crypto.randomUUID()}`;
   const deviceId = `dev_${crypto.randomUUID()}`;
   const joinToken = `join_${crypto.randomUUID()}`;
+  const scriptDraft = createDraft(roomId, deviceId, at);
   const state: RoomState = {
     roomId,
     roomCode,
     status: "active",
     currentScriptVersionId: null,
-    currentDraftId: null,
+    currentDraftId: scriptDraft.draftId,
+    scriptDraft,
+    scriptVersions: [],
     currentControlMode: "fixedSpeed",
     displayConfig: null,
     scrollClock: null,
@@ -152,6 +198,113 @@ export function getRoomState(roomCode: string): RoomState | null {
     return null;
   }
   markExpiredDevices(record);
+  return cloneState(record.state);
+}
+
+export function getScriptDraft(roomCode: string): ScriptDraft | null {
+  const record = roomsByCode.get(roomCode);
+  if (!record) {
+    return null;
+  }
+  return structuredClone(record.state.scriptDraft);
+}
+
+export function updateScriptDraft(input: {
+  roomCode: string;
+  deviceId: string;
+  markdown: string;
+}): RoomState | null {
+  const record = roomsByCode.get(input.roomCode);
+  if (!record) {
+    return null;
+  }
+
+  const at = now();
+  record.state.scriptDraft = {
+    ...record.state.scriptDraft,
+    markdown: input.markdown,
+    updatedBy: input.deviceId,
+    updatedAt: at,
+    draftRevision: record.state.scriptDraft.draftRevision + 1,
+    parseStatus: parseMarkdown(input.markdown).parseWarnings.length > 0 ? "warning" : "valid",
+  };
+  record.state.currentDraftId = record.state.scriptDraft.draftId;
+  record.state.currentScriptVersionId = null;
+  record.state.scrollClock = null;
+  bumpRoomFact(record, at);
+  return cloneState(record.state);
+}
+
+export function saveScriptVersion(input: {
+  roomCode: string;
+  deviceId: string;
+  message?: string;
+}): ScriptVersion | null {
+  const record = roomsByCode.get(input.roomCode);
+  if (!record) {
+    return null;
+  }
+
+  const at = now();
+  const bundle = parseMarkdown(record.state.scriptDraft.markdown);
+  const version: ScriptVersion = {
+    versionId: `ver_${crypto.randomUUID()}`,
+    roomId: record.state.roomId,
+    markdown: record.state.scriptDraft.markdown,
+    message: input.message,
+    displayConfigSnapshot: null,
+    markerIndexSnapshot: bundle.markerIndex.map((marker) => ({
+      markerId: marker.markerId,
+      type: marker.type,
+      label: marker.label,
+      note: marker.note,
+    })),
+    contentHash: hashContent(record.state.scriptDraft.markdown),
+    createdBy: input.deviceId,
+    createdAt: at,
+  };
+  record.state.scriptVersions.unshift(version);
+  record.state.currentScriptVersionId = version.versionId;
+  bumpRoomFact(record, at);
+  return structuredClone(version);
+}
+
+export function listScriptVersions(roomCode: string) {
+  const record = roomsByCode.get(roomCode);
+  if (!record) {
+    return null;
+  }
+  return record.state.scriptVersions.map(summarizeVersion);
+}
+
+export function restoreScriptVersion(input: {
+  roomCode: string;
+  deviceId: string;
+  versionId: string;
+}): RoomState | null {
+  const record = roomsByCode.get(input.roomCode);
+  if (!record) {
+    return null;
+  }
+  const version = record.state.scriptVersions.find((candidate) => candidate.versionId === input.versionId);
+  if (!version) {
+    return null;
+  }
+
+  const at = now();
+  record.state.scriptDraft = {
+    draftId: `draft_${crypto.randomUUID()}`,
+    roomId: record.state.roomId,
+    markdown: version.markdown,
+    updatedBy: input.deviceId,
+    updatedAt: at,
+    draftRevision: record.state.scriptDraft.draftRevision + 1,
+    parseStatus: parseMarkdown(version.markdown).parseWarnings.length > 0 ? "warning" : "valid",
+  };
+  record.state.currentDraftId = record.state.scriptDraft.draftId;
+  record.state.currentScriptVersionId = version.versionId;
+  record.state.scrollClock = null;
+  bumpRoomFact(record, at);
   return cloneState(record.state);
 }
 

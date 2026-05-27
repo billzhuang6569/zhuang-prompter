@@ -204,6 +204,24 @@ input {
   grid-column: 1 / -1;
 }
 
+.editor-panel {
+  grid-column: 1 / -1;
+}
+
+.editor-panel textarea {
+  width: 100%;
+  min-height: 320px;
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--foreground);
+  padding: 14px;
+  resize: vertical;
+  font-family: var(--font-geist-mono), "SFMono-Regular", Consolas, monospace;
+  line-height: 1.6;
+}
+
 .panel h2 {
   margin: 8px 0 18px;
   font-size: 28px;
@@ -449,6 +467,32 @@ input {
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 8px 10px;
+  color: var(--muted);
+}
+
+.version-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.version-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.version-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.version-row small {
+  display: block;
+  margin-top: 4px;
   color: var(--muted);
 }
 
