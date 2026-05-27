@@ -41,7 +41,7 @@ Script draft, version save, and version restore actions broadcast the updated Ro
 
 Control playback uses the current ScrollClock position for pause, speed changes, and 160px forward/back nudges, so live adjustments do not jump back to a stale local offset.
 
-The control route includes a field-check panel that summarizes same-network entry, control connection, player presence, fresh playback reports, and reconnect observation status during real-device testing. It also includes a local `测试断线重连` button for exercising the WebSocket recovery path without opening developer tools.
+The control route includes a field-check panel that summarizes same-network entry, control connection, player presence, fresh playback reports, reconnect observation status, and 10-minute session monitoring during real-device testing. It also includes a local `测试断线重连` button for exercising the WebSocket recovery path without opening developer tools.
 
 ## Verification
 

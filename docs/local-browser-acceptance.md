@@ -107,6 +107,19 @@ Observed flow:
 - The control status briefly left the connected state, then returned to `已连接`.
 - The `现场验收` panel marked `重连观察` as passed with `已尝试重连 1 次，当前 已恢复`.
 
+## Latest 10-Minute Monitor UI Pass
+
+Date: 2026-05-27
+
+Result: PASS for rendered control-side 10-minute session monitor.
+
+Observed flow:
+
+- Opened `/room/610821/control` through local headless Chrome rendering.
+- The `现场验收` panel rendered `开始10分钟监测`, `重置监测`, and `测试断线重连`.
+- The panel included a `10分钟运行` row.
+- Before starting the monitor, the row showed the expected pending prompt: keep the player running to `10:00`.
+
 ## Repeatable Manual Pass
 
 1. Start the app with `pnpm dev`.
@@ -117,17 +130,19 @@ Observed flow:
 6. Open the player URL in another browser, a private window, or iPad Safari on the same Wi-Fi so it becomes a separate device.
 7. If using iPad Safari, scan the LAN player QR code or type the LAN player URL from the room page. `localhost` only works on the Mac itself.
 8. Confirm the control page's `现场验收` panel marks `局域网入口`, `控制端连接`, and `播放端在线` as passed.
-9. Press Play, Pause, Speed, and each marker jump from control.
-10. Press `回退 160px` and `前进 160px`, then confirm the player view moves without jumping back to the top.
-11. Confirm the `现场验收` panel marks `播放回报` as passed after the player starts reporting position.
-12. On the player page, press `保持亮屏`; confirm the browser either enters `亮屏中` or shows a graceful unsupported/permission message.
-13. Edit the markdown draft, save the draft, save a version, and restore the version.
-14. Confirm the player page receives saved draft/version/restore changes without refreshing.
-15. Refresh the player page and confirm it rejoins with the full RoomState.
-16. Keep the session running for 10 minutes before a real shoot.
-17. Press `测试断线重连` in the control page's `现场验收` panel and confirm the page returns to `已连接` without refreshing.
-18. During a device pass, briefly toggle Wi-Fi off/on or background/foreground iPad Safari and confirm the status returns to `已连接` without refreshing.
-19. Confirm the `现场验收` panel updates `重连观察` after either reconnect path has been exercised.
+9. Press `开始10分钟监测` in the `现场验收` panel.
+10. Press Play, Pause, Speed, and each marker jump from control.
+11. Press `回退 160px` and `前进 160px`, then confirm the player view moves without jumping back to the top.
+12. Confirm the `现场验收` panel marks `播放回报` as passed after the player starts reporting position.
+13. Confirm the `10分钟运行` row counts elapsed time and playback reports, and does not show `检测到位置倒退`.
+14. On the player page, press `保持亮屏`; confirm the browser either enters `亮屏中` or shows a graceful unsupported/permission message.
+15. Edit the markdown draft, save the draft, save a version, and restore the version.
+16. Confirm the player page receives saved draft/version/restore changes without refreshing.
+17. Refresh the player page and confirm it rejoins with the full RoomState.
+18. Keep the session running for 10 minutes before a real shoot, then confirm `10分钟运行` becomes passed.
+19. Press `测试断线重连` in the control page's `现场验收` panel and confirm the page returns to `已连接` without refreshing.
+20. During a device pass, briefly toggle Wi-Fi off/on or background/foreground iPad Safari and confirm the status returns to `已连接` without refreshing.
+21. Confirm the `现场验收` panel updates `重连观察` after either reconnect path has been exercised.
 
 For an automated 10-minute stability pass, run `pnpm smoke:m5:session:10min` while `pnpm dev` is running.
 

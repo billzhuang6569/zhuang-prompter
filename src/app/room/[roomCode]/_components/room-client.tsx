@@ -64,9 +64,17 @@ function formatTime(value: number) {
 
 const DEFAULT_SPEED = 68;
 const SCRIPT_VERSION_ID = "fixture_m1";
+const FIELD_SESSION_TARGET_MS = 10 * 60 * 1000;
 
 function currentTime() {
   return Date.now();
+}
+
+function formatDuration(durationMs: number) {
+  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 type VersionSummary = {
@@ -88,6 +96,32 @@ type FieldReadinessItem = {
   status: "pass" | "pending" | "warn";
   detail: string;
 };
+
+type FieldSessionState = {
+  running: boolean;
+  startedAt: number | null;
+  stoppedAt: number | null;
+  reportCount: number;
+  firstPositionPx: number | null;
+  lastPositionPx: number | null;
+  lastReportAt: number | null;
+  lastReportKey: string | null;
+  movedBackward: boolean;
+};
+
+function createFieldSessionState(): FieldSessionState {
+  return {
+    running: false,
+    startedAt: null,
+    stoppedAt: null,
+    reportCount: 0,
+    firstPositionPx: null,
+    lastPositionPx: null,
+    lastReportAt: null,
+    lastReportKey: null,
+    movedBackward: false,
+  };
+}
 
 type WakeLockSentinelLike = EventTarget & {
   released: boolean;
@@ -130,6 +164,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [wakeLockStatus, setWakeLockStatus] = useState("");
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [nowMs, setNowMs] = useState(0);
+  const [fieldSession, setFieldSession] = useState<FieldSessionState>(() => createFieldSessionState());
 
   const selectedRole = preferredRole(mode);
   const selfDevice = roomState && joinResult ? roomState.devices[joinResult.deviceId] : null;
@@ -429,14 +464,23 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }, [joinResult, reconnectAttempt, selectedRole, sendEvent]);
 
   const devices = useMemo(() => Object.values(roomState?.devices ?? {}), [roomState]);
+  const latestPlaybackReport = useMemo(
+    () =>
+      playerReports
+        .map((device) => device.playbackState)
+        .filter((state): state is PlaybackState => Boolean(state))
+        .sort((a, b) => b.reportedAt - a.reportedAt)[0],
+    [playerReports],
+  );
+  const fieldSessionElapsedMs = fieldSession.startedAt
+    ? Math.max(0, (fieldSession.running ? nowMs : fieldSession.stoppedAt ?? nowMs) - fieldSession.startedAt)
+    : 0;
+  const fieldSessionComplete =
+    fieldSessionElapsedMs >= FIELD_SESSION_TARGET_MS && fieldSession.reportCount > 0 && !fieldSession.movedBackward;
   const fieldReadiness = useMemo<FieldReadinessItem[]>(() => {
     const lanLink = roomLinks.find((link) => link.kind === "lan");
     const controlDevice = devices.find((device) => device.role === "control" && device.online);
     const playerDevice = devices.find((device) => device.role === "player" && device.online);
-    const latestPlaybackReport = playerReports
-      .map((device) => device.playbackState)
-      .filter((state): state is PlaybackState => Boolean(state))
-      .sort((a, b) => b.reportedAt - a.reportedAt)[0];
     const playbackReportAge = latestPlaybackReport ? nowMs - latestPlaybackReport.reportedAt : null;
     const playbackReportFresh = playbackReportAge !== null && playbackReportAge >= 0 && playbackReportAge < 5000;
 
@@ -471,8 +515,82 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             ? `已尝试重连 ${reconnectAttempt} 次，当前 ${connection === "connected" ? "已恢复" : connection}`
             : "点击测试断线重连，或实机验收时短暂切后台/切换网络后观察恢复",
       },
+      {
+        label: "10分钟运行",
+        status: fieldSession.movedBackward ? "warn" : fieldSessionComplete ? "pass" : "pending",
+        detail: fieldSession.startedAt
+          ? `${formatDuration(fieldSessionElapsedMs)} / 10:00 · ${fieldSession.reportCount} 次播放回报${
+              fieldSession.movedBackward ? " · 检测到位置倒退" : ""
+            }`
+          : "点击开始 10 分钟监测后，保持播放端运行到 10:00",
+      },
     ];
-  }, [connection, devices, nowMs, playerReports, reconnectAttempt, roomLinks]);
+  }, [
+    connection,
+    devices,
+    fieldSession.movedBackward,
+    fieldSession.reportCount,
+    fieldSession.startedAt,
+    fieldSessionComplete,
+    fieldSessionElapsedMs,
+    latestPlaybackReport,
+    nowMs,
+    reconnectAttempt,
+    roomLinks,
+  ]);
+
+  useEffect(() => {
+    if (mode !== "control" || !fieldSession.running || !latestPlaybackReport) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setFieldSession((current) => {
+        if (!current.running) {
+          return current;
+        }
+        const reportKey = `${latestPlaybackReport.sourceDeviceId}:${latestPlaybackReport.reportedAt}:${Math.round(
+          latestPlaybackReport.positionPx,
+        )}`;
+        if (current.lastReportKey === reportKey) {
+          return current;
+        }
+        const movedBackward =
+          current.lastPositionPx !== null && latestPlaybackReport.positionPx + 1 < current.lastPositionPx;
+        return {
+          ...current,
+          reportCount: current.reportCount + 1,
+          firstPositionPx: current.firstPositionPx ?? latestPlaybackReport.positionPx,
+          lastPositionPx: latestPlaybackReport.positionPx,
+          lastReportAt: latestPlaybackReport.reportedAt,
+          lastReportKey: reportKey,
+          movedBackward: current.movedBackward || movedBackward,
+        };
+      });
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [fieldSession.running, latestPlaybackReport, mode]);
+
+  function toggleFieldSession() {
+    if (fieldSession.running) {
+      setFieldSession((current) => ({
+        ...current,
+        running: false,
+        stoppedAt: Date.now(),
+      }));
+      return;
+    }
+    setFieldSession({
+      ...createFieldSessionState(),
+      running: true,
+      startedAt: Date.now(),
+    });
+  }
+
+  function resetFieldSession() {
+    setFieldSession(createFieldSessionState());
+  }
 
   function testReconnect() {
     const socket = socketRef.current;
@@ -886,6 +1004,12 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             <p className="eyebrow">Field Check</p>
             <h2>现场验收</h2>
             <div className="readiness-actions">
+              <button className="button primary" onClick={toggleFieldSession}>
+                {fieldSession.running ? "停止10分钟监测" : "开始10分钟监测"}
+              </button>
+              <button className="button secondary" onClick={resetFieldSession}>
+                重置监测
+              </button>
               <button className="button secondary" disabled={connection !== "connected"} onClick={testReconnect}>
                 测试断线重连
               </button>
