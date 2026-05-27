@@ -23,9 +23,9 @@ export default function Home() {
     <main className="workspace">
       <section className="entry-layout">
         <div className="entry-copy">
-          <p className="eyebrow">庄Sir 的提词器 · M0</p>
-          <h1>拍摄房间实时地基</h1>
-          <p className="lead">先验证房间、设备、角色和在线状态同步。Markdown、播放时钟、版本和语音将在后续里程碑进入。</p>
+          <p className="eyebrow">庄Sir 的提词器 · P0 本地验收版</p>
+          <h1>拍摄提词房间</h1>
+          <p className="lead">创建房间后，可分开打开控制端和播放端，验证文稿、播放时钟、版本保存、语音跟随和断线恢复。</p>
         </div>
         <div className="panel entry-panel">
           <button className="button primary full" onClick={createRoom}>

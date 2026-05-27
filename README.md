@@ -12,9 +12,16 @@ The original product documents are preserved in `docs/`.
 
 ## Current Milestone
 
-M0 is implemented and M1 has started: room foundation, ScriptEngine parsing, RenderBundle contract tests, and shared control/player rendering demo are present.
+P0 local foundation is implemented through M5:
 
-Next milestone work should move toward M1 closure or M2 only after the handoff gates are satisfied. Do not implement ScrollClock playback, versioning, or voice following before their milestones.
+- M0 room, role, device identity, presence, HTTP join, and WebSocket welcome.
+- M1 Markdown RenderBundle parsing, speech/marker/anchor indexes, and control/player rendering.
+- M2 ScrollClock playback intent and player PlaybackState report loop.
+- M3 script draft save, version save/list, and restore.
+- M4 simulated voice transcript matching and voice-follow ScrollClock handoff.
+- M5 reconnect full-state recovery and configurable session stability smoke.
+
+The remaining local acceptance gap is a longer human-operated shooting session plus device/browser passes.
 
 ## Getting Started
 
@@ -23,6 +30,8 @@ pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+For the manual browser pass, follow [docs/local-browser-acceptance.md](docs/local-browser-acceptance.md).
 
 ## Verification
 
