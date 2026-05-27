@@ -166,6 +166,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [nowMs, setNowMs] = useState(0);
   const [fieldSession, setFieldSession] = useState<FieldSessionState>(() => createFieldSessionState());
   const [fieldReportStatus, setFieldReportStatus] = useState("");
+  const [expandedQrLink, setExpandedQrLink] = useState<(NetworkOrigin & { playerUrl: string }) | null>(null);
 
   const selectedRole = preferredRole(mode);
   const selfDevice = roomState && joinResult ? roomState.devices[joinResult.deviceId] : null;
@@ -1011,6 +1012,9 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img alt={`${link.label} 播放端二维码`} src={`/api/qr?text=${encodeURIComponent(link.playerUrl)}`} />
                     <span>扫码打开播放端</span>
+                    <button className="text-button" type="button" onClick={() => setExpandedQrLink(link)}>
+                      放大二维码
+                    </button>
                   </div>
                 )}
                 <div className="share-actions">
@@ -1196,6 +1200,20 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           </div>
         </div>
       </section>
+      {expandedQrLink && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="播放端二维码">
+          <div className="qr-modal">
+            <p className="eyebrow">{expandedQrLink.label}</p>
+            <h2>扫码打开播放端</h2>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img alt={`${expandedQrLink.label} 播放端大二维码`} src={`/api/qr?text=${encodeURIComponent(expandedQrLink.playerUrl)}`} />
+            <code>{expandedQrLink.playerUrl}</code>
+            <button className="button primary" type="button" onClick={() => setExpandedQrLink(null)}>
+              关闭
+            </button>
+          </div>
+        </div>
+      )}
       {bundle && (
         <RenderBundleView
           bundle={bundle}

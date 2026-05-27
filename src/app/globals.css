@@ -330,6 +330,58 @@ input {
   padding: 6px;
 }
 
+.text-button {
+  border: 0;
+  background: transparent;
+  color: var(--primary-dark);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 0;
+}
+
+.modal-backdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgb(15 23 42 / 62%);
+  padding: 18px;
+}
+
+.qr-modal {
+  display: grid;
+  width: min(100%, 380px);
+  gap: 14px;
+  justify-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 22px;
+  box-shadow: 0 24px 80px rgb(15 23 42 / 28%);
+}
+
+.qr-modal h2 {
+  margin: 0;
+}
+
+.qr-modal img {
+  width: min(72vw, 280px);
+  height: min(72vw, 280px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.qr-modal code {
+  max-width: 100%;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
 .device-row code {
   display: block;
   margin-top: 4px;

@@ -120,6 +120,7 @@ Observed flow:
 - The panel included a `10分钟运行` row.
 - Before starting the monitor, the row showed the expected pending prompt: keep the player running to `10:00`.
 - The panel rendered `复制验收记录`, which produces a pasteable field report from the current room state.
+- The LAN QR row rendered `放大二维码` for easier iPad scanning from a physical device.
 
 ## Repeatable Manual Pass
 
@@ -127,7 +128,7 @@ Observed flow:
 2. Open `http://localhost:3000` in Safari.
 3. Create a new room and select control.
 4. Confirm the room page shows a `同网设备加入` section with at least the current browser URL and, when Wi-Fi is active, a LAN URL such as `http://192.168.x.x:3000`.
-5. Confirm the LAN row shows a `扫码打开播放端` QR code for the player URL.
+5. Confirm the LAN row shows a `扫码打开播放端` QR code for the player URL, then press `放大二维码` and confirm the larger QR code opens.
 6. Open the player URL in another browser, a private window, or iPad Safari on the same Wi-Fi so it becomes a separate device.
 7. If using iPad Safari, scan the LAN player QR code or type the LAN player URL from the room page. `localhost` only works on the Mac itself.
 8. Confirm the control page's `现场验收` panel marks `局域网入口`, `控制端连接`, and `播放端在线` as passed.
