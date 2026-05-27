@@ -87,6 +87,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const socketRef = useRef<WebSocket | null>(null);
   const sessionIdRef = useRef<string | null>(null);
   const roomRevisionRef = useRef(0);
+  const serverSeqRef = useRef(0);
   const playbackPositionRef = useRef(0);
   const clientSeqRef = useRef(0);
   const [connection, setConnection] = useState<ConnectionState>("joining");
@@ -104,6 +105,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [playerFontScale, setPlayerFontScale] = useState(1);
   const [playerOverlayHidden, setPlayerOverlayHidden] = useState(false);
   const [fullscreenActive, setFullscreenActive] = useState(false);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
 
   const selectedRole = preferredRole(mode);
   const selfDevice = roomState && joinResult ? roomState.devices[joinResult.deviceId] : null;
@@ -155,7 +157,8 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
   useEffect(() => {
     roomRevisionRef.current = roomState?.roomRevision ?? 0;
-  }, [roomState?.roomRevision]);
+    serverSeqRef.current = roomState?.serverSeq ?? 0;
+  }, [roomState?.roomRevision, roomState?.serverSeq]);
 
   useEffect(() => {
     let alive = true;
@@ -299,6 +302,13 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       return;
     }
 
+    let closedByCleanup = false;
+    let reconnectTimer: number | undefined;
+    const connectingTimer = window.setTimeout(() => {
+      if (!closedByCleanup) {
+        setConnection("connecting");
+      }
+    }, 0);
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
     const socket = new WebSocket(`${protocol}://${window.location.host}${joinResult.wsUrl}`);
     const sessionId = makeSessionId();
@@ -307,6 +317,8 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
     socket.addEventListener("open", () => {
       clientSeqRef.current += 1;
+      const lastSeenRoomRevision = roomRevisionRef.current || joinResult.lastRoomRevision;
+      const lastSeenServerSeq = serverSeqRef.current || joinResult.roomState.serverSeq;
       const hello: ClientEnvelope<ClientHelloPayload> = {
         type: "client.hello",
         eventId: makeEventId(),
@@ -314,12 +326,12 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
         deviceId: joinResult.deviceId,
         sessionId,
         clientSeq: clientSeqRef.current,
-        baseRoomRevision: joinResult.lastRoomRevision,
+        baseRoomRevision: lastSeenRoomRevision,
         sentAt: Date.now(),
         payload: {
           role: selectedRole,
-          lastSeenRoomRevision: joinResult.lastRoomRevision,
-          lastSeenServerSeq: joinResult.roomState.serverSeq,
+          lastSeenRoomRevision,
+          lastSeenServerSeq,
         },
       };
       socket.send(JSON.stringify(hello));
@@ -340,7 +352,15 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     });
 
     socket.addEventListener("close", () => {
+      if (closedByCleanup) {
+        return;
+      }
       setConnection("disconnected");
+      setLastAck("连接断开，正在尝试重连");
+      const delay = Math.min(5000, 600 + reconnectAttempt * 700);
+      reconnectTimer = window.setTimeout(() => {
+        setReconnectAttempt((attempt) => attempt + 1);
+      }, delay);
     });
 
     const heartbeat = window.setInterval(() => {
@@ -348,11 +368,16 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     }, 10_000);
 
     return () => {
+      closedByCleanup = true;
+      if (reconnectTimer) {
+        window.clearTimeout(reconnectTimer);
+      }
+      window.clearTimeout(connectingTimer);
       window.clearInterval(heartbeat);
       socket.close();
       sessionIdRef.current = null;
     };
-  }, [joinResult, selectedRole, sendEvent]);
+  }, [joinResult, reconnectAttempt, selectedRole, sendEvent]);
 
   const devices = useMemo(() => Object.values(roomState?.devices ?? {}), [roomState]);
 

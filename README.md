@@ -35,6 +35,8 @@ The dev server listens on the local network by default and prints LAN URLs in th
 
 The player route opens in shooting-first mode: the teleprompter stage fills the first screen, while device and debug panels remain below the stage. The player also has local-only stage controls for font size, fullscreen, and hiding the status overlay.
 
+Control and player clients automatically retry the WebSocket connection after a transient disconnect, then rejoin with the latest known room revision.
+
 ## Verification
 
 ```bash

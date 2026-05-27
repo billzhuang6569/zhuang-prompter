@@ -107,7 +107,7 @@ ${results.map(summarize).join("\n")}
 
 - Browser-operated 10-minute shooting session.
 - Safari desktop and iPad Safari visual/device pass.
-- Weak-network observation beyond local reconnect smoke.
+- Real weak-network observation beyond automatic client retry and local reconnect smoke.
 `;
 
   await writeFile("local-acceptance-report.md", body);

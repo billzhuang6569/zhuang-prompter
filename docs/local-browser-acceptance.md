@@ -63,6 +63,7 @@ Observed flow:
 10. Edit the markdown draft, save the draft, save a version, and restore the version.
 11. Refresh the player page and confirm it rejoins with the full RoomState.
 12. Keep the session running for 10 minutes before a real shoot.
+13. During a device pass, briefly toggle Wi-Fi off/on or background/foreground iPad Safari and confirm the status returns to `已连接` without refreshing.
 
 For an automated 10-minute stability pass, run `pnpm smoke:m5:session:10min` while `pnpm dev` is running.
 
@@ -71,4 +72,4 @@ For an automated 10-minute stability pass, run `pnpm smoke:m5:session:10min` whi
 - 10-minute human-operated shooting session.
 - Safari desktop visual pass at full-screen player size.
 - iPad Safari join/player pass on the same network.
-- Weak-network or offline/reconnect observation beyond the local reconnect smoke.
+- Real weak-network or offline/reconnect observation beyond the automatic retry implementation and local reconnect smoke.

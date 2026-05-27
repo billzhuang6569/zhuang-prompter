@@ -1,6 +1,6 @@
 # Local Acceptance Report
 
-Generated: 2026-05-27T13:50:49.253Z
+Generated: 2026-05-27T13:56:22.226Z
 
 Overall: PASS
 
@@ -8,7 +8,7 @@ Overall: PASS
 | --- | --- | --- |
 | contract tests | PASS | 0s |
 | lint | PASS | 1s |
-| typecheck/build | PASS | 7s |
+| typecheck/build | PASS | 6s |
 | smoke:network | PASS | 0s |
 | smoke:m0 | PASS | 1s |
 | smoke:m2 | PASS | 1s |
@@ -31,4 +31,4 @@ Overall: PASS
 
 - Browser-operated 10-minute shooting session.
 - Safari desktop and iPad Safari visual/device pass.
-- Weak-network observation beyond local reconnect smoke.
+- Real weak-network observation beyond automatic client retry and local reconnect smoke.
