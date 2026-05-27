@@ -165,6 +165,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [nowMs, setNowMs] = useState(0);
   const [fieldSession, setFieldSession] = useState<FieldSessionState>(() => createFieldSessionState());
+  const [fieldReportStatus, setFieldReportStatus] = useState("");
 
   const selectedRole = preferredRole(mode);
   const selfDevice = roomState && joinResult ? roomState.devices[joinResult.deviceId] : null;
@@ -592,6 +593,63 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     setFieldSession(createFieldSessionState());
   }
 
+  async function copyFieldReport() {
+    const statusLines = fieldReadiness.map((item) => {
+      const status = item.status === "pass" ? "PASS" : item.status === "warn" ? "WARN" : "PENDING";
+      return `- ${status} ${item.label}: ${item.detail}`;
+    });
+    const linkLines = roomLinks.map((link) => `- ${link.label}: ${link.origin}`);
+    const deviceLines = devices.map(
+      (device) =>
+        `- ${roleLabel(device.role)} ${device.deviceId.slice(0, 16)} ${device.online ? "online" : "offline"} ${
+          device.playbackState
+            ? `${device.playbackState.state} ${Math.round(device.playbackState.positionPx)}px`
+            : device.connectionState
+        }`,
+    );
+    const report = [
+      `# 庄Sir 提词器现场验收记录`,
+      ``,
+      `- Room: ${roomCode}`,
+      `- Time: ${new Date().toLocaleString("zh-CN")}`,
+      `- URL: ${window.location.href}`,
+      `- Connection: ${connection}`,
+      `- RoomRevision: ${roomState?.roomRevision ?? "-"}`,
+      `- ServerSeq: ${roomState?.serverSeq ?? "-"}`,
+      ``,
+      `## 入口`,
+      ...(linkLines.length > 0 ? linkLines : ["- 未检测到入口"]),
+      ``,
+      `## 现场验收`,
+      ...statusLines,
+      ``,
+      `## 设备`,
+      ...(deviceLines.length > 0 ? deviceLines : ["- 暂无设备"]),
+      ``,
+      `## 10分钟监测`,
+      `- Running: ${fieldSession.running ? "yes" : "no"}`,
+      `- Elapsed: ${formatDuration(fieldSessionElapsedMs)}`,
+      `- Reports: ${fieldSession.reportCount}`,
+      `- FirstPosition: ${fieldSession.firstPositionPx === null ? "-" : `${Math.round(fieldSession.firstPositionPx)}px`}`,
+      `- LastPosition: ${fieldSession.lastPositionPx === null ? "-" : `${Math.round(fieldSession.lastPositionPx)}px`}`,
+      `- MovedBackward: ${fieldSession.movedBackward ? "yes" : "no"}`,
+      ``,
+      `## 最新播放回报`,
+      latestPlaybackReport
+        ? `- ${latestPlaybackReport.state} ${Math.round(latestPlaybackReport.positionPx)}px at ${new Date(
+            latestPlaybackReport.reportedAt,
+          ).toLocaleTimeString("zh-CN")}`
+        : "- 暂无播放回报",
+    ].join("\n");
+
+    try {
+      await navigator.clipboard.writeText(report);
+      setFieldReportStatus("验收记录已复制");
+    } catch {
+      setFieldReportStatus("复制失败，请手动记录当前页面状态");
+    }
+  }
+
   function testReconnect() {
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN) {
@@ -1010,10 +1068,14 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
               <button className="button secondary" onClick={resetFieldSession}>
                 重置监测
               </button>
+              <button className="button secondary" onClick={() => void copyFieldReport()}>
+                复制验收记录
+              </button>
               <button className="button secondary" disabled={connection !== "connected"} onClick={testReconnect}>
                 测试断线重连
               </button>
             </div>
+            {fieldReportStatus && <p className="muted">{fieldReportStatus}</p>}
             <div className="readiness-list">
               {fieldReadiness.map((item) => (
                 <div className="readiness-row" key={item.label}>

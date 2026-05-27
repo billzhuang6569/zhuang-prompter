@@ -119,6 +119,7 @@ Observed flow:
 - The `现场验收` panel rendered `开始10分钟监测`, `重置监测`, and `测试断线重连`.
 - The panel included a `10分钟运行` row.
 - Before starting the monitor, the row showed the expected pending prompt: keep the player running to `10:00`.
+- The panel rendered `复制验收记录`, which produces a pasteable field report from the current room state.
 
 ## Repeatable Manual Pass
 
@@ -143,6 +144,7 @@ Observed flow:
 19. Press `测试断线重连` in the control page's `现场验收` panel and confirm the page returns to `已连接` without refreshing.
 20. During a device pass, briefly toggle Wi-Fi off/on or background/foreground iPad Safari and confirm the status returns to `已连接` without refreshing.
 21. Confirm the `现场验收` panel updates `重连观察` after either reconnect path has been exercised.
+22. Press `复制验收记录` and paste the generated report into the project notes or acceptance log.
 
 For an automated 10-minute stability pass, run `pnpm smoke:m5:session:10min` while `pnpm dev` is running.
 
