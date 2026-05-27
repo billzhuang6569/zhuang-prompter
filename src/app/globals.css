@@ -262,6 +262,135 @@ input {
   color: var(--muted);
 }
 
+.script-surface {
+  width: min(1120px, calc(100vw - 32px));
+  margin: 24px auto 48px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 24px;
+}
+
+.script-surface.player-stage {
+  background: #050505;
+  color: #f8fafc;
+}
+
+.script-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+.script-header h2 {
+  margin-top: 6px;
+  font-size: 24px;
+}
+
+.bundle-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.bundle-stats span,
+.warning-list p {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.warning-list {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.teleprompter-content {
+  padding: 40px clamp(16px, 5vw, 64px);
+  word-break: normal;
+  overflow-wrap: anywhere;
+  line-break: strict;
+  text-wrap: pretty;
+  font-kerning: normal;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    "Noto Sans CJK SC", sans-serif;
+}
+
+.player-stage .teleprompter-content {
+  min-height: 70vh;
+  font-size: clamp(32px, 5vw, 64px);
+  line-height: 1.35;
+}
+
+.control-preview .teleprompter-content {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgb(127 127 127 / 5%);
+  font-size: 20px;
+  line-height: 1.7;
+}
+
+.script-heading {
+  margin: 24px 0 18px;
+  line-height: 1.18;
+}
+
+.script-paragraph,
+.script-list-item {
+  margin: 18px 0;
+}
+
+.script-list-item::before {
+  content: "• ";
+  color: var(--primary);
+}
+
+.bound-stage-cue,
+.script-stage-cue {
+  display: block;
+  margin: 8px 0 18px;
+  padding-left: 2.5em;
+  color: var(--muted);
+  font-size: 0.72em;
+  line-height: 1.45;
+}
+
+.player-stage .bound-stage-cue,
+.player-stage .script-stage-cue {
+  color: #a3a3a3;
+}
+
+.script-marker {
+  margin: 24px 0;
+  border-left: 4px solid var(--primary);
+  padding: 10px 0 10px 16px;
+  color: var(--primary-dark);
+  font-size: 0.8em;
+}
+
+.player-stage .script-marker {
+  color: #5eead4;
+}
+
+.script-marker p,
+.script-stage-cue p {
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.inline-marker {
+  display: inline-block;
+  margin: 0 8px;
+  color: var(--primary-dark);
+  font-size: 0.8em;
+}
+
 @media (max-width: 760px) {
   .workspace {
     width: min(100vw - 24px, 1120px);
@@ -274,8 +403,18 @@ input {
   }
 
   .room-topbar,
+  .script-header,
   .device-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .script-surface {
+    width: min(100vw - 24px, 1120px);
+    padding: 16px;
+  }
+
+  .teleprompter-content {
+    padding: 24px 8px;
   }
 }
