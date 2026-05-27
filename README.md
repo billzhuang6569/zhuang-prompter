@@ -23,3 +23,13 @@ pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+## Verification
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm smoke:m0
+```
+
+Run `pnpm smoke:m0` while `pnpm dev` is running.

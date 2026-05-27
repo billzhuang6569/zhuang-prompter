@@ -6,7 +6,9 @@
     "dev": "tsx server.ts",
     "build": "next build --webpack",
     "start": "NODE_ENV=production tsx server.ts",
-    "lint": "eslint"
+    "lint": "eslint",
+    "typecheck": "pnpm build && tsc --noEmit",
+    "smoke:m0": "node scripts/m0-smoke.mjs"
   },
   "dependencies": {
     "next": "16.2.6",
