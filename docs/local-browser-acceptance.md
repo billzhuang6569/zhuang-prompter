@@ -94,6 +94,19 @@ Observed flow:
 - Pressed Play from Safari control.
 - The `现场验收` panel marked `播放回报` as passed and showed a fresh `playing` position.
 
+## Latest Reconnect Button Pass
+
+Date: 2026-05-27
+
+Result: PASS for desktop Safari manual reconnect exercise.
+
+Observed flow:
+
+- Opened `/room/103257/control` in Safari.
+- Pressed `测试断线重连` in the `现场验收` panel.
+- The control status briefly left the connected state, then returned to `已连接`.
+- The `现场验收` panel marked `重连观察` as passed with `已尝试重连 1 次，当前 已恢复`.
+
 ## Repeatable Manual Pass
 
 1. Start the app with `pnpm dev`.
@@ -112,8 +125,9 @@ Observed flow:
 14. Confirm the player page receives saved draft/version/restore changes without refreshing.
 15. Refresh the player page and confirm it rejoins with the full RoomState.
 16. Keep the session running for 10 minutes before a real shoot.
-17. During a device pass, briefly toggle Wi-Fi off/on or background/foreground iPad Safari and confirm the status returns to `已连接` without refreshing.
-18. Confirm the `现场验收` panel updates `重连观察` after the reconnect path has been exercised.
+17. Press `测试断线重连` in the control page's `现场验收` panel and confirm the page returns to `已连接` without refreshing.
+18. During a device pass, briefly toggle Wi-Fi off/on or background/foreground iPad Safari and confirm the status returns to `已连接` without refreshing.
+19. Confirm the `现场验收` panel updates `重连观察` after either reconnect path has been exercised.
 
 For an automated 10-minute stability pass, run `pnpm smoke:m5:session:10min` while `pnpm dev` is running.
 

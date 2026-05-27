@@ -469,10 +469,20 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
         detail:
           reconnectAttempt > 0
             ? `已尝试重连 ${reconnectAttempt} 次，当前 ${connection === "connected" ? "已恢复" : connection}`
-            : "实机验收时短暂切后台或切换网络后观察恢复",
+            : "点击测试断线重连，或实机验收时短暂切后台/切换网络后观察恢复",
       },
     ];
   }, [connection, devices, nowMs, playerReports, reconnectAttempt, roomLinks]);
+
+  function testReconnect() {
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      setLastAck("当前未连接，无法启动重连测试");
+      return;
+    }
+    setLastAck("正在测试断线重连");
+    socket.close(4000, "field-readiness-reconnect-test");
+  }
 
   function setRole(role: DeviceRole) {
     const payload: RoleSetPayload = { role };
@@ -875,6 +885,11 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           <div className="panel field-panel">
             <p className="eyebrow">Field Check</p>
             <h2>现场验收</h2>
+            <div className="readiness-actions">
+              <button className="button secondary" disabled={connection !== "connected"} onClick={testReconnect}>
+                测试断线重连
+              </button>
+            </div>
             <div className="readiness-list">
               {fieldReadiness.map((item) => (
                 <div className="readiness-row" key={item.label}>

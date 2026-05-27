@@ -348,6 +348,13 @@ input {
   gap: 12px;
 }
 
+.readiness-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0 0 16px;
+}
+
 .readiness-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
