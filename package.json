@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "pnpm build && tsc --noEmit",
     "test:contracts": "tsx --test src/modules/script-engine/parse.test.ts",
+    "smoke:network": "node scripts/network-info-smoke.mjs",
     "smoke:m0": "node scripts/m0-smoke.mjs",
     "smoke:m2": "node scripts/m2-smoke.mjs",
     "smoke:m3": "node scripts/m3-smoke.mjs",

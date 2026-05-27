@@ -200,6 +200,10 @@ input {
   grid-column: 1 / -1;
 }
 
+.share-panel {
+  grid-column: 1 / -1;
+}
+
 .playback-panel {
   grid-column: 1 / -1;
 }
@@ -269,6 +273,40 @@ input {
 
 .device-list {
   margin-top: 10px;
+}
+
+.share-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.share-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.share-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.share-row code {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+}
+
+.share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 .device-row code {
@@ -510,9 +548,18 @@ input {
 
   .room-topbar,
   .script-header,
-  .device-row {
+  .device-row,
+  .share-row {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .share-row {
+    display: flex;
+  }
+
+  .share-actions {
+    justify-content: flex-start;
   }
 
   .script-surface {

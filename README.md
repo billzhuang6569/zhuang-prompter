@@ -31,7 +31,7 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-For the manual browser pass, follow [docs/local-browser-acceptance.md](docs/local-browser-acceptance.md).
+The dev server listens on the local network by default and prints LAN URLs in the terminal. For iPad or another device, create a room on the Mac, then use the room page's `同网设备加入` links or the printed LAN URL. Follow [docs/local-browser-acceptance.md](docs/local-browser-acceptance.md) for the manual pass.
 
 ## Verification
 
@@ -39,6 +39,7 @@ For the manual browser pass, follow [docs/local-browser-acceptance.md](docs/loca
 pnpm lint
 pnpm typecheck
 pnpm test:contracts
+pnpm smoke:network
 pnpm smoke:m0
 pnpm smoke:m2
 pnpm smoke:m3

@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { getNetworkInfo } from "../network-info";
 import {
   createRoom,
   getScriptDraft,
@@ -33,6 +34,11 @@ function writeJson(response: ServerResponse, statusCode: number, body: unknown) 
 
 export async function handleRoomApi(request: IncomingMessage, response: ServerResponse) {
   const url = new URL(request.url ?? "/", "http://localhost");
+
+  if (request.method === "GET" && url.pathname === "/api/network-info") {
+    writeJson(response, 200, getNetworkInfo());
+    return true;
+  }
 
   if (request.method === "POST" && url.pathname === "/api/rooms") {
     writeJson(response, 201, createRoom());

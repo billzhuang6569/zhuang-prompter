@@ -1,6 +1,6 @@
 # Local Acceptance Report
 
-Generated: 2026-05-27T13:18:41.343Z
+Generated: 2026-05-27T13:40:53.619Z
 
 Overall: PASS
 
@@ -8,7 +8,8 @@ Overall: PASS
 | --- | --- | --- |
 | contract tests | PASS | 0s |
 | lint | PASS | 1s |
-| typecheck/build | PASS | 7s |
+| typecheck/build | PASS | 6s |
+| smoke:network | PASS | 0s |
 | smoke:m0 | PASS | 1s |
 | smoke:m2 | PASS | 1s |
 | smoke:m3 | PASS | 0s |
@@ -19,6 +20,7 @@ Overall: PASS
 ## Scope Covered
 
 - M0 room, role, device identity, presence.
+- Local network entry discovery for same-Wi-Fi device testing.
 - M1 Markdown RenderBundle contract.
 - M2 ScrollClock intent and PlaybackState report loop.
 - M3 draft save, version save, list, restore without deleting history.

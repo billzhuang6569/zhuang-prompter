@@ -41,7 +41,15 @@ async function runSmokeWithServer() {
   }
 
   const smokeChecks = [];
-  for (const script of ["smoke:m0", "smoke:m2", "smoke:m3", "smoke:m4", "smoke:m5:reconnect", "smoke:m5:session"]) {
+  for (const script of [
+    "smoke:network",
+    "smoke:m0",
+    "smoke:m2",
+    "smoke:m3",
+    "smoke:m4",
+    "smoke:m5:reconnect",
+    "smoke:m5:session",
+  ]) {
     const result = await run("pnpm", [script]);
     smokeChecks.push({ name: script, ...result });
   }
@@ -88,6 +96,7 @@ ${results.map(summarize).join("\n")}
 ## Scope Covered
 
 - M0 room, role, device identity, presence.
+- Local network entry discovery for same-Wi-Fi device testing.
 - M1 Markdown RenderBundle contract.
 - M2 ScrollClock intent and PlaybackState report loop.
 - M3 draft save, version save, list, restore without deleting history.

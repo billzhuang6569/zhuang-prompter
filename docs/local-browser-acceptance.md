@@ -38,13 +38,15 @@ Observed result:
 1. Start the app with `pnpm dev`.
 2. Open `http://localhost:3000` in Safari.
 3. Create a new room and select control.
-4. Open the player URL in another browser or a private window so it becomes a separate device.
-5. Confirm both devices are online in the control device list.
-6. Press Play, Pause, Speed, and each marker jump from control.
-7. Confirm the player view updates without reloading and the control view shows player playback reports.
-8. Edit the markdown draft, save the draft, save a version, and restore the version.
-9. Refresh the player page and confirm it rejoins with the full RoomState.
-10. Keep the session running for 10 minutes before a real shoot.
+4. Confirm the room page shows a `同网设备加入` section with at least the current browser URL and, when Wi-Fi is active, a LAN URL such as `http://192.168.x.x:3000`.
+5. Open the player URL in another browser, a private window, or iPad Safari on the same Wi-Fi so it becomes a separate device.
+6. If using iPad Safari, type the LAN player URL from the room page or the terminal output. `localhost` only works on the Mac itself.
+7. Confirm both devices are online in the control device list.
+8. Press Play, Pause, Speed, and each marker jump from control.
+9. Confirm the player view updates without reloading and the control view shows player playback reports.
+10. Edit the markdown draft, save the draft, save a version, and restore the version.
+11. Refresh the player page and confirm it rejoins with the full RoomState.
+12. Keep the session running for 10 minutes before a real shoot.
 
 For an automated 10-minute stability pass, run `pnpm smoke:m5:session:10min` while `pnpm dev` is running.
 

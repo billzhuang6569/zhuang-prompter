@@ -77,6 +77,12 @@ type VersionSummary = {
   markdownLength: number;
 };
 
+type NetworkOrigin = {
+  label: string;
+  origin: string;
+  kind: "local" | "lan";
+};
+
 export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const socketRef = useRef<WebSocket | null>(null);
   const sessionIdRef = useRef<string | null>(null);
@@ -93,10 +99,26 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [draftStatus, setDraftStatus] = useState("草稿未加载");
   const [versionMessage, setVersionMessage] = useState("");
   const [versions, setVersions] = useState<VersionSummary[]>([]);
+  const [currentOrigin, setCurrentOrigin] = useState("");
+  const [networkOrigins, setNetworkOrigins] = useState<NetworkOrigin[]>([]);
 
   const selectedRole = preferredRole(mode);
   const selfDevice = roomState && joinResult ? roomState.devices[joinResult.deviceId] : null;
   const playerReports = devicesWithPlayback(roomState);
+  const roomLinks = useMemo(() => {
+    const origins = new Map<string, NetworkOrigin>();
+    if (currentOrigin) {
+      origins.set(currentOrigin, { label: "当前浏览器", origin: currentOrigin, kind: "local" });
+    }
+    for (const origin of networkOrigins) {
+      origins.set(origin.origin, origin);
+    }
+    return Array.from(origins.values()).map((origin) => ({
+      ...origin,
+      controlUrl: `${origin.origin}/room/${roomCode}/control`,
+      playerUrl: `${origin.origin}/room/${roomCode}/player`,
+    }));
+  }, [currentOrigin, networkOrigins, roomCode]);
   const bundle = useMemo<RenderBundle | undefined>(() => {
     if (!markdown) {
       return undefined;
@@ -170,6 +192,28 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       alive = false;
     };
   }, [roomCode]);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadNetworkInfo() {
+      const response = await fetch("/api/network-info");
+      if (!response.ok || !alive) {
+        return;
+      }
+      const data = (await response.json()) as { origins: NetworkOrigin[] };
+      setNetworkOrigins(data.origins);
+    }
+    const timer = window.setTimeout(() => {
+      if (alive) {
+        setCurrentOrigin(window.location.origin);
+      }
+      void loadNetworkInfo().catch(() => undefined);
+    }, 0);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, []);
 
   const loadDraftAndVersions = useCallback(async () => {
     const [draftResponse, versionsResponse] = await Promise.all([
@@ -464,6 +508,33 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             <Link href={`/room/${roomCode}/player`}>打开播放端</Link>
           </div>
           <p className="muted">{lastAck}</p>
+        </div>
+
+        <div className="panel share-panel">
+          <p className="eyebrow">设备入口</p>
+          <h2>同网设备加入</h2>
+          <p className="muted">iPad 或另一台电脑需要和这台 Mac 在同一个 Wi-Fi，并使用局域网地址打开播放端。</p>
+          <div className="share-list">
+            {roomLinks.map((link) => (
+              <div className="share-row" key={link.origin}>
+                <div>
+                  <strong>{link.label}</strong>
+                  <code>{link.origin}</code>
+                </div>
+                <div className="share-actions">
+                  <a className="button secondary" href={link.controlUrl}>
+                    控制端
+                  </a>
+                  <a className="button primary" href={link.playerUrl}>
+                    播放端
+                  </a>
+                </div>
+              </div>
+            ))}
+          </div>
+          {roomLinks.every((link) => link.kind !== "lan") && (
+            <p className="muted">暂未检测到局域网地址。请确认 Wi-Fi 已连接，或使用本机浏览器继续测试。</p>
+          )}
         </div>
 
         <div className="panel">
