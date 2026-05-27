@@ -109,6 +109,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
   const selectedRole = preferredRole(mode);
   const selfDevice = roomState && joinResult ? roomState.devices[joinResult.deviceId] : null;
+  const scriptDraft = roomState?.scriptDraft;
   const playerReports = devicesWithPlayback(roomState);
   const roomLinks = useMemo(() => {
     const origins = new Map<string, NetworkOrigin>();
@@ -246,6 +247,17 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [joinResult, loadDraftAndVersions]);
+
+  useEffect(() => {
+    if (mode === "control" || !scriptDraft) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setMarkdown(scriptDraft.markdown);
+      setDraftStatus(`draft rev ${scriptDraft.draftRevision} · ${scriptDraft.parseStatus}`);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [mode, scriptDraft]);
 
   async function saveDraft() {
     if (!joinResult) {

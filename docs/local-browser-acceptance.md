@@ -49,6 +49,20 @@ Observed flow:
 - Hide status left only a compact `显示状态` reveal button over the stage.
 - Device, RoomState, and same-network entry panels remained available below the stage.
 
+## Latest Script Hot Update Pass
+
+Date: 2026-05-27
+
+Result: PASS for desktop Safari player update without refresh.
+
+Observed flow:
+
+- Opened `/room/997401/player` in Safari and kept it connected.
+- Simulated a control-side draft save through the room draft API.
+- The player page updated from the original sample script to `现场热更新验证`.
+- The player showed marker `M777` and unique text `LIVE_SYNC_997401` without reloading.
+- RoomState changed to draft revision `2` while the player stayed connected.
+
 ## Repeatable Manual Pass
 
 1. Start the app with `pnpm dev`.
