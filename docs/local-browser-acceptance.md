@@ -78,6 +78,22 @@ Observed flow:
 - The LAN row displayed a QR code labeled `扫码打开播放端`.
 - Control and player LAN links remained visible beside the QR code.
 
+## Latest Field Check Panel Pass
+
+Date: 2026-05-27
+
+Result: PASS for desktop Safari field readiness panel.
+
+Observed flow:
+
+- Opened `/room/644966/control` in Safari.
+- The control page connected without staying on `joining`.
+- The `现场验收` panel marked `局域网入口` and `控制端连接` as passed.
+- Opened `/room/644966/player` in Chrome as a separate device.
+- The `现场验收` panel marked `播放端在线` as passed.
+- Pressed Play from Safari control.
+- The `现场验收` panel marked `播放回报` as passed and showed a fresh `playing` position.
+
 ## Repeatable Manual Pass
 
 1. Start the app with `pnpm dev`.
@@ -87,16 +103,17 @@ Observed flow:
 5. Confirm the LAN row shows a `扫码打开播放端` QR code for the player URL.
 6. Open the player URL in another browser, a private window, or iPad Safari on the same Wi-Fi so it becomes a separate device.
 7. If using iPad Safari, scan the LAN player QR code or type the LAN player URL from the room page. `localhost` only works on the Mac itself.
-8. Confirm both devices are online in the control device list.
+8. Confirm the control page's `现场验收` panel marks `局域网入口`, `控制端连接`, and `播放端在线` as passed.
 9. Press Play, Pause, Speed, and each marker jump from control.
 10. Press `回退 160px` and `前进 160px`, then confirm the player view moves without jumping back to the top.
-11. On the player page, press `保持亮屏`; confirm the browser either enters `亮屏中` or shows a graceful unsupported/permission message.
-12. Confirm the player view updates without reloading and the control view shows player playback reports.
+11. Confirm the `现场验收` panel marks `播放回报` as passed after the player starts reporting position.
+12. On the player page, press `保持亮屏`; confirm the browser either enters `亮屏中` or shows a graceful unsupported/permission message.
 13. Edit the markdown draft, save the draft, save a version, and restore the version.
 14. Confirm the player page receives saved draft/version/restore changes without refreshing.
 15. Refresh the player page and confirm it rejoins with the full RoomState.
 16. Keep the session running for 10 minutes before a real shoot.
 17. During a device pass, briefly toggle Wi-Fi off/on or background/foreground iPad Safari and confirm the status returns to `已连接` without refreshing.
+18. Confirm the `现场验收` panel updates `重连观察` after the reconnect path has been exercised.
 
 For an automated 10-minute stability pass, run `pnpm smoke:m5:session:10min` while `pnpm dev` is running.
 

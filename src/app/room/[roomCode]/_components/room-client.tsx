@@ -83,6 +83,12 @@ type NetworkOrigin = {
   kind: "local" | "lan";
 };
 
+type FieldReadinessItem = {
+  label: string;
+  status: "pass" | "pending" | "warn";
+  detail: string;
+};
+
 type WakeLockSentinelLike = EventTarget & {
   released: boolean;
   release: () => Promise<void>;
@@ -123,6 +129,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [wakeLockActive, setWakeLockActive] = useState(false);
   const [wakeLockStatus, setWakeLockStatus] = useState("");
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
+  const [nowMs, setNowMs] = useState(0);
 
   const selectedRole = preferredRole(mode);
   const selfDevice = roomState && joinResult ? roomState.devices[joinResult.deviceId] : null;
@@ -177,6 +184,19 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     roomRevisionRef.current = roomState?.roomRevision ?? 0;
     serverSeqRef.current = roomState?.serverSeq ?? 0;
   }, [roomState?.roomRevision, roomState?.serverSeq]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setNowMs(Date.now());
+    }, 0);
+    const interval = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -409,6 +429,50 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }, [joinResult, reconnectAttempt, selectedRole, sendEvent]);
 
   const devices = useMemo(() => Object.values(roomState?.devices ?? {}), [roomState]);
+  const fieldReadiness = useMemo<FieldReadinessItem[]>(() => {
+    const lanLink = roomLinks.find((link) => link.kind === "lan");
+    const controlDevice = devices.find((device) => device.role === "control" && device.online);
+    const playerDevice = devices.find((device) => device.role === "player" && device.online);
+    const latestPlaybackReport = playerReports
+      .map((device) => device.playbackState)
+      .filter((state): state is PlaybackState => Boolean(state))
+      .sort((a, b) => b.reportedAt - a.reportedAt)[0];
+    const playbackReportAge = latestPlaybackReport ? nowMs - latestPlaybackReport.reportedAt : null;
+    const playbackReportFresh = playbackReportAge !== null && playbackReportAge >= 0 && playbackReportAge < 5000;
+
+    return [
+      {
+        label: "局域网入口",
+        status: lanLink ? "pass" : "warn",
+        detail: lanLink ? `${lanLink.origin} 可扫码打开播放端` : "未检测到 LAN 地址，iPad 可能无法从同网访问",
+      },
+      {
+        label: "控制端连接",
+        status: connection === "connected" && controlDevice ? "pass" : "pending",
+        detail: controlDevice ? `${controlDevice.deviceId.slice(0, 12)} 在线` : "等待控制端完成连接",
+      },
+      {
+        label: "播放端在线",
+        status: playerDevice ? "pass" : "pending",
+        detail: playerDevice ? `${playerDevice.deviceId.slice(0, 12)} 在线` : "等待 iPad 或另一浏览器打开播放端",
+      },
+      {
+        label: "播放回报",
+        status: playbackReportFresh ? "pass" : "pending",
+        detail: latestPlaybackReport
+          ? `${latestPlaybackReport.state} · ${Math.round(latestPlaybackReport.positionPx)}px · ${Math.round((playbackReportAge ?? 0) / 1000)}s 前`
+          : "按播放后等待播放端上报位置",
+      },
+      {
+        label: "重连观察",
+        status: reconnectAttempt > 0 && connection === "connected" ? "pass" : "pending",
+        detail:
+          reconnectAttempt > 0
+            ? `已尝试重连 ${reconnectAttempt} 次，当前 ${connection === "connected" ? "已恢复" : connection}`
+            : "实机验收时短暂切后台或切换网络后观察恢复",
+      },
+    ];
+  }, [connection, devices, nowMs, playerReports, reconnectAttempt, roomLinks]);
 
   function setRole(role: DeviceRole) {
     const payload: RoleSetPayload = { role };
@@ -806,6 +870,24 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             <strong>{roomState?.currentScriptVersionId ? "saved" : "draft"}</strong>
           </div>
         </div>
+
+        {mode === "control" && (
+          <div className="panel field-panel">
+            <p className="eyebrow">Field Check</p>
+            <h2>现场验收</h2>
+            <div className="readiness-list">
+              {fieldReadiness.map((item) => (
+                <div className="readiness-row" key={item.label}>
+                  <span className={`readiness-state ${item.status}`}>{item.status === "pass" ? "已通过" : item.status === "warn" ? "注意" : "待确认"}</span>
+                  <div>
+                    <strong>{item.label}</strong>
+                    <p>{item.detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {mode === "control" && (
           <div className="panel editor-panel">

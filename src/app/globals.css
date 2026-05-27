@@ -208,6 +208,10 @@ input {
   grid-column: 1 / -1;
 }
 
+.field-panel {
+  grid-column: 1 / -1;
+}
+
 .editor-panel {
   grid-column: 1 / -1;
 }
@@ -337,6 +341,60 @@ input {
   align-items: center;
   gap: 8px;
   color: var(--muted);
+}
+
+.readiness-list {
+  display: grid;
+  gap: 12px;
+}
+
+.readiness-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.readiness-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.readiness-row strong {
+  display: block;
+  margin-bottom: 3px;
+}
+
+.readiness-row p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.readiness-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.readiness-state.pass {
+  background: var(--primary-dark);
+}
+
+.readiness-state.pending {
+  background: #64748b;
+}
+
+.readiness-state.warn {
+  background: var(--danger);
 }
 
 .script-surface {

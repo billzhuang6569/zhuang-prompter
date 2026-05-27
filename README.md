@@ -41,6 +41,8 @@ Script draft, version save, and version restore actions broadcast the updated Ro
 
 Control playback uses the current ScrollClock position for pause, speed changes, and 160px forward/back nudges, so live adjustments do not jump back to a stale local offset.
 
+The control route includes a field-check panel that summarizes same-network entry, control connection, player presence, fresh playback reports, and reconnect observation status during real-device testing.
+
 ## Verification
 
 ```bash
