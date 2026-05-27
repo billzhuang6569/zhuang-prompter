@@ -30,10 +30,30 @@ export function RenderBundleView({ bundle, variant }: RenderBundleViewProps) {
         </div>
       )}
 
-      <div className="teleprompter-content">
-        {bundle.htmlTree.map((node) => (
-          <RenderNodeView key={node.renderNodeId} node={node} />
-        ))}
+      <div className="render-bundle-layout">
+        <div className="teleprompter-content">
+          {bundle.htmlTree.map((node) => (
+            <RenderNodeView key={node.renderNodeId} node={node} />
+          ))}
+        </div>
+
+        <aside className="marker-index-panel">
+          <p className="eyebrow">Marker Index</p>
+          {bundle.markerIndex.length === 0 ? (
+            <p className="muted">No markers</p>
+          ) : (
+            <div className="marker-index-list">
+              {bundle.markerIndex.map((marker) => (
+                <div className="marker-index-item" key={`${marker.markerId}-${marker.blockIndex}`}>
+                  <strong>{marker.markerId}</strong>
+                  <span>{marker.label ?? marker.type}</span>
+                  {marker.note && <small>{marker.note}</small>}
+                  <code>{marker.inline ? "inline" : "independent"}</code>
+                </div>
+              ))}
+            </div>
+          )}
+        </aside>
       </div>
     </section>
   );

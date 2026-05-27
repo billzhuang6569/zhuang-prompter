@@ -311,6 +311,13 @@ input {
   margin-bottom: 18px;
 }
 
+.render-bundle-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 18px;
+  align-items: start;
+}
+
 .teleprompter-content {
   padding: 40px clamp(16px, 5vw, 64px);
   word-break: normal;
@@ -391,6 +398,39 @@ input {
   font-size: 0.8em;
 }
 
+.marker-index-panel {
+  position: sticky;
+  top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: rgb(127 127 127 / 5%);
+}
+
+.marker-index-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.marker-index-item {
+  display: grid;
+  gap: 4px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.marker-index-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.marker-index-item span,
+.marker-index-item small,
+.marker-index-item code {
+  color: var(--muted);
+}
+
 @media (max-width: 760px) {
   .workspace {
     width: min(100vw - 24px, 1120px);
@@ -398,7 +438,8 @@ input {
   }
 
   .entry-layout,
-  .room-grid {
+  .room-grid,
+  .render-bundle-layout {
     grid-template-columns: 1fr;
   }
 

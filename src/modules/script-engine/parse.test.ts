@@ -48,6 +48,21 @@ test("duplicate marker id creates parse warning", () => {
   assert.ok(bundle.parseWarnings.some((warning) => warning.code === "DUPLICATE_MARKER_ID"));
 });
 
+test("inline marker enters marker index without entering speech", () => {
+  const bundle = parseMarkdown('第一段。:marker[M002]{type="jump" label="跳段点"}继续说。');
+
+  assert.equal(bundle.markerIndex.length, 1);
+  assert.equal(bundle.markerIndex[0].inline, true);
+  assert.equal(bundle.markerIndex[0].markerId, "M002");
+  assert.ok(!bundle.speechIndex.some((item) => item.rawText.includes("跳段点")));
+});
+
+test("unsupported directive becomes parse warning", () => {
+  const bundle = parseMarkdown("::unknown[test]{label=\"nope\"}");
+
+  assert.ok(bundle.parseWarnings.some((warning) => warning.code === "INVALID_EXTENSION_SYNTAX"));
+});
+
 test("headings paragraphs lists and no-marker scripts still produce anchors", () => {
   const bundle = parseMarkdown(`# 标题
 第一段。

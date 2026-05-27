@@ -296,7 +296,7 @@ function isDirective(node: MarkdownNode, name: string) {
 
 function markerFromNode(node: MarkdownNode): MarkerData {
   return {
-    markerId: cleanText(node.label ?? "UNLABELED"),
+    markerId: cleanText(node.label ?? toString(node) ?? "UNLABELED"),
     type: stringAttr(node, "type") ?? "section",
     label: stringAttr(node, "label"),
     note: stringAttr(node, "note"),
