@@ -477,7 +477,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }
 
   return (
-    <main className="workspace">
+    <main className={`workspace ${mode === "player" ? "player-workspace" : ""}`}>
       <section className="room-topbar">
         <div>
           <p className="eyebrow">房间 {roomCode}</p>

@@ -33,6 +33,20 @@ Observed result:
 - Playback position never moved backwards.
 - Final RoomState still included the script draft and active ScrollClock.
 
+## Latest Player Stage Pass
+
+Date: 2026-05-27
+
+Result: PASS for desktop Safari visual check of the player-first layout.
+
+Observed flow:
+
+- Opened `/room/064121/player` in Safari.
+- The first viewport was the black teleprompter stage, not the device/debug panels.
+- Room code and connection state remained visible as a compact top overlay.
+- CJK headline, marker, stage cue, and body text were readable at shooting size.
+- Device, RoomState, and same-network entry panels remained available below the stage.
+
 ## Repeatable Manual Pass
 
 1. Start the app with `pnpm dev`.
