@@ -69,6 +69,39 @@ export type ScriptVersion = {
   createdAt: number;
 };
 
+export type VoiceMatchLevel = "locked" | "probable" | "uncertain" | "lost";
+
+export type VoiceTranscript = {
+  segmentId: string;
+  sourceDeviceId: string;
+  scriptVersionId: string;
+  isFinal: boolean;
+  text: string;
+  normalizedText: string;
+  asrConfidence: number;
+  receivedAt: number;
+};
+
+export type VoiceMatchResult = {
+  transcriptSegmentId: string;
+  matchedScrollAnchorId?: string;
+  matchedSpeechSegmentId?: string;
+  targetOffsetPx?: number;
+  confidence: number;
+  level: VoiceMatchLevel;
+  shouldAdvance: boolean;
+  reason: string;
+  updatedAt: number;
+};
+
+export type VoiceState = {
+  active: boolean;
+  sourceDeviceId: string | null;
+  status: "idle" | "active" | "permissionDenied" | "asrUnavailable";
+  transcript?: VoiceTranscript;
+  match?: VoiceMatchResult;
+};
+
 export type DevicePresence = {
   deviceId: string;
   sessionId: string | null;
@@ -98,7 +131,7 @@ export type RoomState = {
   currentControlMode: ControlMode;
   displayConfig: null;
   scrollClock: ScrollClock | null;
-  voiceState: null;
+  voiceState: VoiceState;
   devices: Record<string, DevicePresence>;
   roomRevision: number;
   serverSeq: number;

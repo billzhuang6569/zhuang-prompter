@@ -33,6 +33,7 @@ pnpm test:contracts
 pnpm smoke:m0
 pnpm smoke:m2
 pnpm smoke:m3
+pnpm smoke:m4
 ```
 
 Run smoke tests while `pnpm dev` is running.

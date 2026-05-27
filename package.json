@@ -11,7 +11,8 @@
     "test:contracts": "tsx --test src/modules/script-engine/parse.test.ts",
     "smoke:m0": "node scripts/m0-smoke.mjs",
     "smoke:m2": "node scripts/m2-smoke.mjs",
-    "smoke:m3": "node scripts/m3-smoke.mjs"
+    "smoke:m3": "node scripts/m3-smoke.mjs",
+    "smoke:m4": "node scripts/m4-smoke.mjs"
   },
   "dependencies": {
     "mdast-util-to-string": "^4.0.0",

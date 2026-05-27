@@ -1,11 +1,13 @@
-import type { DeviceRole, PlaybackState, RoomState, ScrollClock } from "../domain/room/types";
+import type { DeviceRole, PlaybackState, RoomState, ScrollClock, VoiceTranscript } from "../domain/room/types";
 
 export type ClientEventType =
   | "client.hello"
   | "role.set"
   | "presence.heartbeat"
   | "playback.setScrollClock"
-  | "playback.reportState";
+  | "playback.reportState"
+  | "voice.setSource"
+  | "voice.transcript";
 export type ServerEventType =
   | "server.welcome"
   | "server.ack"
@@ -42,6 +44,14 @@ export type SetScrollClockPayload = {
 
 export type PlaybackReportPayload = {
   playbackState: PlaybackState;
+};
+
+export type VoiceSetSourcePayload = {
+  sourceDeviceId: string | null;
+};
+
+export type VoiceTranscriptPayload = {
+  transcript: Omit<VoiceTranscript, "receivedAt" | "normalizedText">;
 };
 
 export type ServerAck = {

@@ -4,10 +4,12 @@ import {
   disconnectSession,
   getRoomState,
   heartbeat,
+  processVoiceTranscript,
   registerSession,
   reportPlaybackState,
   setScrollClock,
   setDeviceRole,
+  setVoiceSource,
 } from "../../modules/room-sync/room-store";
 import type {
   ClientEnvelope,
@@ -16,6 +18,8 @@ import type {
   RoleSetPayload,
   ServerEnvelope,
   SetScrollClockPayload,
+  VoiceSetSourcePayload,
+  VoiceTranscriptPayload,
 } from "../../shared/protocol";
 import { makeEventId } from "../../shared/protocol";
 
@@ -222,6 +226,50 @@ function handleClientEvent(socket: WebSocket, roomCode: string, raw: Buffer) {
       : null;
     if (!state) {
       nack(socket, event.eventId, "Invalid PlaybackState payload.");
+      return;
+    }
+    broadcastRoom(roomCode, {
+      type: "room.patch",
+      eventId: makeEventId("patch"),
+      roomRevision: state.roomRevision,
+      serverSeq: state.serverSeq,
+      state,
+    });
+    return;
+  }
+
+  if (event.type === "voice.setSource") {
+    const payload = event.payload as VoiceSetSourcePayload;
+    const state = setVoiceSource({ roomCode, sourceDeviceId: payload.sourceDeviceId });
+    if (!state) {
+      nack(socket, event.eventId, "Invalid voice source.");
+      return;
+    }
+    send(socket, {
+      type: "server.ack",
+      eventId: event.eventId,
+      accepted: true,
+      roomRevision: state.roomRevision,
+      serverSeq: state.serverSeq,
+      serverTime: Date.now(),
+    });
+    broadcastRoom(roomCode, {
+      type: "room.patch",
+      eventId: makeEventId("patch"),
+      roomRevision: state.roomRevision,
+      serverSeq: state.serverSeq,
+      state,
+    });
+    return;
+  }
+
+  if (event.type === "voice.transcript") {
+    const payload = event.payload as VoiceTranscriptPayload;
+    const state = payload.transcript
+      ? processVoiceTranscript({ roomCode, transcript: payload.transcript })
+      : null;
+    if (!state) {
+      nack(socket, event.eventId, "Invalid voice transcript.");
       return;
     }
     broadcastRoom(roomCode, {

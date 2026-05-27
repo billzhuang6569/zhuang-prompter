@@ -7,6 +7,8 @@ import type {
   ScriptDraft,
   ScriptVersion,
   ScrollClock,
+  VoiceMatchLevel,
+  VoiceTranscript,
 } from "../../domain/room/types";
 import { extensionSpecFixture, parseMarkdown } from "../script-engine";
 
@@ -134,7 +136,11 @@ export function createRoom(): RoomJoinResult {
     currentControlMode: "fixedSpeed",
     displayConfig: null,
     scrollClock: null,
-    voiceState: null,
+    voiceState: {
+      active: false,
+      sourceDeviceId: null,
+      status: "idle",
+    },
     devices: {
       [deviceId]: createDevicePresence(deviceId, at),
     },
@@ -458,6 +464,147 @@ export function reportPlaybackState(input: {
   record.state.serverSeq += 1;
   touchRoom(record, at);
   return cloneState(record.state);
+}
+
+export function setVoiceSource(input: {
+  roomCode: string;
+  sourceDeviceId: string | null;
+}): RoomState | null {
+  const record = roomsByCode.get(input.roomCode);
+  if (!record) {
+    return null;
+  }
+  const at = now();
+  for (const device of Object.values(record.state.devices)) {
+    device.isVoiceSource = input.sourceDeviceId === device.deviceId;
+  }
+  record.state.voiceState = {
+    active: Boolean(input.sourceDeviceId),
+    sourceDeviceId: input.sourceDeviceId,
+    status: input.sourceDeviceId ? "active" : "idle",
+    transcript: undefined,
+    match: undefined,
+  };
+  bumpRoomFact(record, at);
+  return cloneState(record.state);
+}
+
+export function processVoiceTranscript(input: {
+  roomCode: string;
+  transcript: Omit<VoiceTranscript, "receivedAt" | "normalizedText">;
+}): RoomState | null {
+  const record = roomsByCode.get(input.roomCode);
+  if (!record || record.state.voiceState.sourceDeviceId !== input.transcript.sourceDeviceId) {
+    return null;
+  }
+
+  const at = now();
+  const normalizedText = normalizeForVoice(input.transcript.text);
+  const transcript: VoiceTranscript = {
+    ...input.transcript,
+    normalizedText,
+    receivedAt: at,
+  };
+  const bundle = parseMarkdown(record.state.scriptDraft.markdown, {
+    scriptVersionId: record.state.currentScriptVersionId ?? "draft",
+  });
+  const match = findBestVoiceMatch(normalizedText, bundle.speechIndex, input.transcript.asrConfidence);
+  const shouldAdvance = input.transcript.isFinal && match.confidence >= 0.85 && Boolean(match.matchedScrollAnchorId);
+  record.state.voiceState = {
+    ...record.state.voiceState,
+    transcript,
+    match: {
+      ...match,
+      transcriptSegmentId: transcript.segmentId,
+      shouldAdvance,
+      reason: input.transcript.isFinal ? match.reason : "partial_transcript_hold",
+      updatedAt: at,
+    },
+  };
+
+  if (shouldAdvance) {
+    const anchor = bundle.scrollAnchorIndex.find((item) => item.anchorId === match.matchedScrollAnchorId);
+    bumpRoomFact(record, at);
+    record.state.scrollClock = {
+      scrollClockId: `clk_voice_${crypto.randomUUID()}`,
+      scriptVersionId: record.state.currentScriptVersionId ?? "draft",
+      state: "playing",
+      controlMode: "voiceFollow",
+      anchor: anchor?.markerId
+        ? { type: "marker", markerId: anchor.markerId, textHash: anchor.textHash }
+        : {
+            type: "speechSegment",
+            speechSegmentId: match.matchedSpeechSegmentId,
+            paragraphIndex: anchor?.paragraphIndex,
+            textHash: anchor?.textHash,
+          },
+      offsetPx: match.targetOffsetPx ?? 0,
+      velocityPxPerSecond: 48,
+      issuedAt: at,
+      sourceDeviceId: input.transcript.sourceDeviceId,
+      roomRevision: record.state.roomRevision,
+    };
+    record.state.currentControlMode = "voiceFollow";
+  } else {
+    record.state.serverSeq += 1;
+  }
+  touchRoom(record, at);
+  return cloneState(record.state);
+}
+
+function normalizeForVoice(value: string) {
+  return value
+    .normalize("NFKC")
+    .toLocaleLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "")
+    .trim();
+}
+
+function findBestVoiceMatch(
+  normalizedText: string,
+  speechIndex: ReturnType<typeof parseMarkdown>["speechIndex"],
+  asrConfidence: number,
+) {
+  let best = {
+    confidence: 0,
+    level: "lost" as VoiceMatchLevel,
+    reason: "no_match",
+    matchedScrollAnchorId: undefined as string | undefined,
+    matchedSpeechSegmentId: undefined as string | undefined,
+    targetOffsetPx: undefined as number | undefined,
+  };
+  for (const item of speechIndex) {
+    const candidate = normalizeForVoice(item.rawText);
+    const overlap = normalizedOverlap(normalizedText, candidate);
+    const confidence = Math.min(0.99, overlap * asrConfidence);
+    if (confidence > best.confidence) {
+      best = {
+        confidence,
+        level: confidence >= 0.85 ? "locked" : confidence >= 0.65 ? "probable" : confidence >= 0.4 ? "uncertain" : "lost",
+        reason: confidence >= 0.85 ? "nearby_final_match" : "low_confidence_hold",
+        matchedScrollAnchorId: item.scrollAnchorId,
+        matchedSpeechSegmentId: item.speechSegmentId,
+        targetOffsetPx: Math.max(0, (item.paragraphIndex - 1) * 360),
+      };
+    }
+  }
+  return best;
+}
+
+function normalizedOverlap(needle: string, haystack: string) {
+  if (!needle || !haystack) {
+    return 0;
+  }
+  if (haystack.includes(needle) || needle.includes(haystack)) {
+    return Math.min(1, Math.min(needle.length, haystack.length) / Math.max(needle.length, haystack.length) + 0.35);
+  }
+  let hits = 0;
+  for (const char of needle) {
+    if (haystack.includes(char)) {
+      hits += 1;
+    }
+  }
+  return hits / Math.max(needle.length, haystack.length);
 }
 
 export function disconnectSession(input: { roomCode: string; deviceId: string; sessionId: string }): RoomState | null {
