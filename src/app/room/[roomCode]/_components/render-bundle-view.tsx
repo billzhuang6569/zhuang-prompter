@@ -6,9 +6,18 @@ type RenderBundleViewProps = {
   variant: "control" | "player";
   playbackPositionPx?: number;
   fontScale?: number;
+  mirrored?: boolean;
+  showCenterGuide?: boolean;
 };
 
-export function RenderBundleView({ bundle, variant, playbackPositionPx = 0, fontScale = 1 }: RenderBundleViewProps) {
+export function RenderBundleView({
+  bundle,
+  variant,
+  playbackPositionPx = 0,
+  fontScale = 1,
+  mirrored = false,
+  showCenterGuide = false,
+}: RenderBundleViewProps) {
   const contentStyle =
     variant === "player"
       ? ({
@@ -18,7 +27,11 @@ export function RenderBundleView({ bundle, variant, playbackPositionPx = 0, font
       : undefined;
 
   return (
-    <section className={`script-surface ${variant === "player" ? "player-stage" : "control-preview"}`}>
+    <section
+      className={`script-surface ${variant === "player" ? "player-stage" : "control-preview"} ${
+        mirrored ? "is-mirrored" : ""
+      } ${showCenterGuide ? "has-center-guide" : ""}`}
+    >
       <div className="script-header">
         <div>
           <p className="eyebrow">M1 RenderBundle</p>

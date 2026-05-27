@@ -7,7 +7,7 @@ export default function Home() {
     const response = await fetch("/api/rooms", { method: "POST" });
     const data = (await response.json()) as { roomCode: string; deviceId: string };
     window.localStorage.setItem(`zhuang-prompter:${data.roomCode}:deviceId`, data.deviceId);
-    window.location.href = `/room/${data.roomCode}/select-role`;
+    window.location.href = `/room/${data.roomCode}/control`;
   }
 
   function joinRoom(event: FormEvent<HTMLFormElement>) {

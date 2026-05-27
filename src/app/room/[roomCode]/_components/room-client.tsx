@@ -144,6 +144,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
   const wakeLockReleaseHandlerRef = useRef<(() => void) | null>(null);
   const wakeLockWantedRef = useRef(false);
+  const scrollClockRef = useRef<ScrollClock | null>(null);
   const [connection, setConnection] = useState<ConnectionState>("joining");
   const [joinResult, setJoinResult] = useState<RoomJoinResult | null>(null);
   const [roomState, setRoomState] = useState<RoomState | null>(null);
@@ -157,6 +158,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [currentOrigin, setCurrentOrigin] = useState("");
   const [networkOrigins, setNetworkOrigins] = useState<NetworkOrigin[]>([]);
   const [playerFontScale, setPlayerFontScale] = useState(1);
+  const [playerMirrored, setPlayerMirrored] = useState(false);
   const [playerOverlayHidden, setPlayerOverlayHidden] = useState(false);
   const [fullscreenActive, setFullscreenActive] = useState(false);
   const [wakeLockWanted, setWakeLockWanted] = useState(false);
@@ -192,6 +194,17 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     }
     return parseMarkdown(markdown, { scriptVersionId: roomState?.currentScriptVersionId ?? "draft" });
   }, [markdown, roomState?.currentScriptVersionId]);
+  const activeScrollClock = roomState?.scrollClock ?? null;
+  const activeScrollClockKey = activeScrollClock
+    ? [
+        activeScrollClock.scrollClockId,
+        activeScrollClock.state,
+        activeScrollClock.offsetPx,
+        activeScrollClock.velocityPxPerSecond,
+        activeScrollClock.issuedAt,
+        JSON.stringify(activeScrollClock.anchor),
+      ].join(":")
+    : "";
 
   const sendEvent = useCallback(
     <TPayload,>(type: ClientEnvelope<TPayload>["type"], payload: TPayload) => {
@@ -221,6 +234,10 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     roomRevisionRef.current = roomState?.roomRevision ?? 0;
     serverSeqRef.current = roomState?.serverSeq ?? 0;
   }, [roomState?.roomRevision, roomState?.serverSeq]);
+
+  useEffect(() => {
+    scrollClockRef.current = activeScrollClock;
+  }, [activeScrollClock, activeScrollClockKey]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -751,6 +768,16 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     sendScrollClock("paused", targetOffset, 0, { type: "marker", markerId, textHash: marker.textHash });
   }
 
+  function insertMarkdownSnippet(kind: "marker" | "comment") {
+    if (kind === "marker") {
+      const nextIndex = (bundle?.markerIndex.length ?? 0) + 1;
+      const markerId = `M${nextIndex.toString().padStart(3, "0")}`;
+      setMarkdown((value) => `${value.trimEnd()}\n\n::marker[${markerId}]{type="section" label="新标记" note="现场跳转点"}\n`);
+      return;
+    }
+    setMarkdown((value) => `${value.trimEnd()}\n\n::stageCue[注释]{cue="给拍摄或后期看的提示"}\n`);
+  }
+
   useEffect(() => {
     playbackPositionRef.current = playbackPositionPx;
   }, [playbackPositionPx]);
@@ -778,11 +805,15 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   );
 
   useEffect(() => {
-    if (mode !== "player" || !roomState?.scrollClock || !joinResult) {
+    if (mode !== "player" || !activeScrollClockKey || !joinResult) {
       return;
     }
 
-    const clock = roomState.scrollClock;
+    const clock = scrollClockRef.current;
+    if (!clock) {
+      return;
+    }
+
     if (clock.state === "paused") {
       window.setTimeout(() => {
         setPlaybackPositionPx(clock.offsetPx);
@@ -796,16 +827,24 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       return;
     }
 
-    const interval = window.setInterval(() => {
+    let animationFrame = 0;
+    let lastReportedAt = 0;
+    const tick = () => {
       const elapsedSeconds = Math.max(0, Date.now() - clock.issuedAt) / 1000;
       const position = clock.offsetPx + elapsedSeconds * clock.velocityPxPerSecond;
       setPlaybackPositionPx(position);
       playbackPositionRef.current = position;
-      reportPlayerState(clock, position);
-    }, 350);
+      if (Date.now() - lastReportedAt >= 350) {
+        lastReportedAt = Date.now();
+        reportPlayerState(clock, position);
+      }
+      animationFrame = window.requestAnimationFrame(tick);
+    };
 
-    return () => window.clearInterval(interval);
-  }, [joinResult, mode, reportPlayerState, roomState?.scrollClock]);
+    animationFrame = window.requestAnimationFrame(tick);
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [activeScrollClockKey, joinResult, mode, reportPlayerState]);
 
   useEffect(() => {
     if (mode !== "player") {
@@ -952,6 +991,15 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             <button className="player-tool-button" type="button" onClick={() => changePlayerFontScale(0.1)}>
               A+
             </button>
+            <button className="player-tool-button" type="button" aria-pressed={playerMirrored} onClick={() => setPlayerMirrored((value) => !value)}>
+              {playerMirrored ? "取消镜像" : "镜像"}
+            </button>
+            <button className="player-tool-button" type="button" onClick={() => playFromCurrentOffset()}>
+              播放
+            </button>
+            <button className="player-tool-button" type="button" onClick={pauseAtCurrentOffset}>
+              暂停
+            </button>
             <button className="player-tool-button" type="button" onClick={() => void toggleFullscreen()}>
               {fullscreenActive ? "退出全屏" : "全屏"}
             </button>
@@ -964,9 +1012,12 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             </button>
           </div>
         )}
-        <div className={`status-pill ${connection}`}>
-          <span />
-          {connection === "connected" ? "已连接" : connection}
+        <div className="topbar-status-group">
+          <div className={`status-pill ${connection}`}>
+            <span />
+            {connection === "connected" ? "已连接" : connection}
+          </div>
+          <div className="status-chip">设备 {devices.length}</div>
         </div>
       </section>
       {mode === "player" && playerOverlayHidden && (
@@ -975,7 +1026,124 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
         </button>
       )}
 
+      {mode !== "player" && (
       <section className="room-grid">
+        {mode === "control" && bundle && (
+          <div className="panel control-hero-panel">
+            <div className="control-hero-head">
+              <div>
+                <p className="eyebrow">文稿中心</p>
+                <h2>渲染视图编辑</h2>
+                <p className="muted">{draftStatus}</p>
+              </div>
+              <div className="editor-toolbar" aria-label="文稿工具栏">
+                <button className="icon-button" type="button" title="增加标记" onClick={() => insertMarkdownSnippet("marker")}>
+                  M+
+                </button>
+                <button className="icon-button" type="button" title="增加注释" onClick={() => insertMarkdownSnippet("comment")}>
+                  注
+                </button>
+                <button className="button primary" type="button" onClick={saveVersion}>
+                  保存
+                </button>
+              </div>
+            </div>
+            <RenderBundleView bundle={bundle} variant="control" playbackPositionPx={playbackPositionPx} showCenterGuide />
+            <details className="source-editor">
+              <summary>编辑 Markdown 原文</summary>
+              <textarea value={markdown} onChange={(event) => setMarkdown(event.target.value)} />
+              <div className="role-actions">
+                <button className="button secondary" onClick={saveDraft}>
+                  保存草稿
+                </button>
+                <input
+                  aria-label="版本备注"
+                  value={versionMessage}
+                  onChange={(event) => setVersionMessage(event.target.value)}
+                  placeholder="版本备注"
+                />
+              </div>
+            </details>
+          </div>
+        )}
+
+        {mode === "control" && (
+          <div className="panel version-panel">
+            <p className="eyebrow">历史版本</p>
+            <h2>版本列表</h2>
+            <div className="version-list compact">
+              {versions.length === 0 && <p className="muted">还没有保存过版本</p>}
+              {versions.map((version) => (
+                <div className="version-row" key={version.versionId}>
+                  <div>
+                    <strong>{version.message ?? "未命名版本"}</strong>
+                    <small>
+                      {new Date(version.createdAt).toLocaleTimeString("zh-CN")} · {version.markerCount} markers
+                    </small>
+                  </div>
+                  <button className="icon-button" title="回退到这个版本" onClick={() => restoreVersion(version.versionId)}>
+                    ↩
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {mode === "control" && bundle && (
+          <div className="panel playback-panel">
+            <p className="eyebrow">播放控制</p>
+            <h2>控制播放端</h2>
+            <div className="playback-controls">
+              <button className="button primary" onClick={() => playFromCurrentOffset()}>
+                播放
+              </button>
+              <button className="button secondary" onClick={pauseAtCurrentOffset}>
+                暂停
+              </button>
+              <label>
+                速度
+                <input
+                  aria-label="播放速度"
+                  max={160}
+                  min={24}
+                  onChange={(event) => {
+                    const nextSpeed = Number(event.target.value);
+                    setSpeed(nextSpeed);
+                    if (roomState?.scrollClock?.state === "playing") {
+                      playFromCurrentOffset(nextSpeed);
+                    }
+                  }}
+                  type="range"
+                  value={speed}
+                />
+                <span>{speed}px/s</span>
+              </label>
+            </div>
+            <div className="marker-buttons secondary-markers">
+              <button className="button secondary" onClick={() => nudgePlayback(-160)}>
+                回退 160px
+              </button>
+              <button className="button secondary" onClick={() => nudgePlayback(160)}>
+                前进 160px
+              </button>
+              {bundle.markerIndex.map((marker) => (
+                <button className="button secondary" key={marker.markerId} onClick={() => jumpToMarker(marker.markerId)}>
+                  跳到 {marker.markerId}
+                </button>
+              ))}
+            </div>
+            <div className="report-list">
+              {playerReports.map((device) => (
+                <p key={device.deviceId}>
+                  {device.deviceId.slice(0, 10)} · {device.playbackState?.state} ·{" "}
+                  {Math.round(device.playbackState?.positionPx ?? 0)}px
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="panel">
           <p className="eyebrow">当前设备</p>
           <h2>{roleLabel(selfDevice?.role ?? selectedRole)}</h2>
@@ -1094,93 +1262,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           </div>
         )}
 
-        {mode === "control" && (
-          <div className="panel editor-panel">
-            <p className="eyebrow">M3 Script Draft</p>
-            <h2>文稿编辑与版本</h2>
-            <p className="muted">{draftStatus}</p>
-            <textarea value={markdown} onChange={(event) => setMarkdown(event.target.value)} />
-            <div className="role-actions">
-              <button className="button secondary" onClick={saveDraft}>
-                保存草稿
-              </button>
-              <input
-                aria-label="版本备注"
-                value={versionMessage}
-                onChange={(event) => setVersionMessage(event.target.value)}
-                placeholder="版本备注"
-              />
-              <button className="button primary" onClick={saveVersion}>
-                保存版本
-              </button>
-            </div>
-            <div className="version-list">
-              {versions.map((version) => (
-                <div className="version-row" key={version.versionId}>
-                  <div>
-                    <strong>{version.message ?? "未命名版本"}</strong>
-                    <small>
-                      {new Date(version.createdAt).toLocaleTimeString("zh-CN")} · {version.markerCount} markers ·{" "}
-                      {version.markdownLength} chars
-                    </small>
-                  </div>
-                  <button className="button secondary" onClick={() => restoreVersion(version.versionId)}>
-                    恢复
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {mode === "control" && bundle && (
-          <div className="panel playback-panel">
-            <p className="eyebrow">M2 Playback Intent</p>
-            <h2>播放控制</h2>
-            <div className="role-actions">
-              <button className="button primary" onClick={() => playFromCurrentOffset()}>
-                播放
-              </button>
-              <button className="button secondary" onClick={pauseAtCurrentOffset}>
-                暂停
-              </button>
-              <button
-                className="button secondary"
-                onClick={() => {
-                  const nextSpeed = speed === DEFAULT_SPEED ? 96 : DEFAULT_SPEED;
-                  setSpeed(nextSpeed);
-                  playFromCurrentOffset(nextSpeed);
-                }}
-              >
-                速度 {speed}px/s
-              </button>
-            </div>
-            <div className="marker-buttons">
-              <button className="button secondary" onClick={() => nudgePlayback(-160)}>
-                回退 160px
-              </button>
-              <button className="button secondary" onClick={() => nudgePlayback(160)}>
-                前进 160px
-              </button>
-            </div>
-            <div className="marker-buttons">
-              {bundle.markerIndex.map((marker) => (
-                <button className="button secondary" key={marker.markerId} onClick={() => jumpToMarker(marker.markerId)}>
-                  跳到 {marker.markerId}
-                </button>
-              ))}
-            </div>
-            <div className="report-list">
-              {playerReports.map((device) => (
-                <p key={device.deviceId}>
-                  {device.deviceId.slice(0, 10)} · {device.playbackState?.state} ·{" "}
-                  {Math.round(device.playbackState?.positionPx ?? 0)}px
-                </p>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div className="panel device-panel">
           <p className="eyebrow">设备在线状态</p>
           <div className="device-list">
@@ -1200,6 +1281,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           </div>
         </div>
       </section>
+      )}
       {expandedQrLink && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="播放端二维码">
           <div className="qr-modal">
@@ -1214,12 +1296,13 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           </div>
         </div>
       )}
-      {bundle && (
+      {mode === "player" && bundle && (
         <RenderBundleView
           bundle={bundle}
           variant={mode === "player" ? "player" : "control"}
           playbackPositionPx={playbackPositionPx}
           fontScale={playerFontScale}
+          mirrored={mode === "player" && playerMirrored}
         />
       )}
     </main>
