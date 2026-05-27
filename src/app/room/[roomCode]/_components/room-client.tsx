@@ -7,7 +7,6 @@ import type {
   ClientEnvelope,
   ClientHelloPayload,
   PlaybackReportPayload,
-  RoleSetPayload,
   ServerEnvelope,
   SetScrollClockPayload,
 } from "@/shared/protocol";
@@ -44,37 +43,11 @@ function preferredRole(mode: RoomClientProps["mode"]): DeviceRole | null {
   return null;
 }
 
-function roleLabel(role: DeviceRole | null) {
-  if (role === "control") {
-    return "控制端";
-  }
-  if (role === "player") {
-    return "播放端";
-  }
-  return "未选择";
-}
-
-function formatTime(value: number) {
-  return new Intl.DateTimeFormat("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(value);
-}
-
 const DEFAULT_SPEED = 68;
 const SCRIPT_VERSION_ID = "fixture_m1";
-const FIELD_SESSION_TARGET_MS = 10 * 60 * 1000;
 
 function currentTime() {
   return Date.now();
-}
-
-function formatDuration(durationMs: number) {
-  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 type VersionSummary = {
@@ -90,38 +63,6 @@ type NetworkOrigin = {
   origin: string;
   kind: "local" | "lan";
 };
-
-type FieldReadinessItem = {
-  label: string;
-  status: "pass" | "pending" | "warn";
-  detail: string;
-};
-
-type FieldSessionState = {
-  running: boolean;
-  startedAt: number | null;
-  stoppedAt: number | null;
-  reportCount: number;
-  firstPositionPx: number | null;
-  lastPositionPx: number | null;
-  lastReportAt: number | null;
-  lastReportKey: string | null;
-  movedBackward: boolean;
-};
-
-function createFieldSessionState(): FieldSessionState {
-  return {
-    running: false,
-    startedAt: null,
-    stoppedAt: null,
-    reportCount: 0,
-    firstPositionPx: null,
-    lastPositionPx: null,
-    lastReportAt: null,
-    lastReportKey: null,
-    movedBackward: false,
-  };
-}
 
 type WakeLockSentinelLike = EventTarget & {
   released: boolean;
@@ -148,7 +89,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [connection, setConnection] = useState<ConnectionState>("joining");
   const [joinResult, setJoinResult] = useState<RoomJoinResult | null>(null);
   const [roomState, setRoomState] = useState<RoomState | null>(null);
-  const [lastAck, setLastAck] = useState<string>("尚未发送事件");
   const [playbackPositionPx, setPlaybackPositionPx] = useState(0);
   const [speed, setSpeed] = useState(DEFAULT_SPEED);
   const [markdown, setMarkdown] = useState("");
@@ -165,13 +105,9 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [wakeLockActive, setWakeLockActive] = useState(false);
   const [wakeLockStatus, setWakeLockStatus] = useState("");
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
-  const [nowMs, setNowMs] = useState(0);
-  const [fieldSession, setFieldSession] = useState<FieldSessionState>(() => createFieldSessionState());
-  const [fieldReportStatus, setFieldReportStatus] = useState("");
   const [expandedQrLink, setExpandedQrLink] = useState<(NetworkOrigin & { playerUrl: string }) | null>(null);
 
   const selectedRole = preferredRole(mode);
-  const selfDevice = roomState && joinResult ? roomState.devices[joinResult.deviceId] : null;
   const scriptDraft = roomState?.scriptDraft;
   const playerReports = devicesWithPlayback(roomState);
   const roomLinks = useMemo(() => {
@@ -238,19 +174,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   useEffect(() => {
     scrollClockRef.current = activeScrollClock;
   }, [activeScrollClock, activeScrollClockKey]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setNowMs(Date.now());
-    }, 0);
-    const interval = window.setInterval(() => {
-      setNowMs(Date.now());
-    }, 1000);
-    return () => {
-      window.clearTimeout(timer);
-      window.clearInterval(interval);
-    };
-  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -446,12 +369,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       if (event.type === "server.welcome" || event.type === "room.patch" || event.type === "room.state") {
         setRoomState(event.state);
       }
-      if (event.type === "server.ack") {
-        setLastAck(`已确认 ${event.eventId.slice(0, 12)} · rev ${event.roomRevision} · seq ${event.serverSeq}`);
-      }
-      if (event.type === "server.nack") {
-        setLastAck(`被拒绝 ${event.code}: ${event.message}`);
-      }
     });
 
     socket.addEventListener("close", () => {
@@ -459,7 +376,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
         return;
       }
       setConnection("disconnected");
-      setLastAck("连接断开，正在尝试重连");
       const delay = Math.min(5000, 600 + reconnectAttempt * 700);
       reconnectTimer = window.setTimeout(() => {
         setReconnectAttempt((attempt) => attempt + 1);
@@ -483,206 +399,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }, [joinResult, reconnectAttempt, selectedRole, sendEvent]);
 
   const devices = useMemo(() => Object.values(roomState?.devices ?? {}), [roomState]);
-  const latestPlaybackReport = useMemo(
-    () =>
-      playerReports
-        .map((device) => device.playbackState)
-        .filter((state): state is PlaybackState => Boolean(state))
-        .sort((a, b) => b.reportedAt - a.reportedAt)[0],
-    [playerReports],
-  );
-  const fieldSessionElapsedMs = fieldSession.startedAt
-    ? Math.max(0, (fieldSession.running ? nowMs : fieldSession.stoppedAt ?? nowMs) - fieldSession.startedAt)
-    : 0;
-  const fieldSessionComplete =
-    fieldSessionElapsedMs >= FIELD_SESSION_TARGET_MS && fieldSession.reportCount > 0 && !fieldSession.movedBackward;
-  const fieldReadiness = useMemo<FieldReadinessItem[]>(() => {
-    const lanLink = roomLinks.find((link) => link.kind === "lan");
-    const controlDevice = devices.find((device) => device.role === "control" && device.online);
-    const playerDevice = devices.find((device) => device.role === "player" && device.online);
-    const playbackReportAge = latestPlaybackReport ? nowMs - latestPlaybackReport.reportedAt : null;
-    const playbackReportFresh = playbackReportAge !== null && playbackReportAge >= 0 && playbackReportAge < 5000;
-
-    return [
-      {
-        label: "局域网入口",
-        status: lanLink ? "pass" : "warn",
-        detail: lanLink ? `${lanLink.origin} 可扫码打开播放端` : "未检测到 LAN 地址，iPad 可能无法从同网访问",
-      },
-      {
-        label: "控制端连接",
-        status: connection === "connected" && controlDevice ? "pass" : "pending",
-        detail: controlDevice ? `${controlDevice.deviceId.slice(0, 12)} 在线` : "等待控制端完成连接",
-      },
-      {
-        label: "播放端在线",
-        status: playerDevice ? "pass" : "pending",
-        detail: playerDevice ? `${playerDevice.deviceId.slice(0, 12)} 在线` : "等待 iPad 或另一浏览器打开播放端",
-      },
-      {
-        label: "播放回报",
-        status: playbackReportFresh ? "pass" : "pending",
-        detail: latestPlaybackReport
-          ? `${latestPlaybackReport.state} · ${Math.round(latestPlaybackReport.positionPx)}px · ${Math.round((playbackReportAge ?? 0) / 1000)}s 前`
-          : "按播放后等待播放端上报位置",
-      },
-      {
-        label: "重连观察",
-        status: reconnectAttempt > 0 && connection === "connected" ? "pass" : "pending",
-        detail:
-          reconnectAttempt > 0
-            ? `已尝试重连 ${reconnectAttempt} 次，当前 ${connection === "connected" ? "已恢复" : connection}`
-            : "点击测试断线重连，或实机验收时短暂切后台/切换网络后观察恢复",
-      },
-      {
-        label: "10分钟运行",
-        status: fieldSession.movedBackward ? "warn" : fieldSessionComplete ? "pass" : "pending",
-        detail: fieldSession.startedAt
-          ? `${formatDuration(fieldSessionElapsedMs)} / 10:00 · ${fieldSession.reportCount} 次播放回报${
-              fieldSession.movedBackward ? " · 检测到位置倒退" : ""
-            }`
-          : "点击开始 10 分钟监测后，保持播放端运行到 10:00",
-      },
-    ];
-  }, [
-    connection,
-    devices,
-    fieldSession.movedBackward,
-    fieldSession.reportCount,
-    fieldSession.startedAt,
-    fieldSessionComplete,
-    fieldSessionElapsedMs,
-    latestPlaybackReport,
-    nowMs,
-    reconnectAttempt,
-    roomLinks,
-  ]);
-
-  useEffect(() => {
-    if (mode !== "control" || !fieldSession.running || !latestPlaybackReport) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setFieldSession((current) => {
-        if (!current.running) {
-          return current;
-        }
-        const reportKey = `${latestPlaybackReport.sourceDeviceId}:${latestPlaybackReport.reportedAt}:${Math.round(
-          latestPlaybackReport.positionPx,
-        )}`;
-        if (current.lastReportKey === reportKey) {
-          return current;
-        }
-        const movedBackward =
-          current.lastPositionPx !== null && latestPlaybackReport.positionPx + 1 < current.lastPositionPx;
-        return {
-          ...current,
-          reportCount: current.reportCount + 1,
-          firstPositionPx: current.firstPositionPx ?? latestPlaybackReport.positionPx,
-          lastPositionPx: latestPlaybackReport.positionPx,
-          lastReportAt: latestPlaybackReport.reportedAt,
-          lastReportKey: reportKey,
-          movedBackward: current.movedBackward || movedBackward,
-        };
-      });
-    }, 0);
-
-    return () => window.clearTimeout(timer);
-  }, [fieldSession.running, latestPlaybackReport, mode]);
-
-  function toggleFieldSession() {
-    if (fieldSession.running) {
-      setFieldSession((current) => ({
-        ...current,
-        running: false,
-        stoppedAt: Date.now(),
-      }));
-      return;
-    }
-    setFieldSession({
-      ...createFieldSessionState(),
-      running: true,
-      startedAt: Date.now(),
-    });
-  }
-
-  function resetFieldSession() {
-    setFieldSession(createFieldSessionState());
-  }
-
-  async function copyFieldReport() {
-    const statusLines = fieldReadiness.map((item) => {
-      const status = item.status === "pass" ? "PASS" : item.status === "warn" ? "WARN" : "PENDING";
-      return `- ${status} ${item.label}: ${item.detail}`;
-    });
-    const linkLines = roomLinks.map((link) => `- ${link.label}: ${link.origin}`);
-    const deviceLines = devices.map(
-      (device) =>
-        `- ${roleLabel(device.role)} ${device.deviceId.slice(0, 16)} ${device.online ? "online" : "offline"} ${
-          device.playbackState
-            ? `${device.playbackState.state} ${Math.round(device.playbackState.positionPx)}px`
-            : device.connectionState
-        }`,
-    );
-    const report = [
-      `# 庄Sir 提词器现场验收记录`,
-      ``,
-      `- Room: ${roomCode}`,
-      `- Time: ${new Date().toLocaleString("zh-CN")}`,
-      `- URL: ${window.location.href}`,
-      `- Connection: ${connection}`,
-      `- RoomRevision: ${roomState?.roomRevision ?? "-"}`,
-      `- ServerSeq: ${roomState?.serverSeq ?? "-"}`,
-      ``,
-      `## 入口`,
-      ...(linkLines.length > 0 ? linkLines : ["- 未检测到入口"]),
-      ``,
-      `## 现场验收`,
-      ...statusLines,
-      ``,
-      `## 设备`,
-      ...(deviceLines.length > 0 ? deviceLines : ["- 暂无设备"]),
-      ``,
-      `## 10分钟监测`,
-      `- Running: ${fieldSession.running ? "yes" : "no"}`,
-      `- Elapsed: ${formatDuration(fieldSessionElapsedMs)}`,
-      `- Reports: ${fieldSession.reportCount}`,
-      `- FirstPosition: ${fieldSession.firstPositionPx === null ? "-" : `${Math.round(fieldSession.firstPositionPx)}px`}`,
-      `- LastPosition: ${fieldSession.lastPositionPx === null ? "-" : `${Math.round(fieldSession.lastPositionPx)}px`}`,
-      `- MovedBackward: ${fieldSession.movedBackward ? "yes" : "no"}`,
-      ``,
-      `## 最新播放回报`,
-      latestPlaybackReport
-        ? `- ${latestPlaybackReport.state} ${Math.round(latestPlaybackReport.positionPx)}px at ${new Date(
-            latestPlaybackReport.reportedAt,
-          ).toLocaleTimeString("zh-CN")}`
-        : "- 暂无播放回报",
-    ].join("\n");
-
-    try {
-      await navigator.clipboard.writeText(report);
-      setFieldReportStatus("验收记录已复制");
-    } catch {
-      setFieldReportStatus("复制失败，请手动记录当前页面状态");
-    }
-  }
-
-  function testReconnect() {
-    const socket = socketRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN) {
-      setLastAck("当前未连接，无法启动重连测试");
-      return;
-    }
-    setLastAck("正在测试断线重连");
-    socket.close(4000, "field-readiness-reconnect-test");
-  }
-
-  function setRole(role: DeviceRole) {
-    const payload: RoleSetPayload = { role };
-    sendEvent("role.set", payload);
-  }
-
   const defaultAnchor = useMemo<Anchor>(() => {
     const marker = bundle?.markerIndex[0];
     if (marker) {
@@ -1018,6 +734,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             {connection === "connected" ? "已连接" : connection}
           </div>
           <div className="status-chip">设备 {devices.length}</div>
+          {joinResult?.deviceId && <code className="status-chip device-id-chip">Device ID {joinResult.deviceId}</code>}
         </div>
       </section>
       {mode === "player" && playerOverlayHidden && (
@@ -1133,36 +850,8 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
                 </button>
               ))}
             </div>
-            <div className="report-list">
-              {playerReports.map((device) => (
-                <p key={device.deviceId}>
-                  {device.deviceId.slice(0, 10)} · {device.playbackState?.state} ·{" "}
-                  {Math.round(device.playbackState?.positionPx ?? 0)}px
-                </p>
-              ))}
-            </div>
           </div>
         )}
-
-        <div className="panel">
-          <p className="eyebrow">当前设备</p>
-          <h2>{roleLabel(selfDevice?.role ?? selectedRole)}</h2>
-          <p className="muted">Device ID</p>
-          <code className="code-line">{joinResult?.deviceId ?? "joining"}</code>
-          <div className="role-actions">
-            <button className="button primary" onClick={() => setRole("control")}>
-              设为控制端
-            </button>
-            <button className="button secondary" onClick={() => setRole("player")}>
-              设为播放端
-            </button>
-          </div>
-          <div className="role-links">
-            <Link href={`/room/${roomCode}/control`}>打开控制端</Link>
-            <Link href={`/room/${roomCode}/player`}>打开播放端</Link>
-          </div>
-          <p className="muted">{lastAck}</p>
-        </div>
 
         <div className="panel share-panel">
           <p className="eyebrow">设备入口</p>
@@ -1201,85 +890,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           )}
         </div>
 
-        <div className="panel">
-          <p className="eyebrow">RoomState</p>
-          <div className="stat-row">
-            <span>roomRevision</span>
-            <strong>{roomState?.roomRevision ?? "-"}</strong>
-          </div>
-          <div className="stat-row">
-            <span>serverSeq</span>
-            <strong>{roomState?.serverSeq ?? "-"}</strong>
-          </div>
-          <div className="stat-row">
-            <span>设备数</span>
-            <strong>{devices.length}</strong>
-          </div>
-          <div className="stat-row">
-            <span>ScrollClock</span>
-            <strong>{roomState?.scrollClock?.state ?? "-"}</strong>
-          </div>
-          <div className="stat-row">
-            <span>Draft</span>
-            <strong>{roomState?.scriptDraft.draftRevision ?? "-"}</strong>
-          </div>
-          <div className="stat-row">
-            <span>Version</span>
-            <strong>{roomState?.currentScriptVersionId ? "saved" : "draft"}</strong>
-          </div>
-        </div>
-
-        {mode === "control" && (
-          <div className="panel field-panel">
-            <p className="eyebrow">Field Check</p>
-            <h2>现场验收</h2>
-            <div className="readiness-actions">
-              <button className="button primary" onClick={toggleFieldSession}>
-                {fieldSession.running ? "停止10分钟监测" : "开始10分钟监测"}
-              </button>
-              <button className="button secondary" onClick={resetFieldSession}>
-                重置监测
-              </button>
-              <button className="button secondary" onClick={() => void copyFieldReport()}>
-                复制验收记录
-              </button>
-              <button className="button secondary" disabled={connection !== "connected"} onClick={testReconnect}>
-                测试断线重连
-              </button>
-            </div>
-            {fieldReportStatus && <p className="muted">{fieldReportStatus}</p>}
-            <div className="readiness-list">
-              {fieldReadiness.map((item) => (
-                <div className="readiness-row" key={item.label}>
-                  <span className={`readiness-state ${item.status}`}>{item.status === "pass" ? "已通过" : item.status === "warn" ? "注意" : "待确认"}</span>
-                  <div>
-                    <strong>{item.label}</strong>
-                    <p>{item.detail}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="panel device-panel">
-          <p className="eyebrow">设备在线状态</p>
-          <div className="device-list">
-            {devices.map((device) => (
-              <div className="device-row" key={device.deviceId}>
-                <div>
-                  <strong>{roleLabel(device.role)}</strong>
-                  <code>{device.deviceId.slice(0, 16)}</code>
-                </div>
-                <div className="device-meta">
-                  <span className={`dot ${device.online ? "online" : "offline"}`} />
-                  {device.connectionState}
-                  <small>{formatTime(device.lastSeenAt)}</small>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
       </section>
       )}
       {expandedQrLink && (

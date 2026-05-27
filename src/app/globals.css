@@ -190,6 +190,16 @@ input {
   font-weight: 700;
 }
 
+.device-id-chip {
+  max-width: min(48vw, 420px);
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-geist-mono), "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+}
+
 .status-pill span,
 .dot {
   width: 9px;
