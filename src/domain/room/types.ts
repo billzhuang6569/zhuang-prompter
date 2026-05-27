@@ -1,6 +1,46 @@
 export type DeviceRole = "control" | "player";
 
 export type DeviceConnectionState = "online" | "reconnecting" | "offline";
+export type ControlMode = "fixedSpeed" | "manual" | "voiceFollow";
+export type PlaybackStatus = "playing" | "paused" | "frozen";
+
+export type Anchor = {
+  anchorId?: string;
+  type: "marker" | "heading" | "paragraph" | "speechSegment" | "textHash" | "renderLine";
+  markerId?: string;
+  speechSegmentId?: string;
+  headingText?: string;
+  paragraphIndex?: number;
+  textHash?: string;
+  renderLineIndex?: number;
+  fallbackTextHash?: string;
+};
+
+export type ScrollClock = {
+  scrollClockId: string;
+  scriptVersionId: string;
+  state: PlaybackStatus;
+  controlMode: ControlMode;
+  anchor: Anchor;
+  offsetPx: number;
+  velocityPxPerSecond: number;
+  issuedAt: number;
+  sourceDeviceId: string;
+  roomRevision: number;
+};
+
+export type PlaybackState = {
+  scriptVersionId: string;
+  state: PlaybackStatus;
+  positionPx: number;
+  currentAnchor: Anchor;
+  velocityPxPerSecond: number;
+  controlMode: ControlMode;
+  sourceDeviceId: string;
+  scrollClockId?: string;
+  reportedAt: number;
+  serverReceivedAt?: number;
+};
 
 export type DevicePresence = {
   deviceId: string;
@@ -17,6 +57,7 @@ export type DevicePresence = {
     wakeLock?: boolean;
   };
   isVoiceSource: boolean;
+  playbackState?: PlaybackState;
 };
 
 export type RoomState = {
@@ -25,9 +66,9 @@ export type RoomState = {
   status: "active" | "closed";
   currentScriptVersionId: null;
   currentDraftId: null;
-  currentControlMode: "fixedSpeed";
+  currentControlMode: ControlMode;
   displayConfig: null;
-  scrollClock: null;
+  scrollClock: ScrollClock | null;
   voiceState: null;
   devices: Record<string, DevicePresence>;
   roomRevision: number;

@@ -5,9 +5,18 @@ import {
   getRoomState,
   heartbeat,
   registerSession,
+  reportPlaybackState,
+  setScrollClock,
   setDeviceRole,
 } from "../../modules/room-sync/room-store";
-import type { ClientEnvelope, ClientHelloPayload, RoleSetPayload, ServerEnvelope } from "../../shared/protocol";
+import type {
+  ClientEnvelope,
+  ClientHelloPayload,
+  PlaybackReportPayload,
+  RoleSetPayload,
+  ServerEnvelope,
+  SetScrollClockPayload,
+} from "../../shared/protocol";
 import { makeEventId } from "../../shared/protocol";
 
 type ClientRecord = {
@@ -167,7 +176,65 @@ function handleClientEvent(socket: WebSocket, roomCode: string, raw: Buffer) {
     return;
   }
 
-  nack(socket, event.eventId, `Unsupported M0 event: ${event.type}`);
+  if (event.type === "playback.setScrollClock") {
+    const payload = event.payload as SetScrollClockPayload;
+    const state = payload.scrollClock
+      ? setScrollClock({
+          roomCode,
+          deviceId: event.deviceId,
+          sessionId: event.sessionId,
+          clientSeq: event.clientSeq,
+          scrollClock: payload.scrollClock,
+        })
+      : null;
+    if (!state) {
+      nack(socket, event.eventId, "Invalid ScrollClock payload.");
+      return;
+    }
+    send(socket, {
+      type: "server.ack",
+      eventId: event.eventId,
+      accepted: true,
+      roomRevision: state.roomRevision,
+      serverSeq: state.serverSeq,
+      serverTime: Date.now(),
+    });
+    broadcastRoom(roomCode, {
+      type: "room.patch",
+      eventId: makeEventId("patch"),
+      roomRevision: state.roomRevision,
+      serverSeq: state.serverSeq,
+      state,
+    });
+    return;
+  }
+
+  if (event.type === "playback.reportState") {
+    const payload = event.payload as PlaybackReportPayload;
+    const state = payload.playbackState
+      ? reportPlaybackState({
+          roomCode,
+          deviceId: event.deviceId,
+          sessionId: event.sessionId,
+          clientSeq: event.clientSeq,
+          playbackState: payload.playbackState,
+        })
+      : null;
+    if (!state) {
+      nack(socket, event.eventId, "Invalid PlaybackState payload.");
+      return;
+    }
+    broadcastRoom(roomCode, {
+      type: "room.patch",
+      eventId: makeEventId("patch"),
+      roomRevision: state.roomRevision,
+      serverSeq: state.serverSeq,
+      state,
+    });
+    return;
+  }
+
+  nack(socket, event.eventId, `Unsupported event: ${event.type}`);
 }
 
 export function attachRoomWebSocketServer(server: Server) {

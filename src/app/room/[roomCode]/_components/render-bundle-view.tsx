@@ -1,11 +1,20 @@
+import type { CSSProperties } from "react";
 import type { RenderBundle, RenderNode } from "@/modules/script-engine";
 
 type RenderBundleViewProps = {
   bundle: RenderBundle;
   variant: "control" | "player";
+  playbackPositionPx?: number;
 };
 
-export function RenderBundleView({ bundle, variant }: RenderBundleViewProps) {
+export function RenderBundleView({ bundle, variant, playbackPositionPx = 0 }: RenderBundleViewProps) {
+  const contentStyle =
+    variant === "player"
+      ? ({
+          "--playback-offset": `${Math.max(0, playbackPositionPx)}px`,
+        } as CSSProperties)
+      : undefined;
+
   return (
     <section className={`script-surface ${variant === "player" ? "player-stage" : "control-preview"}`}>
       <div className="script-header">
@@ -31,7 +40,7 @@ export function RenderBundleView({ bundle, variant }: RenderBundleViewProps) {
       )}
 
       <div className="render-bundle-layout">
-        <div className="teleprompter-content">
+        <div className="teleprompter-content" style={contentStyle}>
           {bundle.htmlTree.map((node) => (
             <RenderNodeView key={node.renderNodeId} node={node} />
           ))}

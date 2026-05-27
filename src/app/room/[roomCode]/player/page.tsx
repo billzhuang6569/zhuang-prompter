@@ -1,5 +1,5 @@
 import { RoomClient } from "../_components/room-client";
-import { ScriptPreviewDemo } from "../_components/script-preview-demo";
+import { extensionSpecFixture, parseMarkdown } from "@/modules/script-engine";
 
 type PageProps = {
   params: Promise<{
@@ -9,10 +9,6 @@ type PageProps = {
 
 export default async function PlayerPage({ params }: PageProps) {
   const { roomCode } = await params;
-  return (
-    <>
-      <RoomClient roomCode={roomCode} mode="player" />
-      <ScriptPreviewDemo variant="player" />
-    </>
-  );
+  const bundle = parseMarkdown(extensionSpecFixture, { scriptVersionId: "fixture_m1" });
+  return <RoomClient roomCode={roomCode} mode="player" bundle={bundle} />;
 }

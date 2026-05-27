@@ -1,6 +1,11 @@
-import type { DeviceRole, RoomState } from "../domain/room/types";
+import type { DeviceRole, PlaybackState, RoomState, ScrollClock } from "../domain/room/types";
 
-export type ClientEventType = "client.hello" | "role.set" | "presence.heartbeat";
+export type ClientEventType =
+  | "client.hello"
+  | "role.set"
+  | "presence.heartbeat"
+  | "playback.setScrollClock"
+  | "playback.reportState";
 export type ServerEventType =
   | "server.welcome"
   | "server.ack"
@@ -29,6 +34,14 @@ export type ClientHelloPayload = {
 
 export type RoleSetPayload = {
   role: DeviceRole;
+};
+
+export type SetScrollClockPayload = {
+  scrollClock: Omit<ScrollClock, "roomRevision">;
+};
+
+export type PlaybackReportPayload = {
+  playbackState: PlaybackState;
 };
 
 export type ServerAck = {

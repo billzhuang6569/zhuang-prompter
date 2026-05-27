@@ -31,6 +31,7 @@ pnpm lint
 pnpm typecheck
 pnpm test:contracts
 pnpm smoke:m0
+pnpm smoke:m2
 ```
 
-Run `pnpm smoke:m0` while `pnpm dev` is running.
+Run smoke tests while `pnpm dev` is running.

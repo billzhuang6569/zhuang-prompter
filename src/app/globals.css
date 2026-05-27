@@ -200,6 +200,10 @@ input {
   grid-column: 1 / -1;
 }
 
+.playback-panel {
+  grid-column: 1 / -1;
+}
+
 .panel h2 {
   margin: 8px 0 18px;
   font-size: 28px;
@@ -333,6 +337,8 @@ input {
   min-height: 70vh;
   font-size: clamp(32px, 5vw, 64px);
   line-height: 1.35;
+  transform: translateY(calc(-1 * var(--playback-offset, 0px)));
+  transition: transform 180ms linear;
 }
 
 .control-preview .teleprompter-content {
@@ -428,6 +434,21 @@ input {
 .marker-index-item span,
 .marker-index-item small,
 .marker-index-item code {
+  color: var(--muted);
+}
+
+.marker-buttons,
+.report-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.report-list p {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 10px;
   color: var(--muted);
 }
 

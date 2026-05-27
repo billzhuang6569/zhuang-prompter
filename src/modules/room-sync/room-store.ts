@@ -1,4 +1,4 @@
-import type { DevicePresence, DeviceRole, RoomJoinResult, RoomState } from "../../domain/room/types";
+import type { DevicePresence, DeviceRole, PlaybackState, RoomJoinResult, RoomState, ScrollClock } from "../../domain/room/types";
 
 const OFFLINE_AFTER_MS = 30_000;
 
@@ -242,6 +242,66 @@ export function heartbeat(input: {
   device.connectionState = "online";
   device.lastSeenAt = at;
   device.lastClientSeq = Math.max(device.lastClientSeq, input.clientSeq);
+  record.state.serverSeq += 1;
+  touchRoom(record, at);
+  return cloneState(record.state);
+}
+
+export function setScrollClock(input: {
+  roomCode: string;
+  deviceId: string;
+  sessionId: string;
+  clientSeq: number;
+  scrollClock: Omit<ScrollClock, "roomRevision">;
+}): RoomState | null {
+  const record = roomsByCode.get(input.roomCode);
+  if (!record) {
+    return null;
+  }
+
+  const at = now();
+  const device = record.state.devices[input.deviceId] ?? createDevicePresence(input.deviceId, at);
+  device.sessionId = input.sessionId;
+  device.online = true;
+  device.connectionState = "online";
+  device.lastSeenAt = at;
+  device.lastClientSeq = Math.max(device.lastClientSeq, input.clientSeq);
+  record.state.devices[input.deviceId] = device;
+  bumpRoomFact(record, at);
+  record.state.scrollClock = {
+    ...input.scrollClock,
+    sourceDeviceId: input.deviceId,
+    roomRevision: record.state.roomRevision,
+  };
+  record.state.currentControlMode = input.scrollClock.controlMode;
+  touchRoom(record, at);
+  return cloneState(record.state);
+}
+
+export function reportPlaybackState(input: {
+  roomCode: string;
+  deviceId: string;
+  sessionId: string;
+  clientSeq: number;
+  playbackState: PlaybackState;
+}): RoomState | null {
+  const record = roomsByCode.get(input.roomCode);
+  if (!record) {
+    return null;
+  }
+
+  const at = now();
+  const device = record.state.devices[input.deviceId] ?? createDevicePresence(input.deviceId, at);
+  device.sessionId = input.sessionId;
+  device.online = true;
+  device.connectionState = "online";
+  device.lastSeenAt = at;
+  device.lastClientSeq = Math.max(device.lastClientSeq, input.clientSeq);
+  device.playbackState = {
+    ...input.playbackState,
+    serverReceivedAt: at,
+  };
+  record.state.devices[input.deviceId] = device;
   record.state.serverSeq += 1;
   touchRoom(record, at);
   return cloneState(record.state);
