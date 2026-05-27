@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import type { Anchor, DeviceRole, PlaybackState, RoomJoinResult, RoomState, ScrollClock } from "@/domain/room/types";
 import type {
@@ -64,6 +65,37 @@ type NetworkOrigin = {
   kind: "local" | "lan";
 };
 
+type IconName =
+  | "bolt"
+  | "file"
+  | "bookmark"
+  | "comment"
+  | "monitor"
+  | "keyboard"
+  | "qr"
+  | "copy"
+  | "invite"
+  | "history"
+  | "undo"
+  | "play"
+  | "pause"
+  | "skipBack"
+  | "skipForward"
+  | "minus"
+  | "plus"
+  | "fullscreen"
+  | "list"
+  | "heading"
+  | "bold"
+  | "italic"
+  | "strike"
+  | "quote"
+  | "code"
+  | "link"
+  | "image"
+  | "table"
+  | "save";
+
 type WakeLockSentinelLike = EventTarget & {
   released: boolean;
   release: () => Promise<void>;
@@ -92,7 +124,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [playbackPositionPx, setPlaybackPositionPx] = useState(0);
   const [speed, setSpeed] = useState(DEFAULT_SPEED);
   const [markdown, setMarkdown] = useState("");
-  const [draftStatus, setDraftStatus] = useState("草稿未加载");
   const [versionMessage, setVersionMessage] = useState("");
   const [versions, setVersions] = useState<VersionSummary[]>([]);
   const [currentOrigin, setCurrentOrigin] = useState("");
@@ -106,6 +137,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [wakeLockStatus, setWakeLockStatus] = useState("");
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [expandedQrLink, setExpandedQrLink] = useState<(NetworkOrigin & { playerUrl: string }) | null>(null);
+  const [projectName, setProjectName] = useState("小庄Sir013");
 
   const selectedRole = preferredRole(mode);
   const scriptDraft = roomState?.scriptDraft;
@@ -141,6 +173,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
         JSON.stringify(activeScrollClock.anchor),
       ].join(":")
     : "";
+  const playerEntryLink = roomLinks.find((link) => link.kind === "lan") ?? roomLinks[0];
 
   const sendEvent = useCallback(
     <TPayload,>(type: ClientEnvelope<TPayload>["type"], payload: TPayload) => {
@@ -236,6 +269,20 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     };
   }, []);
 
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const storedName = window.localStorage.getItem(`zhuang-prompter:${roomCode}:projectName`);
+      if (storedName) {
+        setProjectName(storedName);
+      }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [roomCode]);
+
+  useEffect(() => {
+    window.localStorage.setItem(`zhuang-prompter:${roomCode}:projectName`, projectName);
+  }, [projectName, roomCode]);
+
   const loadDraftAndVersions = useCallback(async () => {
     const [draftResponse, versionsResponse] = await Promise.all([
       fetch(`/api/rooms/${roomCode}/script/draft`),
@@ -244,7 +291,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     if (draftResponse.ok) {
       const draft = (await draftResponse.json()) as { markdown: string; draftRevision: number; parseStatus: string };
       setMarkdown(draft.markdown);
-      setDraftStatus(`draft rev ${draft.draftRevision} · ${draft.parseStatus}`);
     }
     if (versionsResponse.ok) {
       const data = (await versionsResponse.json()) as { versions: VersionSummary[] };
@@ -268,7 +314,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     }
     const timer = window.setTimeout(() => {
       setMarkdown(scriptDraft.markdown);
-      setDraftStatus(`draft rev ${scriptDraft.draftRevision} · ${scriptDraft.parseStatus}`);
     }, 0);
     return () => window.clearTimeout(timer);
   }, [mode, scriptDraft]);
@@ -285,7 +330,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     if (response.ok) {
       const data = (await response.json()) as { roomState: RoomState };
       setRoomState(data.roomState);
-      setDraftStatus(`draft rev ${data.roomState.scriptDraft.draftRevision} · ${data.roomState.scriptDraft.parseStatus}`);
     }
   }
 
@@ -318,7 +362,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       const data = (await response.json()) as { roomState: RoomState; draft: { markdown: string } };
       setRoomState(data.roomState);
       setMarkdown(data.draft.markdown);
-      setDraftStatus(`restored · draft rev ${data.roomState.scriptDraft.draftRevision}`);
       await loadDraftAndVersions();
     }
   }
@@ -691,12 +734,284 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     );
   }
 
+  if (mode === "control") {
+    return (
+      <main className="control-workspace">
+        <header className="control-appbar">
+          <div className="control-brand">
+            <span className="brand-badge">PROMPTER</span>
+            <div>
+              <strong>庄Sir的提词器</strong>
+              <span>控制端</span>
+            </div>
+          </div>
+
+          <div className="control-room-meta">
+            <div>
+              <span>房间号</span>
+              <strong>{roomCode}</strong>
+            </div>
+            <div>
+              <span>状态</span>
+              <strong className="connected-label">
+                <i />
+                {connection === "connected" ? "已连接" : connection}
+              </strong>
+            </div>
+            <div>
+              <span>设备数</span>
+              <strong>{devices.length}</strong>
+            </div>
+            {joinResult?.deviceId && (
+              <div className="control-device-id">
+                <span>Device ID</span>
+                <code>{joinResult.deviceId}</code>
+              </div>
+            )}
+          </div>
+
+          <div className="control-app-actions">
+            <button
+              className="chrome-icon-button"
+              type="button"
+              title="房间二维码"
+              disabled={!playerEntryLink}
+              onClick={() => playerEntryLink && setExpandedQrLink(playerEntryLink)}
+            >
+              <Icon name="qr" />
+            </button>
+            <button
+              className="chrome-button"
+              type="button"
+              disabled={!playerEntryLink}
+              onClick={() => playerEntryLink && navigator.clipboard?.writeText(playerEntryLink.playerUrl)}
+            >
+              <Icon name="invite" />
+              邀请
+            </button>
+            <div className="user-chip">ZS</div>
+          </div>
+        </header>
+
+        <div className="control-shell">
+          <aside className="control-sidebar">
+            <button className="new-button" type="button">
+              NEW
+              <Icon name="bolt" />
+            </button>
+            <nav className="control-nav">
+              <a className="active" href="#script">
+                <Icon name="file" />
+                文稿编辑
+              </a>
+              <a href="#markers">
+                <Icon name="bookmark" />
+                标记管理
+              </a>
+              <a href="#comments">
+                <Icon name="comment" />
+                注释
+              </a>
+              <a href="#devices">
+                <Icon name="monitor" />
+                设备
+              </a>
+              <a href="#shortcuts">
+                <Icon name="keyboard" />
+                快捷键
+              </a>
+            </nav>
+            <div className="project-card">
+              <span>项目名称</span>
+              <input
+                aria-label="项目名称"
+                value={projectName}
+                onChange={(event) => setProjectName(event.target.value)}
+                placeholder="输入项目名称"
+              />
+            </div>
+          </aside>
+
+          <section className="control-main-column">
+            <section className="control-document-panel" id="script">
+              <div className="document-toolbar">
+                <div className="format-tools" aria-label="文稿格式工具栏">
+                  <button type="button" title="标题">
+                    <Icon name="heading" />
+                  </button>
+                  <button type="button" title="加粗">
+                    <Icon name="bold" />
+                  </button>
+                  <button type="button" title="斜体">
+                    <Icon name="italic" />
+                  </button>
+                  <button type="button" title="删除线">
+                    <Icon name="strike" />
+                  </button>
+                  <button type="button" title="列表">
+                    <Icon name="list" />
+                  </button>
+                  <button type="button" title="引用">
+                    <Icon name="quote" />
+                  </button>
+                  <button type="button" title="代码">
+                    <Icon name="code" />
+                  </button>
+                  <button type="button" title="链接">
+                    <Icon name="link" />
+                  </button>
+                  <button type="button" title="图片">
+                    <Icon name="image" />
+                  </button>
+                  <button type="button" title="表格">
+                    <Icon name="table" />
+                  </button>
+                </div>
+                <div className="script-actions">
+                  <button className="toolbar-action" type="button" onClick={() => insertMarkdownSnippet("marker")}>
+                    <Icon name="bookmark" />
+                    标记
+                  </button>
+                  <button className="toolbar-action" type="button" onClick={() => insertMarkdownSnippet("comment")}>
+                    <Icon name="comment" />
+                    注释
+                  </button>
+                  <button className="save-button" type="button" onClick={saveVersion}>
+                    <Icon name="save" />
+                    保存
+                  </button>
+                </div>
+              </div>
+
+              {bundle && (
+                <RenderBundleView bundle={bundle} variant="control" playbackPositionPx={playbackPositionPx} showCenterGuide />
+              )}
+
+              <details className="source-editor control-source-editor">
+                <summary>编辑 Markdown 原文</summary>
+                <textarea value={markdown} onChange={(event) => setMarkdown(event.target.value)} />
+                <div className="source-actions">
+                  <button className="chrome-button" type="button" onClick={saveDraft}>
+                    保存草稿
+                  </button>
+                  <input
+                    aria-label="版本备注"
+                    value={versionMessage}
+                    onChange={(event) => setVersionMessage(event.target.value)}
+                    placeholder="版本备注，例如：发布会开场版"
+                  />
+                </div>
+              </details>
+            </section>
+
+            {bundle && (
+              <section className="control-playback-bar" aria-label="播放控制">
+                <strong>播放控制</strong>
+                <button className="round-tool" type="button" title="回退" onClick={() => nudgePlayback(-160)}>
+                  <Icon name="skipBack" />
+                </button>
+                <button className="play-main-button" type="button" onClick={() => playFromCurrentOffset()}>
+                  <Icon name="play" />
+                </button>
+                <button className="round-tool" type="button" title="暂停" onClick={pauseAtCurrentOffset}>
+                  <Icon name="pause" />
+                </button>
+                <div className="speed-control">
+                  <span>速度</span>
+                  <button type="button" onClick={() => setSpeed((value) => Math.max(24, value - 8))}>
+                    <Icon name="minus" />
+                  </button>
+                  <strong>{speed} px/s</strong>
+                  <button type="button" onClick={() => setSpeed((value) => Math.min(160, value + 8))}>
+                    <Icon name="plus" />
+                  </button>
+                </div>
+                <button className="chrome-button" type="button" onClick={() => nudgePlayback(160)}>
+                  前进
+                </button>
+                <a className="chrome-button preview-button" href={`/room/${roomCode}/player`} target="_blank">
+                  <Icon name="fullscreen" />
+                  全屏预览
+                </a>
+              </section>
+            )}
+
+            {bundle && (
+              <section className="marker-dock" id="markers">
+                <div>
+                  <Icon name="bookmark" />
+                  标记点导航
+                </div>
+                <div className="marker-chip-list">
+                  {bundle.markerIndex.map((marker, index) => (
+                    <button
+                      className={`marker-chip chip-${index % 8}`}
+                      type="button"
+                      key={marker.markerId}
+                      onClick={() => jumpToMarker(marker.markerId)}
+                    >
+                      {marker.markerId}
+                    </button>
+                  ))}
+                </div>
+                <button className="chrome-button" type="button" onClick={() => insertMarkdownSnippet("marker")}>
+                  <Icon name="plus" />
+                  添加标记
+                </button>
+              </section>
+            )}
+          </section>
+
+          <aside className="control-history-panel">
+            <div className="history-head">
+              <Icon name="history" />
+              <strong>历史版本</strong>
+            </div>
+            <div className="version-timeline">
+              {versions.length === 0 && <p className="muted">还没有保存过版本</p>}
+              {versions.map((version, index) => (
+                <article className={`timeline-version ${index === 0 ? "current" : ""}`} key={version.versionId}>
+                  <div>
+                    <strong>{index === 0 ? `${version.message ?? "现场保存"} · 当前版本` : version.message ?? "未命名版本"}</strong>
+                    <span>
+                      {new Date(version.createdAt).toLocaleDateString("zh-CN")} {new Date(version.createdAt).toLocaleTimeString("zh-CN")}
+                    </span>
+                    <small>{projectName}</small>
+                  </div>
+                  <button type="button" title="回退到这个版本" onClick={() => restoreVersion(version.versionId)}>
+                    <Icon name="undo" />
+                  </button>
+                </article>
+              ))}
+            </div>
+          </aside>
+        </div>
+
+        {expandedQrLink && (
+          <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="播放端二维码">
+            <div className="qr-modal control-qr-popover">
+              <p className="eyebrow">房间二维码</p>
+              <h2>{roomCode}</h2>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img alt={`${expandedQrLink.label} 播放端二维码`} src={`/api/qr?text=${encodeURIComponent(expandedQrLink.playerUrl)}`} />
+              <span>扫码加入播放端</span>
+              <code>{expandedQrLink.playerUrl}</code>
+              <button className="button primary" type="button" onClick={() => setExpandedQrLink(null)}>
+                关闭
+              </button>
+            </div>
+          </div>
+        )}
+      </main>
+    );
+  }
+
   return (
     <main className={`workspace ${mode === "player" ? "player-workspace" : ""} ${playerOverlayHidden ? "player-overlay-hidden" : ""}`}>
       <section className="room-topbar">
         <div>
           <p className="eyebrow">房间 {roomCode}</p>
-          <h1>{mode === "control" ? "控制端" : mode === "player" ? "播放端" : "选择角色"}</h1>
+          <h1>{mode === "player" ? "播放端" : "选择角色"}</h1>
         </div>
         {mode === "player" && (
           <div className="player-stage-controls">
@@ -745,114 +1060,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
       {mode !== "player" && (
       <section className="room-grid">
-        {mode === "control" && bundle && (
-          <div className="panel control-hero-panel">
-            <div className="control-hero-head">
-              <div>
-                <p className="eyebrow">文稿中心</p>
-                <h2>渲染视图编辑</h2>
-                <p className="muted">{draftStatus}</p>
-              </div>
-              <div className="editor-toolbar" aria-label="文稿工具栏">
-                <button className="icon-button" type="button" title="增加标记" onClick={() => insertMarkdownSnippet("marker")}>
-                  M+
-                </button>
-                <button className="icon-button" type="button" title="增加注释" onClick={() => insertMarkdownSnippet("comment")}>
-                  注
-                </button>
-                <button className="button primary" type="button" onClick={saveVersion}>
-                  保存
-                </button>
-              </div>
-            </div>
-            <RenderBundleView bundle={bundle} variant="control" playbackPositionPx={playbackPositionPx} showCenterGuide />
-            <details className="source-editor">
-              <summary>编辑 Markdown 原文</summary>
-              <textarea value={markdown} onChange={(event) => setMarkdown(event.target.value)} />
-              <div className="role-actions">
-                <button className="button secondary" onClick={saveDraft}>
-                  保存草稿
-                </button>
-                <input
-                  aria-label="版本备注"
-                  value={versionMessage}
-                  onChange={(event) => setVersionMessage(event.target.value)}
-                  placeholder="版本备注"
-                />
-              </div>
-            </details>
-          </div>
-        )}
-
-        {mode === "control" && (
-          <div className="panel version-panel">
-            <p className="eyebrow">历史版本</p>
-            <h2>版本列表</h2>
-            <div className="version-list compact">
-              {versions.length === 0 && <p className="muted">还没有保存过版本</p>}
-              {versions.map((version) => (
-                <div className="version-row" key={version.versionId}>
-                  <div>
-                    <strong>{version.message ?? "未命名版本"}</strong>
-                    <small>
-                      {new Date(version.createdAt).toLocaleTimeString("zh-CN")} · {version.markerCount} markers
-                    </small>
-                  </div>
-                  <button className="icon-button" title="回退到这个版本" onClick={() => restoreVersion(version.versionId)}>
-                    ↩
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {mode === "control" && bundle && (
-          <div className="panel playback-panel">
-            <p className="eyebrow">播放控制</p>
-            <h2>控制播放端</h2>
-            <div className="playback-controls">
-              <button className="button primary" onClick={() => playFromCurrentOffset()}>
-                播放
-              </button>
-              <button className="button secondary" onClick={pauseAtCurrentOffset}>
-                暂停
-              </button>
-              <label>
-                速度
-                <input
-                  aria-label="播放速度"
-                  max={160}
-                  min={24}
-                  onChange={(event) => {
-                    const nextSpeed = Number(event.target.value);
-                    setSpeed(nextSpeed);
-                    if (roomState?.scrollClock?.state === "playing") {
-                      playFromCurrentOffset(nextSpeed);
-                    }
-                  }}
-                  type="range"
-                  value={speed}
-                />
-                <span>{speed}px/s</span>
-              </label>
-            </div>
-            <div className="marker-buttons secondary-markers">
-              <button className="button secondary" onClick={() => nudgePlayback(-160)}>
-                回退 160px
-              </button>
-              <button className="button secondary" onClick={() => nudgePlayback(160)}>
-                前进 160px
-              </button>
-              {bundle.markerIndex.map((marker) => (
-                <button className="button secondary" key={marker.markerId} onClick={() => jumpToMarker(marker.markerId)}>
-                  跳到 {marker.markerId}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         <div className="panel share-panel">
           <p className="eyebrow">设备入口</p>
           <h2>同网设备加入</h2>
@@ -921,4 +1128,53 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
 function devicesWithPlayback(roomState: RoomState | null) {
   return Object.values(roomState?.devices ?? {}).filter((device) => device.playbackState);
+}
+
+function Icon({ name }: { name: IconName }) {
+  const common = {
+    fill: "none",
+    stroke: "currentColor",
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    strokeWidth: 1.9,
+    viewBox: "0 0 24 24",
+  };
+
+  const paths: Record<IconName, ReactNode> = {
+    bolt: <path d="M13 2 4 14h7l-1 8 10-13h-7l1-7Z" />,
+    file: <path d="M7 3h7l4 4v14H7V3Zm7 0v5h5M9 13h6M9 17h5" />,
+    bookmark: <path d="M7 4h10v17l-5-3-5 3V4Z" />,
+    comment: <path d="M5 6h14v10H9l-4 4V6Z" />,
+    monitor: <path d="M4 5h16v11H4V5Zm6 15h4M12 16v4" />,
+    keyboard: <path d="M4 7h16v10H4V7Zm3 3h.01M10 10h.01M13 10h.01M16 10h.01M7 14h10" />,
+    qr: <path d="M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm11 1h2v2h-2v-2Zm3 3h2v2h-2v-2Zm-4 1h2" />,
+    copy: <path d="M8 8h11v11H8V8Zm-3 8V5h11" />,
+    invite: <path d="M15 19c0-2.2-1.8-4-4-4H8c-2.2 0-4 1.8-4 4m7-8a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm8 2v6m3-3h-6" />,
+    history: <path d="M4 12a8 8 0 1 0 2.3-5.7L4 8.6M4 4v4.6h4.6M12 8v5l3 2" />,
+    undo: <path d="M9 7H4v5m0-5 5 5m-4-1a7 7 0 1 0 2-5" />,
+    play: <path d="m8 5 11 7-11 7V5Z" />,
+    pause: <path d="M8 5v14M16 5v14" />,
+    skipBack: <path d="M19 5 9 12l10 7V5ZM5 5v14" />,
+    skipForward: <path d="m5 5 10 7-10 7V5Zm14 0v14" />,
+    minus: <path d="M5 12h14" />,
+    plus: <path d="M12 5v14M5 12h14" />,
+    fullscreen: <path d="M8 4H4v4m12-4h4v4M8 20H4v-4m16 0v4h-4" />,
+    list: <path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" />,
+    heading: <path d="M6 5v14M18 5v14M6 12h12" />,
+    bold: <path d="M8 5h5a3.5 3.5 0 0 1 0 7H8V5Zm0 7h6a3.5 3.5 0 0 1 0 7H8v-7Z" />,
+    italic: <path d="M10 5h8M6 19h8M14 5l-4 14" />,
+    strike: <path d="M5 12h14M8 8c.8-2 2.5-3 5-3 2 0 3.5.6 4.4 1.8M16 16c-.9 2-2.6 3-5 3-2.2 0-3.9-.7-5-2" />,
+    quote: <path d="M8 10H5c0-3 1-5 4-6v3c-1 .5-1.5 1.5-1.5 3H10v6H5v-6m11 0h-3c0-3 1-5 4-6v3c-1 .5-1.5 1.5-1.5 3H18v6h-5v-6" />,
+    code: <path d="m9 8-4 4 4 4m6-8 4 4-4 4" />,
+    link: <path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1M14 11a5 5 0 0 0-7.1 0l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1" />,
+    image: <path d="M4 5h16v14H4V5Zm4 4h.01M4 16l5-5 4 4 2-2 5 5" />,
+    table: <path d="M4 5h16v14H4V5Zm0 5h16M4 14h16M10 5v14M16 5v14" />,
+    save: <path d="M5 4h12l2 2v14H5V4Zm3 0v6h8V4M8 20v-6h8v6" />,
+  };
+
+  return (
+    <svg aria-hidden="true" {...common}>
+      {paths[name]}
+    </svg>
+  );
 }

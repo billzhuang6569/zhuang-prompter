@@ -200,6 +200,800 @@ input {
   font-size: 12px;
 }
 
+.control-workspace {
+  min-height: 100vh;
+  color: #f5f5f1;
+  background:
+    radial-gradient(circle at 18% 0%, rgb(230 74 0 / 16%), transparent 22rem),
+    radial-gradient(circle at 82% 8%, rgb(255 255 255 / 7%), transparent 26rem),
+    #080908;
+  font-family: Inter, Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.control-workspace button,
+.control-workspace input,
+.control-workspace textarea {
+  font-family: inherit;
+}
+
+.control-appbar {
+  height: 92px;
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 26px;
+  border-bottom: 1px solid rgb(255 255 255 / 9%);
+  padding: 0 24px 0 26px;
+  background: rgb(9 10 9 / 86%);
+  backdrop-filter: blur(18px);
+}
+
+.control-brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.brand-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 24px;
+  border-radius: 999px;
+  background: #e94905;
+  color: #050505;
+  font-size: 10px;
+  font-weight: 900;
+  transform: rotate(-8deg);
+}
+
+.control-brand div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.control-brand strong {
+  font-size: 24px;
+  letter-spacing: 0;
+}
+
+.control-brand span:last-child {
+  color: #d8d7d0;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.control-room-meta {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(110px, 1fr)) minmax(160px, 0.9fr);
+  align-items: center;
+  gap: 0;
+}
+
+.control-room-meta > div {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  border-left: 1px solid rgb(255 255 255 / 10%);
+  padding: 0 22px;
+}
+
+.control-room-meta span {
+  color: #9c9b95;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.control-room-meta strong {
+  color: #f4f3ee;
+  font-size: 18px;
+  letter-spacing: 0;
+}
+
+.connected-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #8df26f !important;
+}
+
+.connected-label i {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 18px currentColor;
+}
+
+.control-device-id code {
+  max-width: 100%;
+  display: block;
+  overflow: hidden;
+  color: #b5b3aa;
+  font-family: var(--font-geist-mono), "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.control-app-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.chrome-icon-button,
+.chrome-button,
+.round-tool,
+.speed-control button,
+.timeline-version button,
+.format-tools button,
+.toolbar-action,
+.save-button,
+.marker-chip {
+  color: inherit;
+  cursor: pointer;
+}
+
+.chrome-icon-button,
+.chrome-button {
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 3%);
+  color: #f2f1eb;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.chrome-icon-button {
+  width: 56px;
+  padding: 0;
+}
+
+.chrome-icon-button:disabled,
+.chrome-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.control-workspace svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
+.user-chip {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: #237be8;
+  color: #fff;
+  font-weight: 900;
+}
+
+.control-shell {
+  min-height: calc(100vh - 92px);
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr) 300px;
+  gap: 16px;
+  padding: 16px;
+}
+
+.control-sidebar,
+.control-document-panel,
+.control-history-panel,
+.control-playback-bar,
+.marker-dock {
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgb(255 255 255 / 5%), rgb(255 255 255 / 2%));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%), 0 24px 70px rgb(0 0 0 / 24%);
+}
+
+.control-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+}
+
+.new-button {
+  height: 66px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  border-radius: 10px;
+  background: #020202;
+  color: #fff;
+  padding: 0 20px;
+  font-size: 14px;
+  font-weight: 950;
+}
+
+.new-button svg {
+  color: #f04b08;
+}
+
+.control-nav {
+  display: grid;
+  gap: 7px;
+}
+
+.control-nav a {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-radius: 10px;
+  color: #bab8b1;
+  padding: 0 16px;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.control-nav a.active,
+.control-nav a:hover {
+  background: rgb(255 255 255 / 8%);
+  color: #fff;
+}
+
+.project-card {
+  display: grid;
+  gap: 9px;
+  margin-top: auto;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgb(0 0 0 / 22%);
+}
+
+.project-card span {
+  color: #f04b08;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.project-card input {
+  width: 100%;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 5%);
+  color: #f4f3ef;
+  padding: 11px;
+  font-size: 13px;
+}
+
+.control-main-column {
+  min-width: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  gap: 16px;
+}
+
+.control-document-panel {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.document-toolbar {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid rgb(255 255 255 / 10%);
+  padding: 0 20px;
+}
+
+.format-tools,
+.script-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.format-tools button,
+.toolbar-action {
+  min-width: 36px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: #aaa8a0;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.format-tools button:hover,
+.toolbar-action:hover {
+  color: #fff;
+}
+
+.toolbar-action {
+  border-left: 1px solid rgb(255 255 255 / 12%);
+  padding-left: 14px;
+}
+
+.save-button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 8px;
+  background: #e94905;
+  color: #fff;
+  padding: 0 18px;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.control-document-panel .script-surface {
+  width: 100%;
+  height: calc(100% - 72px);
+  min-height: 540px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.control-document-panel .script-header {
+  display: none;
+}
+
+.control-document-panel .render-bundle-layout {
+  height: 100%;
+  grid-template-columns: minmax(0, 1fr) 235px;
+  gap: 0;
+}
+
+.control-document-panel .teleprompter-content {
+  min-height: 100%;
+  border: 0;
+  border-right: 1px solid rgb(255 255 255 / 9%);
+  border-radius: 0;
+  background: radial-gradient(circle at 50% 44%, rgb(255 255 255 / 5%), transparent 24rem);
+  color: #deddd6;
+  padding: 42px 42px 64px;
+  font-size: 18px;
+  line-height: 1.78;
+}
+
+.control-document-panel .script-heading {
+  color: #f4f3ef;
+  font-size: 28px;
+}
+
+.control-document-panel .script-heading::first-letter {
+  color: #f04b08;
+}
+
+.control-document-panel .script-marker,
+.control-document-panel .inline-marker {
+  color: #ff5a13;
+}
+
+.control-document-panel .marker-index-panel {
+  position: static;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 42px 20px;
+}
+
+.control-document-panel .marker-index-panel > .eyebrow {
+  display: none;
+}
+
+.control-document-panel .marker-index-list {
+  gap: 36px;
+}
+
+.control-document-panel .marker-index-item {
+  width: max-content;
+  border: 1px solid rgb(255 91 19 / 55%);
+  border-radius: 8px;
+  background: rgb(255 91 19 / 8%);
+  color: #ff5a13;
+  padding: 8px 12px;
+}
+
+.control-document-panel .marker-index-item span,
+.control-document-panel .marker-index-item small,
+.control-document-panel .marker-index-item code,
+.control-document-panel .marker-index-item .eyebrow {
+  display: none;
+}
+
+.control-document-panel .marker-index-item strong {
+  font-size: 13px;
+}
+
+.control-document-panel .script-surface.has-center-guide .render-bundle-layout::before {
+  right: 235px;
+  border-color: #f04b08;
+  border-style: dashed;
+}
+
+.control-document-panel .script-surface.has-center-guide .render-bundle-layout::after {
+  right: calc(235px + 50%);
+  transform: translateX(50%);
+  background: #271207;
+  border-color: rgb(240 75 8 / 50%);
+  color: #f04b08;
+}
+
+.control-source-editor {
+  margin: -126px 18px 18px;
+  position: relative;
+  z-index: 5;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 14px;
+  background: rgb(8 9 8 / 92%);
+  padding: 12px;
+}
+
+.control-source-editor summary {
+  color: #f4f3ef;
+}
+
+.control-source-editor textarea {
+  min-height: 210px;
+  border-color: rgb(255 255 255 / 12%);
+  background: #050505;
+  color: #e9e8e2;
+}
+
+.source-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.source-actions input {
+  flex: 1;
+  border-color: rgb(255 255 255 / 12%);
+  background: rgb(255 255 255 / 4%);
+  color: #f1f0eb;
+}
+
+.control-playback-bar,
+.marker-dock {
+  min-height: 86px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 26px;
+}
+
+.control-playback-bar strong,
+.marker-dock > div:first-child {
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.round-tool,
+.speed-control button,
+.timeline-version button {
+  width: 44px;
+  height: 44px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 20%);
+}
+
+.play-main-button {
+  width: 62px;
+  height: 62px;
+  display: inline-grid;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: #e94905;
+  color: #fff;
+  cursor: pointer;
+}
+
+.play-main-button svg {
+  width: 26px;
+  height: 26px;
+  fill: currentColor;
+}
+
+.speed-control {
+  height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-inline: 1px solid rgb(255 255 255 / 12%);
+  padding: 0 24px;
+}
+
+.speed-control span {
+  color: #aaa8a0;
+}
+
+.preview-button {
+  margin-left: auto;
+}
+
+.marker-dock {
+  min-height: 74px;
+}
+
+.marker-dock > div:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.marker-chip-list {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow-x: auto;
+}
+
+.marker-chip {
+  min-width: 68px;
+  height: 42px;
+  border-radius: 8px;
+  border: 1px solid currentColor;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+  font-weight: 900;
+}
+
+.chip-0,
+.chip-4 {
+  color: #ff5a13;
+}
+
+.chip-1,
+.chip-5 {
+  color: #79d85b;
+}
+
+.chip-2,
+.chip-6 {
+  color: #b56dff;
+}
+
+.chip-3,
+.chip-7 {
+  color: #ffb000;
+}
+
+.control-history-panel {
+  min-width: 0;
+  padding: 24px 16px;
+}
+
+.history-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px 22px;
+}
+
+.history-head strong {
+  font-size: 17px;
+}
+
+.version-timeline {
+  display: grid;
+  gap: 0;
+  padding-left: 20px;
+}
+
+.timeline-version {
+  position: relative;
+  min-height: 92px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  border-left: 1px solid rgb(255 255 255 / 12%);
+  padding: 0 0 18px 26px;
+}
+
+.timeline-version::before {
+  content: "";
+  position: absolute;
+  left: -5px;
+  top: 6px;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #8d8d88;
+}
+
+.timeline-version.current::before {
+  background: #f04b08;
+  box-shadow: 0 0 18px rgb(240 75 8 / 80%);
+}
+
+.timeline-version div {
+  display: grid;
+  gap: 5px;
+}
+
+.timeline-version strong {
+  color: #f4f3ef;
+  font-size: 15px;
+}
+
+.timeline-version span,
+.timeline-version small {
+  color: #999891;
+  font-size: 13px;
+}
+
+.timeline-version button {
+  border-radius: 8px;
+}
+
+.control-qr-popover img {
+  width: min(60vw, 220px);
+  height: min(60vw, 220px);
+}
+
+@media (max-width: 1180px) {
+  .control-appbar {
+    height: auto;
+    grid-template-columns: 1fr;
+    align-items: start;
+    padding: 18px;
+  }
+
+  .control-room-meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .control-room-meta > div {
+    padding: 10px 0 10px 16px;
+  }
+
+  .control-app-actions {
+    justify-content: flex-start;
+  }
+
+  .control-shell {
+    grid-template-columns: 180px minmax(0, 1fr);
+  }
+
+  .control-history-panel {
+    grid-column: 1 / -1;
+  }
+
+  .version-timeline {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    padding-left: 0;
+  }
+
+  .timeline-version {
+    min-height: auto;
+    border-left: 0;
+    border: 1px solid rgb(255 255 255 / 10%);
+    border-radius: 12px;
+    padding: 14px;
+  }
+
+  .timeline-version::before {
+    display: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .control-brand div {
+    display: grid;
+    gap: 2px;
+    white-space: normal;
+  }
+
+  .control-room-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .control-shell {
+    grid-template-columns: 1fr;
+    padding: 10px;
+  }
+
+  .control-sidebar {
+    flex-direction: column;
+  }
+
+  .control-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .control-nav a {
+    min-height: 46px;
+    padding: 0 12px;
+  }
+
+  .document-toolbar,
+  .control-playback-bar,
+  .marker-dock,
+  .source-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .control-document-panel .script-surface {
+    height: auto;
+  }
+
+  .control-document-panel .render-bundle-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .control-document-panel .teleprompter-content {
+    border-right: 0;
+    padding: 28px 22px 44px;
+  }
+
+  .control-document-panel .marker-index-panel {
+    height: auto;
+    border-top: 1px solid rgb(255 255 255 / 9%);
+    padding: 18px 22px;
+  }
+
+  .control-document-panel .marker-index-list,
+  .marker-chip-list {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+  }
+
+  .control-source-editor {
+    margin: 12px;
+  }
+
+  .speed-control {
+    width: 100%;
+    justify-content: center;
+    border-inline: 0;
+    border-block: 1px solid rgb(255 255 255 / 12%);
+    padding: 14px 0;
+  }
+
+  .preview-button {
+    margin-left: 0;
+  }
+
+  .version-timeline {
+    grid-template-columns: 1fr;
+  }
+}
+
 .status-pill span,
 .dot {
   width: 9px;
