@@ -574,6 +574,37 @@ input {
   color: #d4d4d4;
 }
 
+.player-stage-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #d4d4d4;
+  font-size: 13px;
+}
+
+.player-tool-button,
+.player-reveal-button {
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 46%);
+  color: #f8fafc;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.player-reveal-button {
+  position: fixed;
+  z-index: 30;
+  top: 14px;
+  right: 14px;
+}
+
+.player-overlay-hidden .room-topbar {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .player-workspace .room-grid {
   order: 2;
   width: min(1120px, calc(100vw - 32px));
@@ -605,6 +636,7 @@ input {
 .player-stage .teleprompter-content {
   min-height: 100vh;
   padding: 18vh clamp(28px, 9vw, 128px) 28vh;
+  font-size: calc(clamp(32px, 5vw, 64px) * var(--player-font-scale, 1));
 }
 
 @media (max-width: 760px) {
@@ -657,6 +689,22 @@ input {
   .player-workspace .room-topbar {
     flex-direction: row;
     align-items: center;
+  }
+
+  .player-stage-controls {
+    position: fixed;
+    left: 14px;
+    right: 14px;
+    bottom: 14px;
+    justify-content: center;
+    border: 1px solid rgb(255 255 255 / 14%);
+    border-radius: 999px;
+    padding: 8px;
+    background: rgb(0 0 0 / 52%);
+  }
+
+  .player-tool-button {
+    padding: 8px 10px;
   }
 
   .teleprompter-content {

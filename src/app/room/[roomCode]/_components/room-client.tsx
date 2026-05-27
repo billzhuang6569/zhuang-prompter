@@ -101,6 +101,9 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [versions, setVersions] = useState<VersionSummary[]>([]);
   const [currentOrigin, setCurrentOrigin] = useState("");
   const [networkOrigins, setNetworkOrigins] = useState<NetworkOrigin[]>([]);
+  const [playerFontScale, setPlayerFontScale] = useState(1);
+  const [playerOverlayHidden, setPlayerOverlayHidden] = useState(false);
+  const [fullscreenActive, setFullscreenActive] = useState(false);
 
   const selectedRole = preferredRole(mode);
   const selfDevice = roomState && joinResult ? roomState.devices[joinResult.deviceId] : null;
@@ -462,6 +465,32 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     return () => window.clearInterval(interval);
   }, [joinResult, mode, reportPlayerState, roomState?.scrollClock]);
 
+  useEffect(() => {
+    if (mode !== "player") {
+      return;
+    }
+    function updateFullscreenState() {
+      setFullscreenActive(Boolean(document.fullscreenElement));
+    }
+    document.addEventListener("fullscreenchange", updateFullscreenState);
+    return () => document.removeEventListener("fullscreenchange", updateFullscreenState);
+  }, [mode]);
+
+  async function toggleFullscreen() {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen();
+      return;
+    }
+    if (!document.documentElement.requestFullscreen) {
+      return;
+    }
+    await document.documentElement.requestFullscreen();
+  }
+
+  function changePlayerFontScale(delta: number) {
+    setPlayerFontScale((value) => Math.min(1.35, Math.max(0.75, Number((value + delta).toFixed(2)))));
+  }
+
   if (connection === "not-found") {
     return (
       <main className="workspace">
@@ -477,17 +506,39 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }
 
   return (
-    <main className={`workspace ${mode === "player" ? "player-workspace" : ""}`}>
+    <main className={`workspace ${mode === "player" ? "player-workspace" : ""} ${playerOverlayHidden ? "player-overlay-hidden" : ""}`}>
       <section className="room-topbar">
         <div>
           <p className="eyebrow">房间 {roomCode}</p>
           <h1>{mode === "control" ? "控制端" : mode === "player" ? "播放端" : "选择角色"}</h1>
         </div>
+        {mode === "player" && (
+          <div className="player-stage-controls">
+            <button className="player-tool-button" type="button" onClick={() => changePlayerFontScale(-0.1)}>
+              A-
+            </button>
+            <span>{Math.round(playerFontScale * 100)}%</span>
+            <button className="player-tool-button" type="button" onClick={() => changePlayerFontScale(0.1)}>
+              A+
+            </button>
+            <button className="player-tool-button" type="button" onClick={() => void toggleFullscreen()}>
+              {fullscreenActive ? "退出全屏" : "全屏"}
+            </button>
+            <button className="player-tool-button" type="button" onClick={() => setPlayerOverlayHidden(true)}>
+              隐藏状态
+            </button>
+          </div>
+        )}
         <div className={`status-pill ${connection}`}>
           <span />
           {connection === "connected" ? "已连接" : connection}
         </div>
       </section>
+      {mode === "player" && playerOverlayHidden && (
+        <button className="player-reveal-button" type="button" onClick={() => setPlayerOverlayHidden(false)}>
+          显示状态
+        </button>
+      )}
 
       <section className="room-grid">
         <div className="panel">
@@ -668,6 +719,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           bundle={bundle}
           variant={mode === "player" ? "player" : "control"}
           playbackPositionPx={playbackPositionPx}
+          fontScale={playerFontScale}
         />
       )}
     </main>

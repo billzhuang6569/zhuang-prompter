@@ -45,6 +45,8 @@ Observed flow:
 - The first viewport was the black teleprompter stage, not the device/debug panels.
 - Room code and connection state remained visible as a compact top overlay.
 - CJK headline, marker, stage cue, and body text were readable at shooting size.
+- Player font control changed the stage from `100%` to `110%`.
+- Hide status left only a compact `显示状态` reveal button over the stage.
 - Device, RoomState, and same-network entry panels remained available below the stage.
 
 ## Repeatable Manual Pass

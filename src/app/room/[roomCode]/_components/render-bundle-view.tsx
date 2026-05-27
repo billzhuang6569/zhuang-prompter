@@ -5,13 +5,15 @@ type RenderBundleViewProps = {
   bundle: RenderBundle;
   variant: "control" | "player";
   playbackPositionPx?: number;
+  fontScale?: number;
 };
 
-export function RenderBundleView({ bundle, variant, playbackPositionPx = 0 }: RenderBundleViewProps) {
+export function RenderBundleView({ bundle, variant, playbackPositionPx = 0, fontScale = 1 }: RenderBundleViewProps) {
   const contentStyle =
     variant === "player"
       ? ({
           "--playback-offset": `${Math.max(0, playbackPositionPx)}px`,
+          "--player-font-scale": fontScale,
         } as CSSProperties)
       : undefined;
 

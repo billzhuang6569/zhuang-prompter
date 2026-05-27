@@ -33,7 +33,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 The dev server listens on the local network by default and prints LAN URLs in the terminal. For iPad or another device, create a room on the Mac, then use the room page's `同网设备加入` links or the printed LAN URL. Follow [docs/local-browser-acceptance.md](docs/local-browser-acceptance.md) for the manual pass.
 
-The player route opens in shooting-first mode: the teleprompter stage fills the first screen, while device and debug panels remain below the stage.
+The player route opens in shooting-first mode: the teleprompter stage fills the first screen, while device and debug panels remain below the stage. The player also has local-only stage controls for font size, fullscreen, and hiding the status overlay.
 
 ## Verification
 
