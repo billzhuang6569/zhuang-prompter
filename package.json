@@ -12,7 +12,8 @@
     "smoke:m0": "node scripts/m0-smoke.mjs",
     "smoke:m2": "node scripts/m2-smoke.mjs",
     "smoke:m3": "node scripts/m3-smoke.mjs",
-    "smoke:m4": "node scripts/m4-smoke.mjs"
+    "smoke:m4": "node scripts/m4-smoke.mjs",
+    "acceptance:local": "node scripts/acceptance-report.mjs"
   },
   "dependencies": {
     "mdast-util-to-string": "^4.0.0",
