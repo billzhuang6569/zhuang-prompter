@@ -18,6 +18,21 @@ Observed flow:
 - Control observed the player reporting `playing` playback state and a live position.
 - Player rendered the dark teleprompter view with CJK text, markers, and stage cues.
 
+## Latest Long Stability Pass
+
+Date: 2026-05-27
+
+Result: PASS for the automated 10-minute local session.
+
+Observed result:
+
+- Room `885346` ran for `600000ms`.
+- Playback report count: `1497`.
+- First observed position: `0px`.
+- Last observed position: `40793px`.
+- Playback position never moved backwards.
+- Final RoomState still included the script draft and active ScrollClock.
+
 ## Repeatable Manual Pass
 
 1. Start the app with `pnpm dev`.
@@ -30,6 +45,8 @@ Observed flow:
 8. Edit the markdown draft, save the draft, save a version, and restore the version.
 9. Refresh the player page and confirm it rejoins with the full RoomState.
 10. Keep the session running for 10 minutes before a real shoot.
+
+For an automated 10-minute stability pass, run `pnpm smoke:m5:session:10min` while `pnpm dev` is running.
 
 ## Still Required Before Calling P0 Fully Field-Ready
 
