@@ -1,6 +1,6 @@
 # Local Acceptance Report
 
-Generated: 2026-05-27T13:08:56.301Z
+Generated: 2026-05-27T13:12:43.336Z
 
 Overall: PASS
 
@@ -13,6 +13,8 @@ Overall: PASS
 | smoke:m2 | PASS | 1s |
 | smoke:m3 | PASS | 0s |
 | smoke:m4 | PASS | 1s |
+| smoke:m5:reconnect | PASS | 1s |
+| smoke:m5:session | PASS | 31s |
 
 ## Scope Covered
 
@@ -21,9 +23,10 @@ Overall: PASS
 - M2 ScrollClock intent and PlaybackState report loop.
 - M3 draft save, version save, list, restore without deleting history.
 - M4 active voice source, transcript match, locked voiceFollow ScrollClock.
+- M5 reconnect full-state recovery and configurable stability session.
 
 ## Remaining Before Full Real-Session Acceptance
 
 - Browser-operated 10-minute shooting session.
 - Safari desktop and iPad Safari visual/device pass.
-- Weak-network and reconnect observation beyond smoke tests.
+- Weak-network observation beyond local reconnect smoke.

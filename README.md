@@ -34,6 +34,8 @@ pnpm smoke:m0
 pnpm smoke:m2
 pnpm smoke:m3
 pnpm smoke:m4
+pnpm smoke:m5:reconnect
+pnpm smoke:m5:session
 pnpm acceptance:local
 ```
 
