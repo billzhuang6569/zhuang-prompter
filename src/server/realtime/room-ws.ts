@@ -46,6 +46,16 @@ function broadcastRoom(roomCode: string, event: ServerEnvelope) {
   }
 }
 
+export function broadcastRoomState(roomCode: string, state: NonNullable<ReturnType<typeof getRoomState>>) {
+  broadcastRoom(roomCode, {
+    type: "room.patch",
+    eventId: makeEventId("patch"),
+    roomRevision: state.roomRevision,
+    serverSeq: state.serverSeq,
+    state,
+  });
+}
+
 function nack(socket: WebSocket, eventId: string, message: string) {
   send(socket, {
     type: "server.nack",

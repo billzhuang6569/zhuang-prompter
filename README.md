@@ -37,6 +37,8 @@ The player route opens in shooting-first mode: the teleprompter stage fills the 
 
 Control and player clients automatically retry the WebSocket connection after a transient disconnect, then rejoin with the latest known room revision.
 
+Script draft, version save, and version restore actions broadcast the updated RoomState to connected room clients so the player can refresh without a manual reload.
+
 ## Verification
 
 ```bash

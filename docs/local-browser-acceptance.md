@@ -61,9 +61,10 @@ Observed flow:
 8. Press Play, Pause, Speed, and each marker jump from control.
 9. Confirm the player view updates without reloading and the control view shows player playback reports.
 10. Edit the markdown draft, save the draft, save a version, and restore the version.
-11. Refresh the player page and confirm it rejoins with the full RoomState.
-12. Keep the session running for 10 minutes before a real shoot.
-13. During a device pass, briefly toggle Wi-Fi off/on or background/foreground iPad Safari and confirm the status returns to `已连接` without refreshing.
+11. Confirm the player page receives saved draft/version/restore changes without refreshing.
+12. Refresh the player page and confirm it rejoins with the full RoomState.
+13. Keep the session running for 10 minutes before a real shoot.
+14. During a device pass, briefly toggle Wi-Fi off/on or background/foreground iPad Safari and confirm the status returns to `已连接` without refreshing.
 
 For an automated 10-minute stability pass, run `pnpm smoke:m5:session:10min` while `pnpm dev` is running.
 

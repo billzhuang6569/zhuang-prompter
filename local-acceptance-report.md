@@ -1,6 +1,6 @@
 # Local Acceptance Report
 
-Generated: 2026-05-27T13:56:22.226Z
+Generated: 2026-05-27T14:01:39.182Z
 
 Overall: PASS
 
@@ -23,7 +23,7 @@ Overall: PASS
 - Local network entry discovery for same-Wi-Fi device testing.
 - M1 Markdown RenderBundle contract.
 - M2 ScrollClock intent and PlaybackState report loop.
-- M3 draft save, version save, list, restore without deleting history.
+- M3 draft save, version save, list, restore, and room broadcast without deleting history.
 - M4 active voice source, transcript match, locked voiceFollow ScrollClock.
 - M5 reconnect full-state recovery and configurable stability session.
 

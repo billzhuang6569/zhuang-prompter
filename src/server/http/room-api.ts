@@ -3,12 +3,16 @@ import { getNetworkInfo } from "../network-info";
 import {
   createRoom,
   getScriptDraft,
+  getRoomState,
   joinRoom,
   listScriptVersions,
   restoreScriptVersion,
   saveScriptVersion,
   updateScriptDraft,
 } from "../../modules/room-sync/room-store";
+import type { RoomState } from "../../domain/room/types";
+
+type RoomStateBroadcaster = (roomCode: string, state: RoomState) => void;
 
 async function readJson(request: IncomingMessage) {
   const chunks: Buffer[] = [];
@@ -32,7 +36,11 @@ function writeJson(response: ServerResponse, statusCode: number, body: unknown) 
   response.end(JSON.stringify(body));
 }
 
-export async function handleRoomApi(request: IncomingMessage, response: ServerResponse) {
+export async function handleRoomApi(
+  request: IncomingMessage,
+  response: ServerResponse,
+  broadcastState?: RoomStateBroadcaster,
+) {
   const url = new URL(request.url ?? "/", "http://localhost");
 
   if (request.method === "GET" && url.pathname === "/api/network-info") {
@@ -81,6 +89,7 @@ export async function handleRoomApi(request: IncomingMessage, response: ServerRe
       writeJson(response, 404, { message: "Room not found." });
       return true;
     }
+    broadcastState?.(draftMatch[1], state);
     writeJson(response, 200, { draft: state.scriptDraft, roomState: state });
     return true;
   }
@@ -107,6 +116,10 @@ export async function handleRoomApi(request: IncomingMessage, response: ServerRe
       writeJson(response, 404, { message: "Room not found." });
       return true;
     }
+    const state = getRoomState(versionsMatch[1]);
+    if (state) {
+      broadcastState?.(versionsMatch[1], state);
+    }
     writeJson(response, 201, { version });
     return true;
   }
@@ -123,6 +136,7 @@ export async function handleRoomApi(request: IncomingMessage, response: ServerRe
       writeJson(response, 404, { message: "Version not found." });
       return true;
     }
+    broadcastState?.(restoreMatch[1], state);
     writeJson(response, 200, { draft: state.scriptDraft, roomState: state });
     return true;
   }

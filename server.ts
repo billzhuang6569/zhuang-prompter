@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import next from "next";
-import { attachRoomWebSocketServer } from "./src/server/realtime/room-ws";
+import { attachRoomWebSocketServer, broadcastRoomState } from "./src/server/realtime/room-ws";
 import { handleRoomApi } from "./src/server/http/room-api";
 import { getNetworkInfo, getServerHost, getServerPort } from "./src/server/network-info";
 
@@ -12,7 +12,7 @@ const handle = app.getRequestHandler();
 
 void app.prepare().then(() => {
   const server = createServer((req, res) => {
-    void handleRoomApi(req, res).then((handled) => {
+    void handleRoomApi(req, res, broadcastRoomState).then((handled) => {
       if (!handled) {
         void handle(req, res);
       }
