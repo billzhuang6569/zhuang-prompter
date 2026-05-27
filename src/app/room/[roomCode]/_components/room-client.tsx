@@ -756,6 +756,13 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
                   <strong>{link.label}</strong>
                   <code>{link.origin}</code>
                 </div>
+                {link.kind === "lan" && (
+                  <div className="share-qr">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img alt={`${link.label} 播放端二维码`} src={`/api/qr?text=${encodeURIComponent(link.playerUrl)}`} />
+                    <span>扫码打开播放端</span>
+                  </div>
+                )}
                 <div className="share-actions">
                   <a className="button secondary" href={link.controlUrl}>
                     控制端

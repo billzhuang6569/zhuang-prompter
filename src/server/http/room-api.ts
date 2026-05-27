@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import QRCode from "qrcode";
 import { getNetworkInfo } from "../network-info";
 import {
   createRoom,
@@ -36,6 +37,14 @@ function writeJson(response: ServerResponse, statusCode: number, body: unknown) 
   response.end(JSON.stringify(body));
 }
 
+function writeSvg(response: ServerResponse, statusCode: number, body: string) {
+  response.writeHead(statusCode, {
+    "cache-control": "no-store",
+    "content-type": "image/svg+xml; charset=utf-8",
+  });
+  response.end(body);
+}
+
 export async function handleRoomApi(
   request: IncomingMessage,
   response: ServerResponse,
@@ -45,6 +54,32 @@ export async function handleRoomApi(
 
   if (request.method === "GET" && url.pathname === "/api/network-info") {
     writeJson(response, 200, getNetworkInfo());
+    return true;
+  }
+
+  if ((request.method === "GET" || request.method === "HEAD") && url.pathname === "/api/qr") {
+    const text = url.searchParams.get("text") ?? "";
+    if (!text || text.length > 500) {
+      writeJson(response, 400, { message: "A text query parameter up to 500 characters is required." });
+      return true;
+    }
+
+    if (request.method === "HEAD") {
+      writeSvg(response, 200, "");
+      return true;
+    }
+
+    const svg = await QRCode.toString(text, {
+      errorCorrectionLevel: "M",
+      margin: 2,
+      type: "svg",
+      width: 180,
+      color: {
+        dark: "#0f172aff",
+        light: "#ffffffff",
+      },
+    });
+    writeSvg(response, 200, svg);
     return true;
   }
 

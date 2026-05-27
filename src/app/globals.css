@@ -283,7 +283,7 @@ input {
 
 .share-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 12px;
   align-items: center;
   border-top: 1px solid var(--line);
@@ -307,6 +307,23 @@ input {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
+}
+
+.share-qr {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.share-qr img {
+  width: 112px;
+  height: 112px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 6px;
 }
 
 .device-row code {
@@ -677,6 +694,10 @@ input {
 
   .share-actions {
     justify-content: flex-start;
+  }
+
+  .share-qr {
+    justify-items: start;
   }
 
   .script-surface {
