@@ -185,42 +185,8 @@ export function ControlConsole({
             </div>
           </div>
 
-          <div className={`nike-srw ${isPlaying ? "playing" : ""}`} data-od-id="script-render-wrapper">
-            <div className="nike-iline" />
-
-            {view === "render" ? (
-              <div
-                className="nike-sr"
-                ref={previewScrollRef}
-                data-od-id="script-render"
-                onScroll={(event) => onPreviewScroll(event.currentTarget.scrollTop)}
-              >
-                <div className="nike-sc">
-                  {bundle ? (
-                    bundle.htmlTree.map((node) => (
-                      <ControlRenderNode key={node.renderNodeId} node={node} onJumpToMarker={onJumpToMarker} />
-                    ))
-                  ) : (
-                    <p>开始输入 Markdown 文稿，右侧播放端会同步显示。</p>
-                  )}
-                  <div className="nike-bottom-space" />
-                </div>
-              </div>
-            ) : (
-              <div className="nike-sr" data-od-id="script-raw">
-                <textarea
-                  ref={markdownEditorRef}
-                  className="nike-raw-editor"
-                  spellCheck={false}
-                  value={markdown}
-                  onChange={(event) => setMarkdown(event.target.value)}
-                />
-              </div>
-            )}
-          </div>
-
-          <div className="nike-mde-w" data-od-id="md-editor">
-            <div className="nike-mde-b open">
+          <div className="nike-editor-toolbar-shell">
+            <div className="nike-editor-toolbar-inner">
               <div className="nike-editor-tools" data-od-id="toolbar">
                 <button
                   className="nike-tlb"
@@ -274,6 +240,45 @@ export function ControlConsole({
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+
+          <div className={`nike-srw ${isPlaying ? "playing" : ""}`} data-od-id="script-render-wrapper">
+            <div className="nike-iline" />
+
+            {view === "render" ? (
+              <div
+                className="nike-sr"
+                ref={previewScrollRef}
+                data-od-id="script-render"
+                onScroll={(event) => onPreviewScroll(event.currentTarget.scrollTop)}
+              >
+                <div className="nike-sc">
+                  {bundle ? (
+                    bundle.htmlTree.map((node) => (
+                      <ControlRenderNode key={node.renderNodeId} node={node} onJumpToMarker={onJumpToMarker} />
+                    ))
+                  ) : (
+                    <p>开始输入 Markdown 文稿，右侧播放端会同步显示。</p>
+                  )}
+                  <div className="nike-bottom-space" />
+                </div>
+              </div>
+            ) : (
+              <div className="nike-sr" data-od-id="script-raw">
+                <textarea
+                  ref={markdownEditorRef}
+                  className="nike-raw-editor"
+                  spellCheck={false}
+                  value={markdown}
+                  onChange={(event) => setMarkdown(event.target.value)}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="nike-mde-w" data-od-id="md-editor">
+            <div className="nike-mde-b open">
               <div className="nike-mde-acts">
                 <input
                   className="nike-mde-note"

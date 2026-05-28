@@ -1560,7 +1560,23 @@ input {
   align-items: center;
   justify-content: flex-start;
   gap: var(--nike-sm);
-  margin-bottom: var(--nike-sm);
+}
+
+.nike-editor-toolbar-shell {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--nike-hl);
+  background: var(--nike-canvas);
+  padding: var(--nike-sm) var(--nike-sec);
+}
+
+.nike-editor-toolbar-inner {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.nike-editor-tools + .nike-quick-editor {
+  margin-top: var(--nike-sm);
 }
 
 .nike-title-input {
@@ -1879,7 +1895,7 @@ input {
 
 .nike-mde-b {
   display: none;
-  padding: var(--nike-md) var(--nike-xl) var(--nike-xl);
+  padding: var(--nike-sm) var(--nike-xl) var(--nike-md);
 }
 
 .nike-mde-b.open {
@@ -1935,7 +1951,6 @@ input {
 .nike-mde-acts {
   display: flex;
   gap: var(--nike-sm);
-  margin-top: var(--nike-sm);
 }
 
 .nike-mde-note {
