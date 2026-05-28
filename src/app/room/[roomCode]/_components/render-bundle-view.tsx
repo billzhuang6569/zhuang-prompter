@@ -10,6 +10,7 @@ type RenderBundleViewProps = {
   mirrorX?: boolean;
   mirrorY?: boolean;
   showCenterGuide?: boolean;
+  showMarkers?: boolean;
 };
 
 export function RenderBundleView({
@@ -21,6 +22,7 @@ export function RenderBundleView({
   mirrorX = mirrored,
   mirrorY = false,
   showCenterGuide = false,
+  showMarkers = true,
 }: RenderBundleViewProps) {
   const contentStyle =
     variant === "player"
@@ -36,7 +38,7 @@ export function RenderBundleView({
         mirrorX ? "is-mirrored-x" : ""
       } ${
         mirrorY ? "is-mirrored-y" : ""
-      } ${showCenterGuide ? "has-center-guide" : ""}`}
+      } ${showCenterGuide ? "has-center-guide" : ""} ${variant === "player" && !showMarkers ? "is-markers-hidden" : ""}`}
     >
       <div className="script-header">
         <div>

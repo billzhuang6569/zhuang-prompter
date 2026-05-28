@@ -159,6 +159,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [playerFontScale, setPlayerFontScale] = useState(1);
   const [playerMirrorX, setPlayerMirrorX] = useState(false);
   const [playerMirrorY, setPlayerMirrorY] = useState(false);
+  const [playerMarkersVisible, setPlayerMarkersVisible] = useState(false);
   const [playerOverlayHidden, setPlayerOverlayHidden] = useState(false);
   const [fullscreenActive, setFullscreenActive] = useState(false);
   const [wakeLockWanted, setWakeLockWanted] = useState(false);
@@ -1413,6 +1414,14 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             <button className="player-tool-button" type="button" aria-pressed={playerMirrorY} onClick={() => setPlayerMirrorY((value) => !value)}>
               {playerMirrorY ? "取消垂直镜像" : "垂直镜像"}
             </button>
+            <button
+              className="player-tool-button"
+              type="button"
+              aria-pressed={playerMarkersVisible}
+              onClick={() => setPlayerMarkersVisible((value) => !value)}
+            >
+              {playerMarkersVisible ? "隐藏标记" : "显示标记"}
+            </button>
             <button className="player-tool-button" type="button" onClick={() => playFromCurrentOffset()}>
               播放
             </button>
@@ -1509,6 +1518,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           fontScale={playerFontScale}
           mirrorX={playerMirrorX}
           mirrorY={playerMirrorY}
+          showMarkers={playerMarkersVisible}
         />
       ) : mode === "player" ? (
         <section className="player-empty-stage" aria-label="播放端等待文稿">

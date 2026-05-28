@@ -3083,6 +3083,15 @@ input {
   color: #5eead4;
 }
 
+.player-stage.is-markers-hidden .script-marker {
+  border-left-color: #000;
+  color: #000;
+}
+
+.player-stage.is-markers-hidden .script-marker p {
+  color: #000;
+}
+
 .script-marker p,
 .script-stage-cue p {
   margin-top: 6px;
@@ -3094,6 +3103,12 @@ input {
   margin: 0 8px;
   color: var(--primary-dark);
   font-size: 0.8em;
+}
+
+.player-stage.is-markers-hidden .inline-marker {
+  border-color: #000;
+  background: #000;
+  color: #000;
 }
 
 .marker-index-panel {
@@ -3272,6 +3287,12 @@ input {
   padding: 8px 12px;
   cursor: pointer;
   font-weight: 700;
+}
+
+.player-tool-button[aria-pressed="true"] {
+  border-color: rgb(94 234 212 / 42%);
+  background: rgb(20 184 166 / 14%);
+  color: #5eead4;
 }
 
 .player-reveal-button {
