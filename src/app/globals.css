@@ -1715,10 +1715,11 @@ input {
 }
 
 .nike-iline {
-  position: absolute;
+  position: fixed;
   z-index: 10;
+  top: 50vh;
   left: 0;
-  right: 0;
+  right: 272px;
   height: 2px;
   background: linear-gradient(90deg, transparent, var(--nike-info) 18%, var(--nike-info) 82%, transparent);
   box-shadow: 0 0 12px rgb(68 147 248 / 45%);
@@ -1836,7 +1837,6 @@ input {
 }
 
 .nike-sr {
-  position: relative;
   flex: 1;
   overflow-y: auto;
   padding: var(--nike-sec);
@@ -2561,6 +2561,9 @@ input {
     min-height: 620px;
   }
 
+  .nike-iline {
+    right: 0;
+  }
 }
 
 .status-pill.connected span,

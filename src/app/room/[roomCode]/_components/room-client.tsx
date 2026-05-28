@@ -878,6 +878,10 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     }
     const offset = Math.max(0, primaryPlayerReportedPosition);
     const animationFrame = window.requestAnimationFrame(() => {
+      const scrollEl = controlPreviewScrollRef.current;
+      if (scrollEl && Math.abs(scrollEl.scrollTop - offset) > 1) {
+        scrollEl.scrollTop = offset;
+      }
       setPlaybackPositionPx(offset);
       playbackPositionRef.current = offset;
     });
@@ -1075,7 +1079,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           setVersionMessage={setVersionMessage}
           bundle={bundle}
           versions={versions}
-          playbackPositionPx={playbackPositionPx}
           speed={speed}
           isPlaying={isControlPlaying}
           playerEntryLink={playerEntryLink}

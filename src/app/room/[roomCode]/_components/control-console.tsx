@@ -68,7 +68,6 @@ type ControlConsoleProps = {
   setVersionMessage: (value: string) => void;
   bundle?: RenderBundle;
   versions: VersionSummary[];
-  playbackPositionPx: number;
   speed: number;
   isPlaying: boolean;
   playerEntryLink?: PlayerLink;
@@ -110,7 +109,6 @@ export function ControlConsole({
   setVersionMessage,
   bundle,
   versions,
-  playbackPositionPx,
   speed,
   isPlaying,
   playerEntryLink,
@@ -144,7 +142,6 @@ export function ControlConsole({
   const [floatingEditorPosition, setFloatingEditorPosition] = useState<FloatingEditorPosition | null>(null);
   const [richPendingEditorAction, setRichPendingEditorAction] = useState<PendingEditorAction | null>(null);
   const [canUndo, setCanUndo] = useState(false);
-  const [playerViewportCenterPx, setPlayerViewportCenterPx] = useState(0);
 
   const markers = bundle?.markerIndex ?? [];
   const safePlayerLink = playerEntryLink ?? roomLinks[0];
@@ -164,16 +161,6 @@ export function ControlConsole({
       window.requestAnimationFrame(() => markdownEditorRef.current?.focus());
     }
   }, [markdownEditorRef, view]);
-
-  useEffect(() => {
-    function updatePlayerViewportCenter() {
-      setPlayerViewportCenterPx(Math.round(window.innerHeight / 2));
-    }
-
-    updatePlayerViewportCenter();
-    window.addEventListener("resize", updatePlayerViewportCenter);
-    return () => window.removeEventListener("resize", updatePlayerViewportCenter);
-  }, []);
 
   useEffect(() => {
     if (previousMarkdownRef.current === markdown) {
@@ -541,6 +528,7 @@ export function ControlConsole({
           </div>
 
           <div className={`nike-srw ${isPlaying ? "playing" : ""}`} data-od-id="script-render-wrapper" ref={scriptSurfaceRef}>
+            <div className="nike-iline" />
             {activePendingEditorAction && floatingEditorPosition && (
               <div className="nike-floating-editor" style={{ left: floatingEditorPosition.left, top: floatingEditorPosition.top }}>
                 <span>
@@ -586,10 +574,6 @@ export function ControlConsole({
                 onClick={beginExistingDirectiveEdit}
                 onScroll={(event) => onPreviewScroll(event.currentTarget.scrollTop)}
               >
-                <div
-                  className="nike-iline"
-                  style={{ top: `${Math.max(0, playbackPositionPx + playerViewportCenterPx)}px` }}
-                />
                 <div className="nike-sc nike-rich-editor-wrap">
                   <RichMarkdownEditor
                     ref={richEditorRef}
