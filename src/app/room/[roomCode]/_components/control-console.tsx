@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
 import type { MDXEditorMethods } from "@mdxeditor/editor";
 import type { RoomJoinResult } from "@/domain/room/types";
 import type { RenderBundle } from "@/modules/script-engine/types";
@@ -171,6 +171,33 @@ export function ControlConsole({
     setCanUndo(true);
   }, [markdown]);
 
+  const undoMarkdown = useCallback(() => {
+    const previous = undoStackRef.current.pop();
+    if (!previous) {
+      setCanUndo(false);
+      return;
+    }
+    restoringRef.current = true;
+    setFloatingEditorPosition(null);
+    setRichPendingEditorAction(null);
+    setCanUndo(undoStackRef.current.length > 0);
+    setMarkdown(previous);
+  }, [setMarkdown]);
+
+  useEffect(() => {
+    function handleKeyboardUndo(event: KeyboardEvent) {
+      const isUndoKey = event.key.toLowerCase() === "z" && (event.metaKey || event.ctrlKey);
+      if (!isUndoKey || event.shiftKey || event.altKey || event.isComposing || !canUndo) {
+        return;
+      }
+      event.preventDefault();
+      undoMarkdown();
+    }
+
+    window.addEventListener("keydown", handleKeyboardUndo, { capture: true });
+    return () => window.removeEventListener("keydown", handleKeyboardUndo, { capture: true });
+  }, [canUndo, undoMarkdown]);
+
   function runInRawEditor(action: () => void) {
     if (view !== "raw") {
       setView("raw");
@@ -222,17 +249,6 @@ export function ControlConsole({
 
     setFloatingEditorPosition(fallbackFloatingEditorPosition());
     runInRawEditor(() => onBeginCommentEdit());
-  }
-
-  function undoMarkdown() {
-    const previous = undoStackRef.current.pop();
-    if (!previous) {
-      setCanUndo(false);
-      return;
-    }
-    restoringRef.current = true;
-    setCanUndo(undoStackRef.current.length > 0);
-    setMarkdown(previous);
   }
 
   function insertHeading() {
