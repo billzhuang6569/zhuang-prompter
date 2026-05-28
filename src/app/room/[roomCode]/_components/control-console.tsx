@@ -291,13 +291,33 @@ export function ControlConsole({
     onPendingEditorValueChange(value);
   }
 
-  function cancelFloatingEditorAction() {
+  const cancelFloatingEditorAction = useCallback(() => {
     if (richPendingEditorAction?.pendingId && !richPendingEditorAction.editTarget) {
       setMarkdown((source) => removePendingDirective(source, richPendingEditorAction));
     }
     setRichPendingEditorAction(null);
     setFloatingEditorPosition(null);
-  }
+  }, [richPendingEditorAction, setMarkdown]);
+
+  useEffect(() => {
+    if (!activePendingEditorAction || !floatingEditorPosition) {
+      return;
+    }
+
+    function closeFloatingEditorOnOutsidePointerDown(event: PointerEvent) {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target) {
+        return;
+      }
+      if (target.closest(".nike-floating-editor") || target.closest(".nike-mdx-directive")) {
+        return;
+      }
+      cancelFloatingEditorAction();
+    }
+
+    document.addEventListener("pointerdown", closeFloatingEditorOnOutsidePointerDown, { capture: true });
+    return () => document.removeEventListener("pointerdown", closeFloatingEditorOnOutsidePointerDown, { capture: true });
+  }, [activePendingEditorAction, cancelFloatingEditorAction, floatingEditorPosition]);
 
   function fallbackFloatingEditorPosition() {
     const surface = scriptSurfaceRef.current;
