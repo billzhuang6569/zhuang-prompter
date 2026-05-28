@@ -1089,6 +1089,98 @@ input {
   color: #f04b08;
 }
 
+.home-projects {
+  max-width: 860px;
+  margin-top: 46px;
+}
+
+.home-section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.home-section-title span {
+  color: #f04b08;
+  font-size: 12px;
+  font-weight: 950;
+}
+
+.home-section-title strong {
+  color: #f4f3ef;
+  font-size: 18px;
+}
+
+.home-project-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.home-project-card,
+.home-empty-projects {
+  min-height: 158px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 14px;
+  background: rgb(255 255 255 / 4%);
+  color: #f4f3ef;
+  padding: 16px;
+}
+
+.home-project-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease,
+    transform 150ms ease;
+}
+
+.home-project-card:hover {
+  border-color: rgb(240 75 8 / 45%);
+  background: rgb(240 75 8 / 8%);
+  transform: translateY(-1px);
+}
+
+.home-project-code {
+  color: #f04b08;
+  font-family: var(--font-geist-mono), "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.home-project-card strong {
+  overflow: hidden;
+  color: #f4f3ef;
+  font-size: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-project-card p,
+.home-empty-projects {
+  color: #9f9d95;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.home-project-card div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.home-project-card div span {
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 999px;
+  color: #b8b5ad;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
 .home-action-panel {
   display: grid;
   gap: 18px;
@@ -1194,6 +1286,27 @@ input {
   line-height: 1.55;
 }
 
+.nike-back-btn {
+  min-width: 54px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--nike-hl);
+  border-radius: var(--nike-pill);
+  color: var(--nike-ink2);
+  font-size: 12px;
+  font-weight: 800;
+  transition:
+    border-color var(--nike-t),
+    color var(--nike-t);
+}
+
+.nike-back-btn:hover {
+  border-color: var(--nike-ink);
+  color: var(--nike-ink);
+}
+
 @media (max-width: 1180px) {
   .control-appbar {
     position: sticky;
@@ -1267,6 +1380,10 @@ input {
   }
 
   .home-join-row {
+    grid-template-columns: 1fr;
+  }
+
+  .home-project-grid {
     grid-template-columns: 1fr;
   }
 

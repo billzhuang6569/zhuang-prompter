@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   useCallback,
   useEffect,
@@ -59,7 +60,6 @@ type ControlConsoleProps = {
   joinResult: RoomJoinResult | null;
   projectName: string;
   setProjectName: (value: string) => void;
-  draftRevision?: number;
   parseStatus?: string;
   hasSavedVersion: boolean;
   markdown: string;
@@ -101,7 +101,6 @@ export function ControlConsole({
   joinResult,
   projectName,
   setProjectName,
-  draftRevision,
   parseStatus,
   hasSavedVersion,
   markdown,
@@ -470,6 +469,9 @@ export function ControlConsole({
   return (
     <main className="nike-control">
       <header className="nike-ubar" data-od-id="status-bar">
+        <Link className="nike-back-btn" href="/" aria-label="返回房间入口">
+          返回
+        </Link>
         <div className="nike-brand">
           <div className="nike-brand-ic">
             <MiniPrompterIcon />
@@ -507,7 +509,6 @@ export function ControlConsole({
               value={projectName}
               onChange={(event) => setProjectName(event.target.value)}
             />
-            <span className="nike-bdg">draft rev {draftRevision ?? 0}</span>
             <span className={`nike-bdg ${parseStatus === "valid" ? "nike-bdg-ok" : ""}`}>{parseStatus ?? "draft"}</span>
             <span className="nike-bdg nike-bdg-ink">{hasSavedVersion ? "已保存版本" : "未保存版本"}</span>
             <div className="nike-vtabs">

@@ -1,8 +1,11 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type {
   DevicePresence,
   DeviceRole,
   PlaybackState,
   RoomJoinResult,
+  RoomSettings,
   RoomState,
   ScriptDraft,
   ScriptVersion,
@@ -13,6 +16,20 @@ import type {
 import { extensionSpecFixture, parseMarkdown } from "../script-engine";
 
 const OFFLINE_AFTER_MS = 30_000;
+const STORE_FILE = process.env.ZHUANG_PROMPTER_STORE_FILE ?? join(process.cwd(), ".local-data", "rooms.json");
+
+export type RoomSummary = {
+  roomId: string;
+  roomCode: string;
+  projectName: string;
+  status: RoomState["status"];
+  createdAt: number;
+  updatedAt: number;
+  draftRevision: number;
+  markerCount: number;
+  versionCount: number;
+  previewText: string;
+};
 
 type RoomRecord = {
   state: RoomState;
@@ -20,6 +37,15 @@ type RoomRecord = {
 };
 
 const roomsByCode = new Map<string, RoomRecord>();
+
+const defaultRoomSettings: RoomSettings = {
+  projectName: "小庄Sir013",
+  playbackSpeedPxPerSecond: 68,
+  playerFontScale: 1,
+  playerMirrorX: false,
+  playerMirrorY: false,
+  playerMarkersVisible: false,
+};
 
 function now() {
   return Date.now();
@@ -39,6 +65,13 @@ function createRoomCode() {
     roomCode = randomDigits(6);
   }
   return roomCode;
+}
+
+function withDefaultSettings(settings?: Partial<RoomSettings> | null): RoomSettings {
+  return {
+    ...defaultRoomSettings,
+    ...(settings ?? {}),
+  };
 }
 
 function createDevicePresence(deviceId: string, at: number): DevicePresence {
@@ -92,6 +125,54 @@ function cloneState(state: RoomState): RoomState {
   return structuredClone(state);
 }
 
+function sanitizeLoadedState(state: RoomState): RoomState {
+  const sanitized = structuredClone(state);
+  sanitized.settings = withDefaultSettings(sanitized.settings);
+  sanitized.voiceState = {
+    active: false,
+    sourceDeviceId: null,
+    status: "idle",
+  };
+  sanitized.scrollClock = null;
+  for (const device of Object.values(sanitized.devices ?? {})) {
+    device.online = false;
+    device.connectionState = "offline";
+    device.sessionId = null;
+    device.isVoiceSource = false;
+    delete device.playbackState;
+  }
+  return sanitized;
+}
+
+function persistRooms() {
+  mkdirSync(dirname(STORE_FILE), { recursive: true });
+  const states = Array.from(roomsByCode.values()).map((record) => record.state);
+  writeFileSync(STORE_FILE, JSON.stringify({ rooms: states }, null, 2));
+}
+
+function loadPersistedRooms() {
+  if (!existsSync(STORE_FILE)) {
+    return;
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(STORE_FILE, "utf8")) as { rooms?: RoomState[] };
+    for (const state of parsed.rooms ?? []) {
+      if (!state?.roomCode || roomsByCode.has(state.roomCode)) {
+        continue;
+      }
+      roomsByCode.set(state.roomCode, {
+        state: sanitizeLoadedState(state),
+        joinTokens: new Map(),
+      });
+    }
+  } catch {
+    // Keep the live room service available even if the local cache is corrupt.
+  }
+}
+
+loadPersistedRooms();
+
 function touchRoom(record: RoomRecord, at = now()) {
   record.state.updatedAt = at;
 }
@@ -129,6 +210,7 @@ export function createRoom(): RoomJoinResult {
     roomId,
     roomCode,
     status: "active",
+    settings: withDefaultSettings(),
     currentScriptVersionId: null,
     currentDraftId: scriptDraft.draftId,
     scriptDraft,
@@ -155,6 +237,7 @@ export function createRoom(): RoomJoinResult {
     joinTokens: new Map([[deviceId, joinToken]]),
   };
   roomsByCode.set(roomCode, record);
+  persistRooms();
 
   return {
     roomId,
@@ -165,6 +248,33 @@ export function createRoom(): RoomJoinResult {
     roomState: cloneState(state),
     lastRoomRevision: state.roomRevision,
   };
+}
+
+export function listRooms(): RoomSummary[] {
+  return Array.from(roomsByCode.values())
+    .map((record) => {
+      const bundle = parseMarkdown(record.state.scriptDraft.markdown);
+      const previewText = record.state.scriptDraft.markdown
+        .replace(/:{1,2}(?:marker|notes?)(?:\[[^\]]*])?\{[^}]*}/g, "")
+        .replace(/[#*_`>|-]/g, "")
+        .split(/\s+/)
+        .join(" ")
+        .trim()
+        .slice(0, 80);
+      return {
+        roomId: record.state.roomId,
+        roomCode: record.state.roomCode,
+        projectName: record.state.settings.projectName,
+        status: record.state.status,
+        createdAt: record.state.createdAt,
+        updatedAt: record.state.updatedAt,
+        draftRevision: record.state.scriptDraft.draftRevision,
+        markerCount: bundle.markerIndex.length,
+        versionCount: record.state.scriptVersions.length,
+        previewText,
+      };
+    })
+    .sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 export function joinRoom(roomCode: string, existingDeviceId?: string | null): RoomJoinResult | null {
@@ -196,6 +306,30 @@ export function joinRoom(roomCode: string, existingDeviceId?: string | null): Ro
     roomState: cloneState(record.state),
     lastRoomRevision: record.state.roomRevision,
   };
+}
+
+export function updateRoomSettings(input: {
+  roomCode: string;
+  settings: Partial<RoomSettings>;
+}): RoomState | null {
+  const record = roomsByCode.get(input.roomCode);
+  if (!record) {
+    return null;
+  }
+
+  const nextSettings: RoomSettings = withDefaultSettings(record.state.settings);
+  if (input.settings.projectName !== undefined) nextSettings.projectName = input.settings.projectName;
+  if (input.settings.playbackSpeedPxPerSecond !== undefined) {
+    nextSettings.playbackSpeedPxPerSecond = input.settings.playbackSpeedPxPerSecond;
+  }
+  if (input.settings.playerFontScale !== undefined) nextSettings.playerFontScale = input.settings.playerFontScale;
+  if (input.settings.playerMirrorX !== undefined) nextSettings.playerMirrorX = input.settings.playerMirrorX;
+  if (input.settings.playerMirrorY !== undefined) nextSettings.playerMirrorY = input.settings.playerMirrorY;
+  if (input.settings.playerMarkersVisible !== undefined) nextSettings.playerMarkersVisible = input.settings.playerMarkersVisible;
+  record.state.settings = withDefaultSettings(nextSettings);
+  bumpRoomFact(record);
+  persistRooms();
+  return cloneState(record.state);
 }
 
 export function getRoomState(roomCode: string): RoomState | null {
@@ -238,6 +372,7 @@ export function updateScriptDraft(input: {
   record.state.currentScriptVersionId = null;
   record.state.scrollClock = null;
   bumpRoomFact(record, at);
+  persistRooms();
   return cloneState(record.state);
 }
 
@@ -273,6 +408,7 @@ export function saveScriptVersion(input: {
   record.state.scriptVersions.unshift(version);
   record.state.currentScriptVersionId = version.versionId;
   bumpRoomFact(record, at);
+  persistRooms();
   return structuredClone(version);
 }
 
@@ -312,6 +448,7 @@ export function restoreScriptVersion(input: {
   record.state.currentScriptVersionId = version.versionId;
   record.state.scrollClock = null;
   bumpRoomFact(record, at);
+  persistRooms();
   return cloneState(record.state);
 }
 

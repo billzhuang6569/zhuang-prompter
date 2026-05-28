@@ -124,10 +124,20 @@ export type DevicePresence = {
   playbackState?: PlaybackState;
 };
 
+export type RoomSettings = {
+  projectName: string;
+  playbackSpeedPxPerSecond: number;
+  playerFontScale: number;
+  playerMirrorX: boolean;
+  playerMirrorY: boolean;
+  playerMarkersVisible: boolean;
+};
+
 export type RoomState = {
   roomId: string;
   roomCode: string;
   status: "active" | "closed";
+  settings: RoomSettings;
   currentScriptVersionId: string | null;
   currentDraftId: string;
   scriptDraft: ScriptDraft;

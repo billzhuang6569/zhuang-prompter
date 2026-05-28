@@ -332,18 +332,65 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }, []);
 
   useEffect(() => {
+    if (!roomState?.settings) {
+      return;
+    }
+    const settings = roomState.settings;
     const timer = window.setTimeout(() => {
-      const storedName = window.localStorage.getItem(`zhuang-prompter:${roomCode}:projectName`);
-      if (storedName) {
-        setProjectName(storedName);
-      }
+      setProjectName(settings.projectName);
+      setSpeed(settings.playbackSpeedPxPerSecond);
+      setPlayerFontScale(settings.playerFontScale);
+      setPlayerMirrorX(settings.playerMirrorX);
+      setPlayerMirrorY(settings.playerMirrorY);
+      setPlayerMarkersVisible(settings.playerMarkersVisible);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [roomCode]);
+  }, [roomState?.settings]);
 
   useEffect(() => {
-    window.localStorage.setItem(`zhuang-prompter:${roomCode}:projectName`, projectName);
-  }, [projectName, roomCode]);
+    if (!joinResult || !roomState?.settings) {
+      return;
+    }
+    const nextSettings = {
+      projectName,
+      playbackSpeedPxPerSecond: speed,
+      playerFontScale,
+      playerMirrorX,
+      playerMirrorY,
+      playerMarkersVisible,
+    };
+    if (
+      roomState.settings.projectName === nextSettings.projectName &&
+      roomState.settings.playbackSpeedPxPerSecond === nextSettings.playbackSpeedPxPerSecond &&
+      roomState.settings.playerFontScale === nextSettings.playerFontScale &&
+      roomState.settings.playerMirrorX === nextSettings.playerMirrorX &&
+      roomState.settings.playerMirrorY === nextSettings.playerMirrorY &&
+      roomState.settings.playerMarkersVisible === nextSettings.playerMarkersVisible
+    ) {
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void fetch(`/api/rooms/${roomCode}/settings`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(nextSettings),
+        signal: controller.signal,
+      })
+        .then(async (response) => {
+          if (!response.ok) {
+            return;
+          }
+          const data = (await response.json()) as { roomState: RoomState };
+          setRoomState(data.roomState);
+        })
+        .catch(() => undefined);
+    }, 350);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timer);
+    };
+  }, [joinResult, playerFontScale, playerMarkersVisible, playerMirrorX, playerMirrorY, projectName, roomCode, roomState?.settings, speed]);
 
   const loadDraftAndVersions = useCallback(async () => {
     const [draftResponse, versionsResponse] = await Promise.all([
@@ -1125,7 +1172,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           joinResult={joinResult}
           projectName={projectName}
           setProjectName={setProjectName}
-          draftRevision={scriptDraft?.draftRevision}
           parseStatus={scriptDraft?.parseStatus}
           hasSavedVersion={versions.length > 0}
           markdown={markdown}

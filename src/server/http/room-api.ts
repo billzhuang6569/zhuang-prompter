@@ -6,9 +6,11 @@ import {
   getScriptDraft,
   getRoomState,
   joinRoom,
+  listRooms,
   listScriptVersions,
   restoreScriptVersion,
   saveScriptVersion,
+  updateRoomSettings,
   updateScriptDraft,
 } from "../../modules/room-sync/room-store";
 import type { RoomState } from "../../domain/room/types";
@@ -83,6 +85,11 @@ export async function handleRoomApi(
     return true;
   }
 
+  if (request.method === "GET" && url.pathname === "/api/rooms") {
+    writeJson(response, 200, { rooms: listRooms() });
+    return true;
+  }
+
   if (request.method === "POST" && url.pathname === "/api/rooms") {
     writeJson(response, 201, createRoom());
     return true;
@@ -99,6 +106,32 @@ export async function handleRoomApi(
     }
 
     writeJson(response, 200, result);
+    return true;
+  }
+
+  const settingsMatch = url.pathname.match(/^\/api\/rooms\/([^/]+)\/settings$/);
+  if (request.method === "POST" && settingsMatch) {
+    const body = await readJson(request);
+    const state = updateRoomSettings({
+      roomCode: settingsMatch[1],
+      settings: {
+        projectName: typeof body.projectName === "string" ? body.projectName : undefined,
+        playbackSpeedPxPerSecond:
+          typeof body.playbackSpeedPxPerSecond === "number" ? body.playbackSpeedPxPerSecond : undefined,
+        playerFontScale: typeof body.playerFontScale === "number" ? body.playerFontScale : undefined,
+        playerMirrorX: typeof body.playerMirrorX === "boolean" ? body.playerMirrorX : undefined,
+        playerMirrorY: typeof body.playerMirrorY === "boolean" ? body.playerMirrorY : undefined,
+        playerMarkersVisible: typeof body.playerMarkersVisible === "boolean" ? body.playerMarkersVisible : undefined,
+      },
+    });
+
+    if (!state) {
+      writeJson(response, 404, { message: "Room not found." });
+      return true;
+    }
+
+    broadcastState?.(settingsMatch[1], state);
+    writeJson(response, 200, { roomState: state });
     return true;
   }
 

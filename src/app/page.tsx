@@ -1,12 +1,58 @@
 "use client";
 
-import type { FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+
+type RoomSummary = {
+  roomId: string;
+  roomCode: string;
+  projectName: string;
+  status: "active" | "closed";
+  createdAt: number;
+  updatedAt: number;
+  draftRevision: number;
+  markerCount: number;
+  versionCount: number;
+  previewText: string;
+};
+
+type NetworkOrigin = {
+  label: string;
+  origin: string;
+  kind: "local" | "lan";
+};
 
 export default function Home() {
+  const [rooms, setRooms] = useState<RoomSummary[]>([]);
+  const [networkOrigins, setNetworkOrigins] = useState<NetworkOrigin[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadHomeData() {
+      const [roomsResponse, networkResponse] = await Promise.all([fetch("/api/rooms"), fetch("/api/network-info")]);
+      if (!alive) {
+        return;
+      }
+      if (roomsResponse.ok) {
+        const data = (await roomsResponse.json()) as { rooms: RoomSummary[] };
+        setRooms(data.rooms);
+      }
+      if (networkResponse.ok) {
+        const data = (await networkResponse.json()) as { origins: NetworkOrigin[] };
+        setNetworkOrigins(data.origins);
+      }
+    }
+    void loadHomeData().catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const lanOrigin = useMemo(() => networkOrigins.find((origin) => origin.kind === "lan"), [networkOrigins]);
+
   async function createRoom() {
     const response = await fetch("/api/rooms", { method: "POST" });
     const data = (await response.json()) as { roomCode: string; deviceId: string };
-    window.localStorage.setItem(`zhuang-prompter:${data.roomCode}:deviceId`, data.deviceId);
+    window.localStorage.setItem(`zhuang-prompter:${data.roomCode}:control:deviceId`, data.deviceId);
     window.location.href = `/room/${data.roomCode}/control`;
   }
 
@@ -31,7 +77,7 @@ export default function Home() {
         </div>
         <div className="home-appbar-meta">
           <span>本地服务器</span>
-          <strong>localhost:3000</strong>
+          <strong>{lanOrigin?.origin.replace(/^https?:\/\//, "") ?? "localhost:3000"}</strong>
         </div>
       </header>
 
@@ -54,6 +100,31 @@ export default function Home() {
               <span>扫码播放端</span>
             </div>
           </div>
+
+          <section className="home-projects" aria-label="项目画册">
+            <div className="home-section-title">
+              <span>PROJECTS</span>
+              <strong>项目画册</strong>
+            </div>
+            {rooms.length > 0 ? (
+              <div className="home-project-grid">
+                {rooms.map((room) => (
+                  <a className="home-project-card" href={`/room/${room.roomCode}/control`} key={room.roomId}>
+                    <span className="home-project-code">ROOM {room.roomCode}</span>
+                    <strong>{room.projectName || `房间 ${room.roomCode}`}</strong>
+                    <p>{room.previewText || "还没有文稿内容"}</p>
+                    <div>
+                      <span>{room.markerCount} 个标记</span>
+                      <span>{room.versionCount} 个版本</span>
+                      <span>{formatTime(room.updatedAt)}</span>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div className="home-empty-projects">还没有固定下来的房间。创建第一个房间后，它会出现在这里。</div>
+            )}
+          </section>
         </div>
 
         <div className="home-action-panel">
@@ -79,12 +150,24 @@ export default function Home() {
 
           <div className="home-note-card">
             <strong>同局域网使用</strong>
-            <p>控制端和播放端都连接到这台 Mac 上运行的本地服务；热点或同 Wi-Fi 均可测试。</p>
+            <p>
+              本机服务已监听局域网。其他电脑与这台 Mac 在同一 Wi-Fi 或热点下，打开{" "}
+              {lanOrigin?.origin ?? "http://本机IP:3000"} 即可进入。
+            </p>
           </div>
         </div>
       </section>
     </main>
   );
+}
+
+function formatTime(value: number) {
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(value);
 }
 
 function Icon({ name }: { name: "arrow" | "bolt" | "control" | "create" | "player" }) {
