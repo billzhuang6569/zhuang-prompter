@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type Dispatch, type KeyboardEvent, type RefObject, type SetStateAction } from "react";
+import { useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
+import type { MDXEditorMethods } from "@mdxeditor/editor";
 import type { RoomJoinResult } from "@/domain/room/types";
-import type { MarkerAnchor, RenderBundle, RenderNode } from "@/modules/script-engine/types";
+import type { RenderBundle } from "@/modules/script-engine/types";
+import { RichMarkdownEditor } from "./rich-markdown-editor";
 
 type VersionSummary = {
   versionId: string;
@@ -24,6 +26,7 @@ type MarkdownCommand = "heading" | "marker" | "comment";
 
 type PendingEditorAction = {
   kind: "marker" | "comment";
+  pendingId?: string;
   value: string;
 };
 
@@ -122,33 +125,27 @@ export function ControlConsole({
 }: ControlConsoleProps) {
   const [view, setView] = useState<"render" | "raw">("render");
   const quickInputRef = useRef<HTMLInputElement | null>(null);
-  const renderEditTimerRef = useRef<number | null>(null);
+  const richEditorRef = useRef<MDXEditorMethods | null>(null);
   const scriptSurfaceRef = useRef<HTMLDivElement | null>(null);
   const [floatingEditorPosition, setFloatingEditorPosition] = useState<FloatingEditorPosition | null>(null);
+  const [richPendingEditorAction, setRichPendingEditorAction] = useState<PendingEditorAction | null>(null);
 
   const markers = bundle?.markerIndex ?? [];
   const safePlayerLink = playerEntryLink ?? roomLinks[0];
+  const activePendingEditorAction = richPendingEditorAction ?? pendingEditorAction;
 
   useEffect(() => {
-    if (pendingEditorAction) {
+    if (activePendingEditorAction) {
       quickInputRef.current?.focus();
       quickInputRef.current?.select();
     }
-  }, [pendingEditorAction]);
+  }, [activePendingEditorAction]);
 
   useEffect(() => {
     if (view === "raw") {
       window.requestAnimationFrame(() => markdownEditorRef.current?.focus());
     }
   }, [markdownEditorRef, view]);
-
-  useEffect(() => {
-    return () => {
-      if (renderEditTimerRef.current) {
-        window.clearTimeout(renderEditTimerRef.current);
-      }
-    };
-  }, []);
 
   function runInRawEditor(action: () => void) {
     if (view !== "raw") {
@@ -160,62 +157,64 @@ export function ControlConsole({
   }
 
   function beginInlineMarkerEdit() {
-    const renderedTarget = renderedInsertionTarget(false);
-    if (renderedTarget) {
-      setFloatingEditorPosition(renderedTarget.position);
-      onBeginMarkerEdit(renderedTarget.target);
+    if (view === "render" && richEditorRef.current) {
+      const pendingId = `pending_${crypto.randomUUID()}`;
+      const selected = richEditorRef.current.getSelectionMarkdown().trim();
+      const label = escapeDirectiveAttr(selected || "新标记");
+      const marker = `\n\n::marker[${nextMarkerId(markers)}]{type="section" label="${label}" note="现场跳转点" pending="${pendingId}"}\n\n`;
+      setFloatingEditorPosition(floatingPositionForCurrentSelection());
+      setRichPendingEditorAction({ kind: "marker", pendingId, value: label });
+      richEditorRef.current.insertMarkdown(marker);
+      window.setTimeout(() => setMarkdown((source) => renumberMarkerDirectives(source)), 0);
       return;
     }
+
     setFloatingEditorPosition(fallbackFloatingEditorPosition());
     runInRawEditor(() => onBeginMarkerEdit());
   }
 
   function beginInlineCommentEdit() {
-    const renderedTarget = renderedInsertionTarget(true);
-    if (renderedTarget) {
-      setFloatingEditorPosition(renderedTarget.position);
-      onBeginCommentEdit(renderedTarget.target);
+    if (view === "render" && richEditorRef.current) {
+      const selected = richEditorRef.current.getSelectionMarkdown().trim();
+      if (!selected) {
+        richEditorRef.current.focus();
+        return;
+      }
+      const pendingId = `pending_${crypto.randomUUID()}`;
+      const note = "注释";
+      const stage = `:stage[${escapeDirectiveLabel(selected)}]{cue="${note}" label="${note}" pending="${pendingId}"}`;
+      setFloatingEditorPosition(floatingPositionForCurrentSelection());
+      setRichPendingEditorAction({ kind: "comment", pendingId, value: note });
+      richEditorRef.current.insertMarkdown(stage);
       return;
     }
+
     setFloatingEditorPosition(fallbackFloatingEditorPosition());
     runInRawEditor(() => onBeginCommentEdit());
   }
 
   function confirmFloatingEditorAction() {
-    onConfirmPendingEditorAction();
+    if (richPendingEditorAction) {
+      const fallback = richPendingEditorAction.kind === "marker" ? "新标记" : "注释";
+      const cleanValue = escapeDirectiveAttr(richPendingEditorAction.value || fallback);
+      setMarkdown((source) => updatePendingDirective(source, richPendingEditorAction, cleanValue, true));
+      setRichPendingEditorAction(null);
+    } else {
+      onConfirmPendingEditorAction();
+    }
     setFloatingEditorPosition(null);
   }
 
-  function renderedInsertionTarget(requireSelection: boolean) {
-    if (view !== "render" || !bundle || !scriptSurfaceRef.current) {
-      return null;
+  function updateFloatingEditorValue(value: string) {
+    if (richPendingEditorAction) {
+      const fallback = richPendingEditorAction.kind === "marker" ? "新标记" : "注释";
+      const cleanValue = escapeDirectiveAttr(value || fallback);
+      const nextAction = { ...richPendingEditorAction, value };
+      setRichPendingEditorAction(nextAction);
+      setMarkdown((source) => updatePendingDirective(source, richPendingEditorAction, cleanValue, false));
+      return;
     }
-
-    const selection = window.getSelection();
-    const editable = editableElementFromSelection(selection);
-    if (!editable) {
-      return null;
-    }
-
-    const node = bundle.htmlTree.find((item) => item.renderNodeId === editable.dataset.renderNodeId);
-    if (!node || node.type === "marker" || node.type === "stageCue") {
-      return null;
-    }
-
-    const offsets = selectionOffsetsInEditable(editable, selection);
-    if (!offsets || (requireSelection && offsets.start === offsets.end)) {
-      return null;
-    }
-
-    const target = sourceTargetForRenderedNode(markdown, node, offsets.start, offsets.end);
-    if (!target) {
-      return null;
-    }
-
-    return {
-      target,
-      position: floatingPositionForSelection(editable, selection),
-    };
+    onPendingEditorValueChange(value);
   }
 
   function fallbackFloatingEditorPosition() {
@@ -227,13 +226,19 @@ export function ControlConsole({
     return { left: Math.min(320, Math.max(24, rect.width * 0.28)), top: 72 };
   }
 
-  function updateRenderedNode(node: RenderNode, value: string) {
-    if (renderEditTimerRef.current) {
-      window.clearTimeout(renderEditTimerRef.current);
+  function floatingPositionForCurrentSelection() {
+    const selection = window.getSelection();
+    const surface = scriptSurfaceRef.current;
+    const surfaceRect = surface?.getBoundingClientRect();
+    const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+    const rangeRect = range?.getBoundingClientRect();
+    if (!surfaceRect || !rangeRect || (rangeRect.width === 0 && rangeRect.height === 0)) {
+      return fallbackFloatingEditorPosition();
     }
-    renderEditTimerRef.current = window.setTimeout(() => {
-      setMarkdown((current) => replaceRenderedNodeText(current, node, value));
-    }, 220);
+    return {
+      left: clamp(rangeRect.left - surfaceRect.left, 20, Math.max(20, surfaceRect.width - 390)),
+      top: clamp(rangeRect.bottom - surfaceRect.top + 10, 18, Math.max(18, surfaceRect.height - 72)),
+    };
   }
 
   return (
@@ -329,20 +334,20 @@ export function ControlConsole({
 
           <div className={`nike-srw ${isPlaying ? "playing" : ""}`} data-od-id="script-render-wrapper" ref={scriptSurfaceRef}>
             <div className="nike-iline" />
-            {pendingEditorAction && floatingEditorPosition && (
+            {activePendingEditorAction && floatingEditorPosition && (
               <div className="nike-floating-editor" style={{ left: floatingEditorPosition.left, top: floatingEditorPosition.top }}>
-                <span>{pendingEditorAction.kind === "marker" ? "标记" : "注释"}</span>
+                <span>{activePendingEditorAction.kind === "marker" ? "标记" : "注释"}</span>
                 <input
                   ref={quickInputRef}
-                  value={pendingEditorAction.value}
-                  onChange={(event) => onPendingEditorValueChange(event.target.value)}
+                  value={activePendingEditorAction.value}
+                  onChange={(event) => updateFloatingEditorValue(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
                       event.preventDefault();
                       confirmFloatingEditorAction();
                     }
                   }}
-                  placeholder={pendingEditorAction.kind === "marker" ? "输入标记名称" : "输入注释内容"}
+                  placeholder={activePendingEditorAction.kind === "marker" ? "输入标记名称" : "输入注释内容"}
                 />
                 <button type="button" title="完成" onClick={confirmFloatingEditorAction}>
                   <CheckIcon />
@@ -357,19 +362,15 @@ export function ControlConsole({
                 data-od-id="script-render"
                 onScroll={(event) => onPreviewScroll(event.currentTarget.scrollTop)}
               >
-                <div className="nike-sc">
-                  {bundle ? (
-                    bundle.htmlTree.map((node) => (
-                      <ControlRenderNode
-                        key={node.renderNodeId}
-                        node={node}
-                        onJumpToMarker={onJumpToMarker}
-                        onEdit={updateRenderedNode}
-                      />
-                    ))
-                  ) : (
-                    <p>开始输入 Markdown 文稿，右侧播放端会同步显示。</p>
-                  )}
+                <div className="nike-sc nike-rich-editor-wrap">
+                  <RichMarkdownEditor
+                    ref={richEditorRef}
+                    className="nike-rich-editor"
+                    contentEditableClassName="nike-rich-editor-content"
+                    markdown={markdown}
+                    onChange={setMarkdown}
+                    spellCheck={false}
+                  />
                   <div className="nike-bottom-space" />
                 </div>
               </div>
@@ -520,251 +521,69 @@ export function ControlConsole({
   );
 }
 
-function ControlRenderNode({
-  node,
-  onJumpToMarker,
-  onEdit,
-}: {
-  node: RenderNode;
-  onJumpToMarker: (markerId: string) => void;
-  onEdit: (node: RenderNode, value: string) => void;
-}) {
-  if (node.type === "heading") {
-    const HeadingTag = node.depth <= 1 ? "h1" : "h2";
-    return (
-      <HeadingTag
-        data-render-node-id={node.renderNodeId}
-        className="nike-editable-text"
-        contentEditable="plaintext-only"
-        suppressContentEditableWarning
-        onInput={(event) => onEdit(node, editableText(event.currentTarget))}
-        onKeyDown={handlePlaintextEditKeyDown}
-      >
-        {node.text}
-      </HeadingTag>
-    );
-  }
-
-  if (node.type === "marker") {
-    return <MarkerTag marker={node.marker} onJumpToMarker={onJumpToMarker} />;
-  }
-
-  if (node.type === "stageCue") {
-    return <StageCue label={cueText(node.cue) || node.body || "注释"} />;
-  }
-
-  return (
-    <div className={`nike-script-text ${node.type === "listItem" ? "is-list-item" : ""}`}>
-      <p
-        data-render-node-id={node.renderNodeId}
-        className="nike-editable-text"
-        contentEditable="plaintext-only"
-        suppressContentEditableWarning
-        onInput={(event) => onEdit(node, editableText(event.currentTarget))}
-        onKeyDown={handlePlaintextEditKeyDown}
-      >
-        {node.inlineMarkers?.map((marker) => (
-          <MarkerTag key={marker.markerId} marker={marker} onJumpToMarker={onJumpToMarker} inline />
-        ))}
-        {node.text}
-      </p>
-      {node.cue && <StageCue label={cueText(node.cue)} />}
-    </div>
-  );
-}
-
-function editableText(element: HTMLElement) {
-  const clone = element.cloneNode(true) as HTMLElement;
-  clone.querySelectorAll("[data-edit-lock]").forEach((child) => child.remove());
-  return clone.textContent ?? "";
-}
-
-function handlePlaintextEditKeyDown(event: KeyboardEvent<HTMLElement>) {
-  if (event.key === "Enter") {
-    event.preventDefault();
-    event.currentTarget.blur();
-  }
-}
-
-function replaceRenderedNodeText(markdown: string, node: RenderNode, value: string) {
-  if (node.type === "marker" || node.type === "stageCue") {
-    return markdown;
-  }
-
-  const nextText = normalizeEditedText(value);
-  const start = Math.max(0, Math.min(node.sourceRange.start, markdown.length));
-  const end = Math.max(start, Math.min(node.sourceRange.end, markdown.length));
-  const before = markdown.slice(0, start);
-  const source = markdown.slice(start, end);
-  const after = markdown.slice(end);
-
-  if (node.type === "heading") {
-    const match = source.match(/^(\s{0,3}#{1,6}\s+)([\s\S]*?)(\s*)$/);
-    if (match) {
-      return `${before}${match[1]}${nextText}${match[3]}${after}`;
-    }
-  }
-
-  if (node.type === "listItem") {
-    const match = source.match(/^(\s*(?:[-*+]|\d+[.)])\s+)([\s\S]*?)(\s*)$/);
-    if (match) {
-      return `${before}${match[1]}${nextText}${match[3]}${after}`;
-    }
-  }
-
-  const textIndex = source.indexOf(node.text);
-  if (textIndex >= 0) {
-    const patched = `${source.slice(0, textIndex)}${nextText}${source.slice(textIndex + node.text.length)}`;
-    return `${before}${patched}${after}`;
-  }
-
-  return `${before}${nextText}${after}`;
-}
-
-function normalizeEditedText(value: string) {
-  return value.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
-}
-
-function editableElementFromSelection(selection: Selection | null) {
-  const node = selection?.anchorNode;
-  const element = node instanceof Element ? node : node?.parentElement;
-  const editable = element?.closest<HTMLElement>(".nike-editable-text");
-  return editable ?? null;
-}
-
-function selectionOffsetsInEditable(root: HTMLElement, selection: Selection | null) {
-  if (!selection || selection.rangeCount === 0) {
-    return null;
-  }
-
-  const range = selection.getRangeAt(0);
-  if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) {
-    return null;
-  }
-
-  const start = textLengthBefore(root, range.startContainer, range.startOffset);
-  const end = textLengthBefore(root, range.endContainer, range.endOffset);
-  return {
-    start: Math.min(start, end),
-    end: Math.max(start, end),
-  };
-}
-
-function textLengthBefore(root: HTMLElement, container: Node, offset: number) {
-  const range = document.createRange();
-  range.selectNodeContents(root);
-  try {
-    range.setEnd(container, offset);
-  } catch {
-    return editableText(root).length;
-  }
-  const fragment = range.cloneContents();
-  fragment.querySelectorAll("[data-edit-lock]").forEach((child) => child.remove());
-  return fragment.textContent?.length ?? 0;
-}
-
-function sourceTargetForRenderedNode(markdown: string, node: RenderNode, selectionStart: number, selectionEnd: number) {
-  if (node.type === "marker" || node.type === "stageCue") {
-    return null;
-  }
-
-  const rangeStart = Math.max(0, Math.min(node.sourceRange.start, markdown.length));
-  const rangeEnd = Math.max(rangeStart, Math.min(node.sourceRange.end, markdown.length));
-  const source = markdown.slice(rangeStart, rangeEnd);
-  let textStart = source.indexOf(node.text);
-
-  if (node.type === "heading") {
-    const match = source.match(/^(\s{0,3}#{1,6}\s+)/);
-    textStart = match?.[1].length ?? Math.max(textStart, 0);
-  }
-
-  if (node.type === "listItem") {
-    const match = source.match(/^(\s*(?:[-*+]|\d+[.)])\s+)/);
-    textStart = match?.[1].length ?? Math.max(textStart, 0);
-  }
-
-  if (textStart < 0) {
-    textStart = 0;
-  }
-
-  return {
-    start: rangeStart + textStart + selectionStart,
-    end: rangeStart + textStart + selectionEnd,
-  };
-}
-
-function floatingPositionForSelection(editable: HTMLElement, selection: Selection | null) {
-  const surface = editable.closest<HTMLElement>(".nike-srw");
-  const surfaceRect = surface?.getBoundingClientRect();
-  const editableRect = editable.getBoundingClientRect();
-  let targetRect = editableRect;
-
-  if (selection && selection.rangeCount > 0) {
-    const range = selection.getRangeAt(0);
-    if (editable.contains(range.commonAncestorContainer)) {
-      const rangeRect = range.getBoundingClientRect();
-      if (rangeRect.width > 0 || rangeRect.height > 0) {
-        targetRect = rangeRect;
-      }
-    }
-  }
-
-  if (!surfaceRect) {
-    return { left: 24, top: 24 };
-  }
-
-  return {
-    left: clamp(targetRect.left - surfaceRect.left, 20, Math.max(20, surfaceRect.width - 390)),
-    top: clamp(targetRect.bottom - surfaceRect.top + 10, 18, Math.max(18, surfaceRect.height - 72)),
-  };
-}
-
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function MarkerTag({
-  marker,
-  inline = false,
-  onJumpToMarker,
-}: {
-  marker: Pick<MarkerAnchor, "markerId" | "label" | "type">;
-  inline?: boolean;
-  onJumpToMarker: (markerId: string) => void;
-}) {
-  return (
-    <button
-      className={`nike-mtag ${inline ? "inline" : ""}`}
-      type="button"
-      contentEditable={false}
-      data-edit-lock
-      onClick={() => onJumpToMarker(marker.markerId)}
-    >
-      <span className="nike-dot-mini" />
-      {marker.markerId}
-      {marker.label ? ` · ${marker.label}` : ""}
-    </button>
-  );
+function nextMarkerId(markers: Array<{ markerId: string }>) {
+  const usedIds = new Set(markers.map((marker) => marker.markerId));
+  let nextIndex = markers.length + 1;
+  let markerId = `M${nextIndex.toString().padStart(3, "0")}`;
+  while (usedIds.has(markerId)) {
+    nextIndex += 1;
+    markerId = `M${nextIndex.toString().padStart(3, "0")}`;
+  }
+  return markerId;
 }
 
-function StageCue({ label }: { label: string }) {
-  return (
-    <div className="nike-scue">
-      <span className="nike-scue-arrow">↳</span>
-      {label}
-    </div>
-  );
+function renumberMarkerDirectives(source: string) {
+  let markerIndex = 0;
+  return source.replace(/((?::|::)marker\[)M\d{3}(\]\{)/g, (_match, before: string, after: string) => {
+    markerIndex += 1;
+    return `${before}M${markerIndex.toString().padStart(3, "0")}${after}`;
+  });
 }
 
-function cueText(cue: { label?: string; cue?: string; level?: string; duration?: string }) {
-  const levelLabels: Record<string, string> = {
-    important: "重点",
-    warning: "注意",
-    soft: "轻声",
-  };
-  const level = cue.level ? (levelLabels[cue.level] ?? cue.level) : undefined;
-  const cueValue = cue.label ? undefined : cue.cue;
-  return [cue.label ?? cueValue, level, cue.duration].filter(Boolean).join(" · ");
+function escapeDirectiveAttr(value: string) {
+  return value.replace(/["\\\n\r]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function escapeDirectiveLabel(value: string) {
+  return value.replace(/[\][\n\r]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function replaceDirectiveAttribute(directive: string, attr: "label" | "cue", value: string) {
+  const attrPattern = new RegExp(`${attr}="[^"]*"`);
+  if (attrPattern.test(directive)) {
+    return directive.replace(attrPattern, `${attr}="${value}"`);
+  }
+  return directive.replace(/\}$/, ` ${attr}="${value}"}`);
+}
+
+function updatePendingDirective(source: string, action: PendingEditorAction, value: string, finalize: boolean) {
+  if (!action.pendingId) {
+    return source;
+  }
+
+  const pendingPattern = escapeRegExp(action.pendingId);
+  const directivePattern =
+    action.kind === "marker"
+      ? new RegExp(`::marker\\[M\\d{3}\\]\\{[^}]*pending="${pendingPattern}"[^}]*\\}`)
+      : new RegExp(`:stage\\[[^\\]]*\\]\\{[^}]*pending="${pendingPattern}"[^}]*\\}`);
+
+  return source.replace(directivePattern, (directive) => {
+    let nextDirective = directive;
+    if (action.kind === "marker") {
+      nextDirective = replaceDirectiveAttribute(nextDirective, "label", value);
+    } else {
+      nextDirective = replaceDirectiveAttribute(replaceDirectiveAttribute(nextDirective, "cue", value), "label", value);
+    }
+    return finalize ? nextDirective.replace(/\s+pending="[^"]*"/, "") : nextDirective;
+  });
 }
 
 function formatTime(value: number) {

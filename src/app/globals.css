@@ -1841,6 +1841,94 @@ input {
   margin: 0 auto;
 }
 
+.nike-rich-editor-wrap {
+  min-height: calc(100% - 280px);
+}
+
+.nike-rich-editor {
+  color: var(--nike-ink);
+  --accentBase: var(--nike-info);
+  --accentBgSubtle: rgb(68 147 248 / 8%);
+  --accentBg: rgb(68 147 248 / 12%);
+  --accentBorder: rgb(68 147 248 / 35%);
+  --baseBase: var(--nike-canvas);
+  --baseBg: var(--nike-canvas);
+  --baseBgSubtle: var(--nike-s1);
+  --baseBorder: var(--nike-hl);
+  --baseText: var(--nike-ink);
+  --baseTextContrast: var(--nike-ink);
+}
+
+.nike-rich-editor .mdxeditor {
+  background: transparent;
+}
+
+.nike-rich-editor-content {
+  min-height: 620px;
+  outline: 0;
+  color: var(--nike-ink);
+  caret-color: var(--nike-info);
+}
+
+.nike-rich-editor-content h1 {
+  margin: 0 0 var(--nike-md);
+  color: var(--nike-ink);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.nike-rich-editor-content h2 {
+  margin: var(--nike-xxl) 0 var(--nike-sm);
+  color: var(--nike-ink);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.nike-rich-editor-content p,
+.nike-rich-editor-content li {
+  max-width: 60ch;
+  color: var(--nike-ink);
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.65;
+}
+
+.nike-rich-editor-content p {
+  margin: 0 0 var(--nike-lg);
+}
+
+.nike-rich-editor-content ul,
+.nike-rich-editor-content ol {
+  margin: 0 0 var(--nike-lg) 1.4em;
+  padding: 0;
+}
+
+.nike-rich-editor-content blockquote {
+  margin: var(--nike-md) 0;
+  border-left: 2px solid var(--nike-info);
+  color: var(--nike-ink2);
+  padding-left: var(--nike-md);
+}
+
+.nike-rich-editor-content code {
+  border: 1px solid var(--nike-hl);
+  border-radius: 5px;
+  background: var(--nike-s1);
+  padding: 1px 5px;
+  font-size: 0.88em;
+}
+
+.nike-mdx-directive {
+  user-select: none;
+}
+
+.nike-rich-editor-content .nike-scue {
+  display: inline-flex;
+  margin: 0 8px 0 0;
+  vertical-align: middle;
+}
+
 .nike-sc h1 {
   margin-bottom: var(--nike-md);
   color: var(--nike-ink);

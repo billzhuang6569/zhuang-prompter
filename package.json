@@ -20,6 +20,7 @@
     "acceptance:local": "node scripts/acceptance-report.mjs"
   },
   "dependencies": {
+    "@mdxeditor/editor": "^4.0.1",
     "mdast-util-to-string": "^4.0.0",
     "next": "16.2.6",
     "qrcode": "^1.5.4",
