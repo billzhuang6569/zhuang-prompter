@@ -1601,7 +1601,6 @@ input {
 .nike-vtab,
 .nike-tlb,
 .nike-t-save,
-.nike-mde-row,
 .nike-mde-save,
 .nike-stpb,
 .nike-play-btn,
@@ -1864,39 +1863,6 @@ input {
   flex: 0 0 auto;
   border-top: 1px solid var(--nike-hl);
   background: var(--nike-canvas);
-}
-
-.nike-mde-row {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border: 0;
-  border-bottom: 1px solid var(--nike-hl);
-  background: transparent;
-  color: inherit;
-  padding: var(--nike-lg) var(--nike-xl);
-  text-align: left;
-  transition: background var(--nike-t);
-}
-
-.nike-mde-row:hover {
-  background: var(--nike-s1);
-}
-
-.nike-mde-lbl {
-  color: var(--nike-ink);
-  font-size: 14px;
-  font-weight: 500;
-}
-
-.nike-mde-caret {
-  color: var(--nike-mute);
-  transition: transform var(--nike-t);
-}
-
-.nike-mde-caret.open {
-  transform: rotate(180deg);
 }
 
 .nike-mde-b {

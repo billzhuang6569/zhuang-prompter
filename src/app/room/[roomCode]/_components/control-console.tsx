@@ -205,10 +205,6 @@ export function ControlConsole({
           </div>
 
           <div className="nike-mde-w" data-od-id="md-editor">
-            <button className="nike-mde-row" type="button" onClick={() => markdownEditorRef.current?.focus()}>
-              <span className="nike-mde-lbl">Markdown 原文编辑</span>
-              <span className="nike-mde-caret open">⌄</span>
-            </button>
             <div className="nike-mde-b open">
               <div className="nike-editor-tools" data-od-id="toolbar">
                 <button
