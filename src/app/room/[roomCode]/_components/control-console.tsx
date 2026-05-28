@@ -31,8 +31,6 @@ type PlayerLink = {
   playerUrl: string;
 };
 
-type MarkdownCommand = "heading" | "marker" | "comment";
-
 type PendingEditorAction = {
   kind: "marker" | "notes";
   pendingId?: string;
@@ -86,7 +84,6 @@ type ControlConsoleProps = {
   onNudge: (deltaPx: number) => void;
   onJumpToMarker: (markerId: string) => void;
   onSpeedChange: (speed: number) => void;
-  onMarkdownCommand: (command: MarkdownCommand) => void;
   onBeginMarkerEdit: (target?: EditorInsertionTarget) => void;
   onBeginCommentEdit: (target?: EditorInsertionTarget) => void;
   pendingEditorAction: PendingEditorAction | null;
@@ -128,7 +125,6 @@ export function ControlConsole({
   onNudge,
   onJumpToMarker,
   onSpeedChange,
-  onMarkdownCommand,
   onBeginMarkerEdit,
   onBeginCommentEdit,
   pendingEditorAction,
@@ -262,18 +258,6 @@ export function ControlConsole({
 
     setFloatingEditorPosition(fallbackFloatingEditorPosition());
     runInRawEditor(() => onBeginCommentEdit());
-  }
-
-  function insertHeading() {
-    if (view === "render") {
-      const editor = richEditorRef.current;
-      if (!editor) {
-        return;
-      }
-      editor.focus(() => editor.insertMarkdown("\n\n# 标题\n\n"), { defaultSelection: "rootEnd" });
-      return;
-    }
-    runInRawEditor(() => onMarkdownCommand("heading"));
   }
 
   function confirmFloatingEditorAction() {
@@ -480,15 +464,6 @@ export function ControlConsole({
                 >
                   <CommentIcon />
                   增加注释
-                </button>
-                <div className="nike-t-sep" />
-                <button
-                  className="nike-tlb"
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={insertHeading}
-                >
-                  标题
                 </button>
                 <button className="nike-t-save" type="button" onClick={onSaveVersion}>
                   <SaveIcon />

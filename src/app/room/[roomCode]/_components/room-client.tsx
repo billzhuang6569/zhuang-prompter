@@ -1057,7 +1057,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           onNudge={nudgePlayback}
           onJumpToMarker={jumpToMarker}
           onSpeedChange={setBoundedSpeed}
-          onMarkdownCommand={applyMarkdownCommand}
           onBeginMarkerEdit={beginMarkerEdit}
           onBeginCommentEdit={beginCommentEdit}
           pendingEditorAction={pendingEditorAction}
