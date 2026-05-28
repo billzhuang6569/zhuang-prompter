@@ -136,8 +136,10 @@ export function ControlConsole({
 
   useEffect(() => {
     if (activePendingEditorAction) {
-      quickInputRef.current?.focus();
-      quickInputRef.current?.select();
+      window.requestAnimationFrame(() => {
+        quickInputRef.current?.focus();
+        quickInputRef.current?.select();
+      });
     }
   }, [activePendingEditorAction]);
 
@@ -157,7 +159,10 @@ export function ControlConsole({
   }
 
   function beginInlineMarkerEdit() {
-    if (view === "render" && richEditorRef.current) {
+    if (view === "render") {
+      if (!richEditorRef.current) {
+        return;
+      }
       const pendingId = `pending_${crypto.randomUUID()}`;
       const selected = richEditorRef.current.getSelectionMarkdown().trim();
       const label = escapeDirectiveAttr(selected || "新标记");
@@ -174,7 +179,10 @@ export function ControlConsole({
   }
 
   function beginInlineCommentEdit() {
-    if (view === "render" && richEditorRef.current) {
+    if (view === "render") {
+      if (!richEditorRef.current) {
+        return;
+      }
       const selected = richEditorRef.current.getSelectionMarkdown().trim();
       if (!selected) {
         richEditorRef.current.focus();
@@ -191,6 +199,18 @@ export function ControlConsole({
 
     setFloatingEditorPosition(fallbackFloatingEditorPosition());
     runInRawEditor(() => onBeginCommentEdit());
+  }
+
+  function insertHeading() {
+    if (view === "render") {
+      const editor = richEditorRef.current;
+      if (!editor) {
+        return;
+      }
+      editor.focus(() => editor.insertMarkdown("\n\n# 标题\n\n"), { defaultSelection: "rootEnd" });
+      return;
+    }
+    runInRawEditor(() => onMarkdownCommand("heading"));
   }
 
   function confirmFloatingEditorAction() {
@@ -320,7 +340,7 @@ export function ControlConsole({
                   className="nike-tlb"
                   type="button"
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => runInRawEditor(() => onMarkdownCommand("heading"))}
+                  onClick={insertHeading}
                 >
                   标题
                 </button>
