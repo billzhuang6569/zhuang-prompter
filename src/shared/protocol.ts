@@ -1,4 +1,5 @@
 import type { DeviceRole, PlaybackState, RoomState, ScrollClock, VoiceTranscript } from "../domain/room/types";
+import { makeRandomId } from "./id";
 
 export type ClientEventType =
   | "client.hello"
@@ -105,5 +106,5 @@ export type RoomPatchEvent = {
 export type ServerEnvelope = ServerAck | ServerNack | ServerWelcome | RoomStateEvent | RoomPatchEvent;
 
 export function makeEventId(prefix = "evt") {
-  return `${prefix}_${crypto.randomUUID()}`;
+  return makeRandomId(prefix);
 }

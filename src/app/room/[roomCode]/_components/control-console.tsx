@@ -14,6 +14,7 @@ import {
 import type { MDXEditorMethods } from "@mdxeditor/editor";
 import type { RoomJoinResult } from "@/domain/room/types";
 import type { RenderBundle } from "@/modules/script-engine/types";
+import { makeRandomId } from "@/shared/id";
 import { RichMarkdownEditor } from "./rich-markdown-editor";
 
 type VersionSummary = {
@@ -252,7 +253,7 @@ export function ControlConsole({
       if (!richEditorRef.current) {
         return;
       }
-      const pendingId = `pending_${crypto.randomUUID()}`;
+      const pendingId = makeRandomId("pending");
       const label = "标记点";
       const marker = `\n\n:marker[${nextMarkerId(markers)}]{text="${label}" pending="${pendingId}"}\u00A0\n\n`;
       const insertionIndex = markdownInsertionIndexFromSelection(markdown);
@@ -275,7 +276,7 @@ export function ControlConsole({
       if (!richEditorRef.current) {
         return;
       }
-      const pendingId = `pending_${crypto.randomUUID()}`;
+      const pendingId = makeRandomId("pending");
       const note = "提示内容";
       const stage = `\n\n:notes{text="${note}" pending="${pendingId}"}\u00A0\n\n`;
       const insertionIndex = markdownInsertionIndexFromSelection(markdown);

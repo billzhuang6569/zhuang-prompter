@@ -13,6 +13,7 @@ import type {
 } from "@/shared/protocol";
 import type { RenderBundle } from "@/modules/script-engine";
 import { parseMarkdown } from "@/modules/script-engine";
+import { makeRandomId } from "@/shared/id";
 import { ControlConsole } from "./control-console";
 import { RenderBundleView } from "./render-bundle-view";
 
@@ -24,11 +25,11 @@ type RoomClientProps = {
 type ConnectionState = "joining" | "connecting" | "connected" | "disconnected" | "not-found";
 
 function makeSessionId() {
-  return `sess_${crypto.randomUUID()}`;
+  return makeRandomId("sess");
 }
 
 function makeEventId() {
-  return `evt_${crypto.randomUUID()}`;
+  return makeRandomId("evt");
 }
 
 function deviceStorageKey(roomCode: string, role: DeviceRole | "select-role" | null) {
@@ -573,7 +574,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       return;
     }
     const scrollClock: Omit<ScrollClock, "roomRevision"> = {
-      scrollClockId: `clk_${crypto.randomUUID()}`,
+      scrollClockId: makeRandomId("clk"),
       scriptVersionId: SCRIPT_VERSION_ID,
       state,
       controlMode: "fixedSpeed",
@@ -689,7 +690,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     const source = editor?.value ?? markdown;
     const start = target?.start ?? editor?.selectionStart ?? source.length;
     const end = target?.end ?? editor?.selectionEnd ?? source.length;
-    const pendingId = `pending_${crypto.randomUUID()}`;
+    const pendingId = makeRandomId("pending");
     const label = "标记点";
     const marker = `:marker[${nextMarkerId()}]{text="${label}" pending="${pendingId}"}\u00A0`;
     const nextValue = renumberMarkerDirectives(sourceWithBlockInsertion(source, start, end, marker));
@@ -706,7 +707,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     const source = editor?.value ?? markdown;
     const start = target?.start ?? editor?.selectionStart ?? source.length;
     const end = target?.end ?? editor?.selectionEnd ?? source.length;
-    const pendingId = `pending_${crypto.randomUUID()}`;
+    const pendingId = makeRandomId("pending");
     const note = "提示内容";
     const stage = `:notes{text="${note}" pending="${pendingId}"}\u00A0`;
     const nextValue = sourceWithBlockInsertion(source, start, end, stage);
