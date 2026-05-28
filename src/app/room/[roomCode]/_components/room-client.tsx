@@ -205,6 +205,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
         JSON.stringify(activeScrollClock.anchor),
       ].join(":")
     : "";
+  const primaryPlayerReportedPosition = playerReports[0]?.playbackState?.positionPx;
   const playerEntryLink = roomLinks.find((link) => link.kind === "lan") ?? roomLinks[0];
 
   const sendEvent = useCallback(
@@ -547,6 +548,13 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     sendScrollClock("paused", offset, 0);
   }
 
+  function manuallyAdjustPlayer(deltaPx: number) {
+    const offset = Math.max(0, playbackPositionRef.current + deltaPx);
+    setPlaybackPositionPx(offset);
+    playbackPositionRef.current = offset;
+    sendScrollClock("paused", offset, 0);
+  }
+
   function jumpToMarker(markerId: string) {
     const marker = bundle?.markerIndex.find((item) => item.markerId === markerId);
     if (!marker) {
@@ -864,6 +872,18 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }, [activeScrollClockKey, mode]);
 
   useEffect(() => {
+    if (mode !== "control" || activeScrollClockKey || typeof primaryPlayerReportedPosition !== "number") {
+      return;
+    }
+    const offset = Math.max(0, primaryPlayerReportedPosition);
+    const animationFrame = window.requestAnimationFrame(() => {
+      setPlaybackPositionPx(offset);
+      playbackPositionRef.current = offset;
+    });
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [activeScrollClockKey, mode, primaryPlayerReportedPosition]);
+
+  useEffect(() => {
     if (mode !== "player") {
       return;
     }
@@ -1054,6 +1074,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           setVersionMessage={setVersionMessage}
           bundle={bundle}
           versions={versions}
+          playbackPositionPx={playbackPositionPx}
           speed={speed}
           isPlaying={isControlPlaying}
           playerEntryLink={playerEntryLink}
@@ -1393,7 +1414,17 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }
 
   return (
-    <main className={`workspace ${mode === "player" ? "player-workspace" : ""} ${playerOverlayHidden ? "player-overlay-hidden" : ""}`}>
+    <main
+      className={`workspace ${mode === "player" ? "player-workspace" : ""} ${playerOverlayHidden ? "player-overlay-hidden" : ""}`}
+      onWheel={
+        mode === "player"
+          ? (event) => {
+              event.preventDefault();
+              manuallyAdjustPlayer(event.deltaY);
+            }
+          : undefined
+      }
+    >
       <section className="room-topbar">
         <div>
           <p className="eyebrow">房间 {roomCode}</p>

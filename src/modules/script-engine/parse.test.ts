@@ -70,6 +70,17 @@ test("inline marker enters marker index without entering speech", () => {
   assert.ok(!bundle.speechIndex.some((item) => item.rawText.includes("跳段点")));
 });
 
+test("line marker renders as an independent marker block", () => {
+  const bundle = parseMarkdown('第一段。\n:marker[02]{text="跳段点"}\u00A0\n继续说。');
+
+  assert.equal(bundle.markerIndex.length, 1);
+  assert.equal(bundle.markerIndex[0].inline, false);
+  assert.deepEqual(
+    bundle.htmlTree.map((node) => node.type),
+    ["paragraph", "marker", "paragraph"],
+  );
+});
+
 test("unsupported directive becomes parse warning", () => {
   const bundle = parseMarkdown("::unknown[test]{label=\"nope\"}");
 

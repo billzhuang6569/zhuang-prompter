@@ -34,7 +34,7 @@ const processor = unified().use(remarkParse).use(remarkDirective);
 
 export function parseMarkdown(markdown: string, options: ParseOptions = {}): RenderBundle {
   const scriptVersionId = options.scriptVersionId ?? "draft";
-  const tree = processor.parse(markdown) as MarkdownNode;
+  const tree = processor.parse(normalizeLineMarkerDirectives(markdown)) as MarkdownNode;
   const htmlTree: RenderNode[] = [];
   const speechIndex: SpeechIndexItem[] = [];
   const markerIndex: MarkerAnchor[] = [];
@@ -145,6 +145,28 @@ export function parseMarkdown(markdown: string, options: ParseOptions = {}): Ren
 
     if (node.type === "paragraph") {
       const segments = paragraphSegments(node);
+      const paragraphContainsOnlyMarkers =
+        segments.length > 0 &&
+        segments.every((parsed) => parsed.markers.length > 0 && !parsed.spokenText && !parsed.cue);
+
+      if (paragraphContainsOnlyMarkers) {
+        let markerSegmentIndex = 0;
+        for (const parsed of segments) {
+          for (const markerNode of parsed.markers) {
+            markerSegmentIndex += 1;
+            const { marker, anchorId, sourceRange } = addMarker(markerNode, false);
+            htmlTree.push({
+              renderNodeId: `render_marker_${blockIndex}_${markerSegmentIndex}`,
+              type: "marker",
+              marker,
+              sourceRange,
+              scrollAnchorId: anchorId,
+            });
+          }
+        }
+        return;
+      }
+
       let segmentIndex = 0;
       for (const parsed of segments) {
         segmentIndex += 1;
@@ -353,6 +375,10 @@ function addRenderLineAnchor(node: MarkdownNode, scriptVersionId: string, scroll
 
 function cleanText(value?: string) {
   return (value ?? "").replace(/\u200B/g, "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeLineMarkerDirectives(markdown: string) {
+  return markdown.replace(/^([ \t]*):marker(\[[^\]\n]+\](?:\{[^\n}]*\})?)[\u200B\u00A0 \t]*$/gm, "$1::marker$2");
 }
 
 function normalizeSpeech(value: string) {

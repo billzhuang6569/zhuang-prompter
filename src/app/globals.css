@@ -1717,7 +1717,6 @@ input {
 .nike-iline {
   position: absolute;
   z-index: 10;
-  top: 50%;
   left: 0;
   right: 0;
   height: 2px;
@@ -1837,6 +1836,7 @@ input {
 }
 
 .nike-sr {
+  position: relative;
   flex: 1;
   overflow-y: auto;
   padding: var(--nike-sec);
@@ -2560,6 +2560,7 @@ input {
   .nike-srw {
     min-height: 620px;
   }
+
 }
 
 .status-pill.connected span,
