@@ -123,6 +123,12 @@ export function ControlConsole({
     }
   }, [pendingEditorAction]);
 
+  useEffect(() => {
+    if (view === "raw") {
+      window.requestAnimationFrame(() => markdownEditorRef.current?.focus());
+    }
+  }, [markdownEditorRef, view]);
+
   function runInRawEditor(action: () => void) {
     if (view !== "raw") {
       setView("raw");
@@ -269,9 +275,11 @@ export function ControlConsole({
                 <textarea
                   ref={markdownEditorRef}
                   className="nike-raw-editor"
+                  aria-label="Markdown 原文编辑"
                   spellCheck={false}
                   value={markdown}
                   onChange={(event) => setMarkdown(event.target.value)}
+                  placeholder="在这里直接编辑 Markdown 原文..."
                 />
               </div>
             )}
