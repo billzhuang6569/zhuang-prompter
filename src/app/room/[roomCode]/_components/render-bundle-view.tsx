@@ -7,6 +7,8 @@ type RenderBundleViewProps = {
   playbackPositionPx?: number;
   fontScale?: number;
   mirrored?: boolean;
+  mirrorX?: boolean;
+  mirrorY?: boolean;
   showCenterGuide?: boolean;
 };
 
@@ -16,6 +18,8 @@ export function RenderBundleView({
   playbackPositionPx = 0,
   fontScale = 1,
   mirrored = false,
+  mirrorX = mirrored,
+  mirrorY = false,
   showCenterGuide = false,
 }: RenderBundleViewProps) {
   const contentStyle =
@@ -29,7 +33,9 @@ export function RenderBundleView({
   return (
     <section
       className={`script-surface ${variant === "player" ? "player-stage" : "control-preview"} ${
-        mirrored ? "is-mirrored" : ""
+        mirrorX ? "is-mirrored-x" : ""
+      } ${
+        mirrorY ? "is-mirrored-y" : ""
       } ${showCenterGuide ? "has-center-guide" : ""}`}
     >
       <div className="script-header">

@@ -3021,8 +3021,16 @@ input {
   will-change: transform;
 }
 
-.player-stage.is-mirrored .teleprompter-content {
+.player-stage.is-mirrored-x .teleprompter-content {
   transform: translate3d(0, calc(-1 * var(--playback-offset, 0px)), 0) scaleX(-1);
+}
+
+.player-stage.is-mirrored-y .teleprompter-content {
+  transform: translate3d(0, calc(-1 * var(--playback-offset, 0px)), 0) scaleY(-1);
+}
+
+.player-stage.is-mirrored-x.is-mirrored-y .teleprompter-content {
+  transform: translate3d(0, calc(-1 * var(--playback-offset, 0px)), 0) scale(-1, -1);
 }
 
 .control-preview .teleprompter-content {
@@ -3286,6 +3294,34 @@ input {
 
 .player-workspace .room-grid {
   display: none;
+}
+
+.player-empty-stage {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #050505;
+  color: #f8fafc;
+  text-align: center;
+}
+
+.player-empty-stage > div {
+  max-width: 460px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 14px;
+  background: rgb(255 255 255 / 4%);
+  padding: 28px;
+}
+
+.player-empty-stage h2 {
+  margin: 8px 0;
+  font-size: 28px;
+}
+
+.player-empty-stage p:last-child {
+  color: #a3a3a3;
+  line-height: 1.6;
 }
 
 .player-workspace .script-surface.player-stage {

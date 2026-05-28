@@ -157,7 +157,8 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [currentOrigin, setCurrentOrigin] = useState("");
   const [networkOrigins, setNetworkOrigins] = useState<NetworkOrigin[]>([]);
   const [playerFontScale, setPlayerFontScale] = useState(1);
-  const [playerMirrored, setPlayerMirrored] = useState(false);
+  const [playerMirrorX, setPlayerMirrorX] = useState(false);
+  const [playerMirrorY, setPlayerMirrorY] = useState(false);
   const [playerOverlayHidden, setPlayerOverlayHidden] = useState(false);
   const [fullscreenActive, setFullscreenActive] = useState(false);
   const [wakeLockWanted, setWakeLockWanted] = useState(false);
@@ -872,6 +873,23 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     return () => document.removeEventListener("fullscreenchange", updateFullscreenState);
   }, [mode]);
 
+  useEffect(() => {
+    if (mode !== "player") {
+      return;
+    }
+
+    function exitFullscreenWithEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape" || !document.fullscreenElement) {
+        return;
+      }
+      event.preventDefault();
+      void document.exitFullscreen();
+    }
+
+    window.addEventListener("keydown", exitFullscreenWithEscape, { capture: true });
+    return () => window.removeEventListener("keydown", exitFullscreenWithEscape, { capture: true });
+  }, [mode]);
+
   const detachWakeLock = useCallback(() => {
     const sentinel = wakeLockRef.current;
     const handler = wakeLockReleaseHandlerRef.current;
@@ -1389,8 +1407,11 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             <button className="player-tool-button" type="button" onClick={() => changePlayerFontScale(0.1)}>
               A+
             </button>
-            <button className="player-tool-button" type="button" aria-pressed={playerMirrored} onClick={() => setPlayerMirrored((value) => !value)}>
-              {playerMirrored ? "取消镜像" : "镜像"}
+            <button className="player-tool-button" type="button" aria-pressed={playerMirrorX} onClick={() => setPlayerMirrorX((value) => !value)}>
+              {playerMirrorX ? "取消水平镜像" : "水平镜像"}
+            </button>
+            <button className="player-tool-button" type="button" aria-pressed={playerMirrorY} onClick={() => setPlayerMirrorY((value) => !value)}>
+              {playerMirrorY ? "取消垂直镜像" : "垂直镜像"}
             </button>
             <button className="player-tool-button" type="button" onClick={() => playFromCurrentOffset()}>
               播放
@@ -1480,15 +1501,24 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           </div>
         </div>
       )}
-      {mode === "player" && bundle && (
+      {mode === "player" && bundle ? (
         <RenderBundleView
           bundle={bundle}
-          variant={mode === "player" ? "player" : "control"}
+          variant="player"
           playbackPositionPx={playbackPositionPx}
           fontScale={playerFontScale}
-          mirrored={mode === "player" && playerMirrored}
+          mirrorX={playerMirrorX}
+          mirrorY={playerMirrorY}
         />
-      )}
+      ) : mode === "player" ? (
+        <section className="player-empty-stage" aria-label="播放端等待文稿">
+          <div>
+            <p className="eyebrow">播放端</p>
+            <h2>正在同步文稿</h2>
+            <p>控制端保存或同步文稿后，这里会自动显示提词内容。</p>
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }

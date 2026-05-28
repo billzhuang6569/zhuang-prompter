@@ -683,9 +683,9 @@ export function ControlConsole({
                   <button className="nike-btn" type="button" onClick={() => onOpenQr(safePlayerLink)}>
                     放大二维码
                   </button>
-                  <button className="nike-btn nike-btn-ink" type="button" onClick={() => openPlayerWindow(safePlayerLink.playerUrl)}>
+                  <a className="nike-btn nike-btn-ink" href={safePlayerLink.playerUrl} target="_blank" rel="noreferrer">
                     打开播放端
-                  </button>
+                  </a>
                 </div>
               </>
             ) : (
@@ -829,24 +829,6 @@ function formatTime(value: number) {
 
 async function copyToClipboard(value: string) {
   await navigator.clipboard?.writeText(value).catch(() => undefined);
-}
-
-function openPlayerWindow(url: string) {
-  const width = 920;
-  const height = 720;
-  const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - width) / 2));
-  const top = Math.max(0, Math.round(window.screenY + (window.outerHeight - height) / 2));
-  const features = [
-    "popup=yes",
-    `width=${width}`,
-    `height=${height}`,
-    `left=${left}`,
-    `top=${top}`,
-    "noopener=yes",
-    "noreferrer=yes",
-  ].join(",");
-  const playerWindow = window.open(url, "zhuang-prompter-player", features);
-  playerWindow?.focus();
 }
 
 function MiniPrompterIcon() {
