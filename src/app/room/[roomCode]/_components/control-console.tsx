@@ -27,6 +27,16 @@ type PendingEditorAction = {
   value: string;
 };
 
+type EditorInsertionTarget = {
+  start: number;
+  end: number;
+};
+
+type FloatingEditorPosition = {
+  left: number;
+  top: number;
+};
+
 type ControlConsoleProps = {
   roomCode: string;
   connectionLabel: string;
@@ -61,8 +71,8 @@ type ControlConsoleProps = {
   onJumpToMarker: (markerId: string) => void;
   onSpeedChange: (speed: number) => void;
   onMarkdownCommand: (command: MarkdownCommand) => void;
-  onBeginMarkerEdit: () => void;
-  onBeginCommentEdit: () => void;
+  onBeginMarkerEdit: (target?: EditorInsertionTarget) => void;
+  onBeginCommentEdit: (target?: EditorInsertionTarget) => void;
   pendingEditorAction: PendingEditorAction | null;
   onPendingEditorValueChange: (value: string) => void;
   onConfirmPendingEditorAction: () => void;
@@ -113,6 +123,8 @@ export function ControlConsole({
   const [view, setView] = useState<"render" | "raw">("render");
   const quickInputRef = useRef<HTMLInputElement | null>(null);
   const renderEditTimerRef = useRef<number | null>(null);
+  const scriptSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const [floatingEditorPosition, setFloatingEditorPosition] = useState<FloatingEditorPosition | null>(null);
 
   const markers = bundle?.markerIndex ?? [];
   const safePlayerLink = playerEntryLink ?? roomLinks[0];
@@ -145,6 +157,74 @@ export function ControlConsole({
       return;
     }
     action();
+  }
+
+  function beginInlineMarkerEdit() {
+    const renderedTarget = renderedInsertionTarget(false);
+    if (renderedTarget) {
+      setFloatingEditorPosition(renderedTarget.position);
+      onBeginMarkerEdit(renderedTarget.target);
+      return;
+    }
+    setFloatingEditorPosition(fallbackFloatingEditorPosition());
+    runInRawEditor(() => onBeginMarkerEdit());
+  }
+
+  function beginInlineCommentEdit() {
+    const renderedTarget = renderedInsertionTarget(true);
+    if (renderedTarget) {
+      setFloatingEditorPosition(renderedTarget.position);
+      onBeginCommentEdit(renderedTarget.target);
+      return;
+    }
+    setFloatingEditorPosition(fallbackFloatingEditorPosition());
+    runInRawEditor(() => onBeginCommentEdit());
+  }
+
+  function confirmFloatingEditorAction() {
+    onConfirmPendingEditorAction();
+    setFloatingEditorPosition(null);
+  }
+
+  function renderedInsertionTarget(requireSelection: boolean) {
+    if (view !== "render" || !bundle || !scriptSurfaceRef.current) {
+      return null;
+    }
+
+    const selection = window.getSelection();
+    const editable = editableElementFromSelection(selection);
+    if (!editable) {
+      return null;
+    }
+
+    const node = bundle.htmlTree.find((item) => item.renderNodeId === editable.dataset.renderNodeId);
+    if (!node || node.type === "marker" || node.type === "stageCue") {
+      return null;
+    }
+
+    const offsets = selectionOffsetsInEditable(editable, selection);
+    if (!offsets || (requireSelection && offsets.start === offsets.end)) {
+      return null;
+    }
+
+    const target = sourceTargetForRenderedNode(markdown, node, offsets.start, offsets.end);
+    if (!target) {
+      return null;
+    }
+
+    return {
+      target,
+      position: floatingPositionForSelection(editable, selection),
+    };
+  }
+
+  function fallbackFloatingEditorPosition() {
+    const surface = scriptSurfaceRef.current;
+    if (!surface) {
+      return { left: 24, top: 24 };
+    }
+    const rect = surface.getBoundingClientRect();
+    return { left: Math.min(320, Math.max(24, rect.width * 0.28)), top: 72 };
   }
 
   function updateRenderedNode(node: RenderNode, value: string) {
@@ -216,7 +296,7 @@ export function ControlConsole({
                   className="nike-tlb"
                   type="button"
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => runInRawEditor(onBeginMarkerEdit)}
+                  onClick={beginInlineMarkerEdit}
                 >
                   <StarIcon />
                   增加标记
@@ -225,7 +305,7 @@ export function ControlConsole({
                   className="nike-tlb"
                   type="button"
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => runInRawEditor(onBeginCommentEdit)}
+                  onClick={beginInlineCommentEdit}
                 >
                   <CommentIcon />
                   增加注释
@@ -244,31 +324,31 @@ export function ControlConsole({
                   保存
                 </button>
               </div>
-              {pendingEditorAction && (
-                <div className="nike-quick-editor">
-                  <span>{pendingEditorAction.kind === "marker" ? "标记内容" : "注释内容"}</span>
-                  <input
-                    ref={quickInputRef}
-                    value={pendingEditorAction.value}
-                    onChange={(event) => onPendingEditorValueChange(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") {
-                        event.preventDefault();
-                        onConfirmPendingEditorAction();
-                      }
-                    }}
-                    placeholder={pendingEditorAction.kind === "marker" ? "输入标记名称" : "输入注释内容"}
-                  />
-                  <button type="button" title="完成" onClick={onConfirmPendingEditorAction}>
-                    <CheckIcon />
-                  </button>
-                </div>
-              )}
             </div>
           </div>
 
-          <div className={`nike-srw ${isPlaying ? "playing" : ""}`} data-od-id="script-render-wrapper">
+          <div className={`nike-srw ${isPlaying ? "playing" : ""}`} data-od-id="script-render-wrapper" ref={scriptSurfaceRef}>
             <div className="nike-iline" />
+            {pendingEditorAction && floatingEditorPosition && (
+              <div className="nike-floating-editor" style={{ left: floatingEditorPosition.left, top: floatingEditorPosition.top }}>
+                <span>{pendingEditorAction.kind === "marker" ? "标记" : "注释"}</span>
+                <input
+                  ref={quickInputRef}
+                  value={pendingEditorAction.value}
+                  onChange={(event) => onPendingEditorValueChange(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      confirmFloatingEditorAction();
+                    }
+                  }}
+                  placeholder={pendingEditorAction.kind === "marker" ? "输入标记名称" : "输入注释内容"}
+                />
+                <button type="button" title="完成" onClick={confirmFloatingEditorAction}>
+                  <CheckIcon />
+                </button>
+              </div>
+            )}
 
             {view === "render" ? (
               <div
@@ -453,6 +533,7 @@ function ControlRenderNode({
     const HeadingTag = node.depth <= 1 ? "h1" : "h2";
     return (
       <HeadingTag
+        data-render-node-id={node.renderNodeId}
         className="nike-editable-text"
         contentEditable="plaintext-only"
         suppressContentEditableWarning
@@ -475,6 +556,7 @@ function ControlRenderNode({
   return (
     <div className={`nike-script-text ${node.type === "listItem" ? "is-list-item" : ""}`}>
       <p
+        data-render-node-id={node.renderNodeId}
         className="nike-editable-text"
         contentEditable="plaintext-only"
         suppressContentEditableWarning
@@ -541,6 +623,104 @@ function replaceRenderedNodeText(markdown: string, node: RenderNode, value: stri
 
 function normalizeEditedText(value: string) {
   return value.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function editableElementFromSelection(selection: Selection | null) {
+  const node = selection?.anchorNode;
+  const element = node instanceof Element ? node : node?.parentElement;
+  const editable = element?.closest<HTMLElement>(".nike-editable-text");
+  return editable ?? null;
+}
+
+function selectionOffsetsInEditable(root: HTMLElement, selection: Selection | null) {
+  if (!selection || selection.rangeCount === 0) {
+    return null;
+  }
+
+  const range = selection.getRangeAt(0);
+  if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) {
+    return null;
+  }
+
+  const start = textLengthBefore(root, range.startContainer, range.startOffset);
+  const end = textLengthBefore(root, range.endContainer, range.endOffset);
+  return {
+    start: Math.min(start, end),
+    end: Math.max(start, end),
+  };
+}
+
+function textLengthBefore(root: HTMLElement, container: Node, offset: number) {
+  const range = document.createRange();
+  range.selectNodeContents(root);
+  try {
+    range.setEnd(container, offset);
+  } catch {
+    return editableText(root).length;
+  }
+  const fragment = range.cloneContents();
+  fragment.querySelectorAll("[data-edit-lock]").forEach((child) => child.remove());
+  return fragment.textContent?.length ?? 0;
+}
+
+function sourceTargetForRenderedNode(markdown: string, node: RenderNode, selectionStart: number, selectionEnd: number) {
+  if (node.type === "marker" || node.type === "stageCue") {
+    return null;
+  }
+
+  const rangeStart = Math.max(0, Math.min(node.sourceRange.start, markdown.length));
+  const rangeEnd = Math.max(rangeStart, Math.min(node.sourceRange.end, markdown.length));
+  const source = markdown.slice(rangeStart, rangeEnd);
+  let textStart = source.indexOf(node.text);
+
+  if (node.type === "heading") {
+    const match = source.match(/^(\s{0,3}#{1,6}\s+)/);
+    textStart = match?.[1].length ?? Math.max(textStart, 0);
+  }
+
+  if (node.type === "listItem") {
+    const match = source.match(/^(\s*(?:[-*+]|\d+[.)])\s+)/);
+    textStart = match?.[1].length ?? Math.max(textStart, 0);
+  }
+
+  if (textStart < 0) {
+    textStart = 0;
+  }
+
+  return {
+    start: rangeStart + textStart + selectionStart,
+    end: rangeStart + textStart + selectionEnd,
+  };
+}
+
+function floatingPositionForSelection(editable: HTMLElement, selection: Selection | null) {
+  const surface = editable.closest<HTMLElement>(".nike-srw");
+  const surfaceRect = surface?.getBoundingClientRect();
+  const editableRect = editable.getBoundingClientRect();
+  let targetRect = editableRect;
+
+  if (selection && selection.rangeCount > 0) {
+    const range = selection.getRangeAt(0);
+    if (editable.contains(range.commonAncestorContainer)) {
+      const rangeRect = range.getBoundingClientRect();
+      if (rangeRect.width > 0 || rangeRect.height > 0) {
+        targetRect = rangeRect;
+      }
+    }
+  }
+
+  if (!surfaceRect) {
+    return { left: 24, top: 24 };
+  }
+
+  return {
+    left: clamp(targetRect.left - surfaceRect.left, 20, Math.max(20, surfaceRect.width - 390)),
+    top: clamp(targetRect.bottom - surfaceRect.top + 10, 18, Math.max(18, surfaceRect.height - 72)),
+  };
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function MarkerTag({

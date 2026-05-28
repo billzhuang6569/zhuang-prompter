@@ -1740,6 +1740,71 @@ input {
   animation: nike-ipulse 2s ease-in-out infinite;
 }
 
+.nike-floating-editor {
+  position: absolute;
+  z-index: 30;
+  width: min(360px, calc(100% - 40px));
+  display: grid;
+  grid-template-columns: auto minmax(120px, 1fr) 34px;
+  align-items: center;
+  gap: var(--nike-sm);
+  border: 1px solid rgb(68 147 248 / 45%);
+  border-radius: 14px;
+  background: rgb(12 12 12 / 92%);
+  box-shadow:
+    0 18px 48px rgb(0 0 0 / 45%),
+    0 0 0 1px rgb(255 255 255 / 5%) inset;
+  padding: var(--nike-sm);
+  backdrop-filter: blur(18px);
+}
+
+.nike-floating-editor::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 24px;
+  width: 10px;
+  height: 10px;
+  border-left: 1px solid rgb(68 147 248 / 45%);
+  border-top: 1px solid rgb(68 147 248 / 45%);
+  background: rgb(12 12 12 / 92%);
+  transform: rotate(45deg);
+}
+
+.nike-floating-editor span {
+  color: var(--nike-mute);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.nike-floating-editor input {
+  min-width: 0;
+  border: 1px solid var(--nike-hl);
+  border-radius: var(--nike-pill);
+  outline: 0;
+  background: var(--nike-s1);
+  color: var(--nike-ink);
+  padding: 7px var(--nike-md);
+  font-size: 13px;
+}
+
+.nike-floating-editor input:focus {
+  border-color: var(--nike-info);
+}
+
+.nike-floating-editor button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--nike-full);
+  background: var(--nike-ink);
+  color: var(--nike-canvas);
+  cursor: pointer;
+}
+
 @keyframes nike-ipulse {
   0%,
   100% {

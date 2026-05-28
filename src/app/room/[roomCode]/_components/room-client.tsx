@@ -117,6 +117,11 @@ type PendingEditorAction = {
   value: string;
 };
 
+type EditorInsertionTarget = {
+  start: number;
+  end: number;
+};
+
 type WakeLockSentinelLike = EventTarget & {
   released: boolean;
   release: () => Promise<void>;
@@ -593,11 +598,11 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     });
   }
 
-  function beginMarkerEdit() {
+  function beginMarkerEdit(target?: EditorInsertionTarget) {
     const editor = markdownEditorRef.current;
     const source = editor?.value ?? markdown;
-    const start = editor?.selectionStart ?? source.length;
-    const end = editor?.selectionEnd ?? source.length;
+    const start = target?.start ?? editor?.selectionStart ?? source.length;
+    const end = target?.end ?? editor?.selectionEnd ?? source.length;
     const selected = source.slice(start, end).trim();
     const pendingId = `pending_${crypto.randomUUID()}`;
     const label = escapeDirectiveAttr(selected || "新标记");
@@ -606,14 +611,16 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
     setMarkdown(nextValue);
     setPendingEditorAction({ kind: "marker", pendingId, value: label });
-    focusPendingDirective(pendingId, label);
+    if (!target) {
+      focusPendingDirective(pendingId, label);
+    }
   }
 
-  function beginCommentEdit() {
+  function beginCommentEdit(target?: EditorInsertionTarget) {
     const editor = markdownEditorRef.current;
     const source = editor?.value ?? markdown;
-    const start = editor?.selectionStart ?? source.length;
-    const end = editor?.selectionEnd ?? source.length;
+    const start = target?.start ?? editor?.selectionStart ?? source.length;
+    const end = target?.end ?? editor?.selectionEnd ?? source.length;
     const selected = source.slice(start, end).trim();
     if (!selected) {
       editor?.focus();
@@ -628,7 +635,9 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
     setMarkdown(nextValue);
     setPendingEditorAction({ kind: "comment", pendingId, value: note });
-    focusPendingDirective(pendingId, note);
+    if (!target) {
+      focusPendingDirective(pendingId, note);
+    }
   }
 
   function updatePendingEditorValue(value: string) {
