@@ -138,6 +138,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [expandedQrLink, setExpandedQrLink] = useState<(NetworkOrigin & { playerUrl: string }) | null>(null);
   const [projectName, setProjectName] = useState("小庄Sir013");
+  const [inviteStatus, setInviteStatus] = useState<"idle" | "copied" | "fallback">("idle");
 
   const selectedRole = preferredRole(mode);
   const scriptDraft = roomState?.scriptDraft;
@@ -720,6 +721,22 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     setPlayerFontScale((value) => Math.min(1.35, Math.max(0.75, Number((value + delta).toFixed(2)))));
   }
 
+  async function invitePlayer() {
+    if (!playerEntryLink) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(playerEntryLink.playerUrl);
+      setInviteStatus("copied");
+      window.setTimeout(() => setInviteStatus("idle"), 1800);
+    } catch {
+      setInviteStatus("fallback");
+      setExpandedQrLink(playerEntryLink);
+      window.setTimeout(() => setInviteStatus("idle"), 2200);
+    }
+  }
+
   if (connection === "not-found") {
     return (
       <main className="workspace">
@@ -784,10 +801,10 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
               className="chrome-button"
               type="button"
               disabled={!playerEntryLink}
-              onClick={() => playerEntryLink && navigator.clipboard?.writeText(playerEntryLink.playerUrl)}
+              onClick={() => void invitePlayer()}
             >
               <Icon name="invite" />
-              邀请
+              {inviteStatus === "copied" ? "已复制" : inviteStatus === "fallback" ? "扫码邀请" : "邀请"}
             </button>
             <div className="user-chip">ZS</div>
           </div>
