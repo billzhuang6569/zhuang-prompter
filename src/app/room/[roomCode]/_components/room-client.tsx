@@ -1132,6 +1132,14 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     };
   }, [mode, releaseWakeLock, requestWakeLock]);
 
+  useEffect(() => {
+    if (mode !== "player" || !wakeLockStatus) {
+      return;
+    }
+    const timer = window.setTimeout(() => setWakeLockStatus(""), 2200);
+    return () => window.clearTimeout(timer);
+  }, [mode, wakeLockStatus]);
+
   async function toggleWakeLock() {
     if (wakeLockWantedRef.current) {
       wakeLockWantedRef.current = false;
@@ -1198,6 +1206,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }
 
   const isControlPlaying = activeScrollClock?.state === "playing";
+  const isPlayerPlaying = mode === "player" && activeScrollClock?.state === "playing";
   const setBoundedSpeed = (nextSpeed: number) => {
     const boundedSpeed = Math.max(10, Math.min(150, Math.round(nextSpeed)));
     setSpeed(boundedSpeed);
@@ -1598,11 +1607,13 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             >
               {playerMarkersVisible ? "隐藏标记" : "显示标记"}
             </button>
-            <button className="player-tool-button" type="button" onClick={() => playFromCurrentOffset()}>
-              播放
-            </button>
-            <button className="player-tool-button" type="button" onClick={pauseAtCurrentOffset}>
-              暂停
+            <button
+              className="player-tool-button"
+              type="button"
+              aria-pressed={isPlayerPlaying}
+              onClick={isPlayerPlaying ? pauseAtCurrentOffset : () => playFromCurrentOffset()}
+            >
+              {isPlayerPlaying ? "暂停" : "播放"}
             </button>
             <button className="player-tool-button" type="button" onClick={() => void toggleFullscreen()}>
               {fullscreenActive ? "退出全屏" : "全屏"}
@@ -1610,10 +1621,14 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             <button className="player-tool-button" type="button" aria-pressed={wakeLockWanted} onClick={() => void toggleWakeLock()}>
               {wakeLockActive ? "亮屏中" : "保持亮屏"}
             </button>
-            {wakeLockStatus && <small className="player-wake-status">{wakeLockStatus}</small>}
             <button className="player-tool-button" type="button" onClick={() => setPlayerOverlayHidden(true)}>
               隐藏状态
             </button>
+          </div>
+        )}
+        {mode === "player" && wakeLockStatus && (
+          <div className="player-toast" role="status" aria-live="polite">
+            {wakeLockStatus}
           </div>
         )}
         <div className="topbar-status-group">

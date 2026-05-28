@@ -3420,14 +3420,29 @@ input {
   right: 14px;
 }
 
-.player-wake-status {
-  max-width: 180px;
-  color: #a3a3a3;
-  line-height: 1.25;
-}
-
 .player-overlay-hidden .room-topbar {
   opacity: 0;
+  pointer-events: none;
+}
+
+.player-toast {
+  position: fixed;
+  z-index: 32;
+  left: 50%;
+  bottom: 76px;
+  transform: translateX(-50%);
+  max-width: min(90vw, 360px);
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 999px;
+  background: rgb(0 0 0 / 72%);
+  box-shadow: 0 18px 42px rgb(0 0 0 / 30%);
+  color: #f8fafc;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+  backdrop-filter: blur(16px);
   pointer-events: none;
 }
 
@@ -3562,11 +3577,6 @@ input {
 
   .player-tool-button {
     padding: 8px 10px;
-  }
-
-  .player-wake-status {
-    max-width: min(100%, 240px);
-    text-align: center;
   }
 
   .teleprompter-content {
