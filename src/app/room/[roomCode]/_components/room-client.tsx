@@ -31,8 +31,8 @@ function makeEventId() {
   return `evt_${crypto.randomUUID()}`;
 }
 
-function deviceStorageKey(roomCode: string) {
-  return `zhuang-prompter:${roomCode}:deviceId`;
+function deviceStorageKey(roomCode: string, role: DeviceRole | "select-role" | null) {
+  return `zhuang-prompter:${roomCode}:${role ?? "select-role"}:deviceId`;
 }
 
 function preferredRole(mode: RoomClientProps["mode"]): DeviceRole | null {
@@ -243,7 +243,8 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
   useEffect(() => {
     let alive = true;
-    const existingDeviceId = window.localStorage.getItem(deviceStorageKey(roomCode));
+    const storageKey = deviceStorageKey(roomCode, selectedRole);
+    const existingDeviceId = window.localStorage.getItem(storageKey);
 
     async function join() {
       setConnection("joining");
@@ -263,7 +264,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       }
 
       const result = (await response.json()) as RoomJoinResult;
-      window.localStorage.setItem(deviceStorageKey(roomCode), result.deviceId);
+      window.localStorage.setItem(storageKey, result.deviceId);
       setJoinResult(result);
       setRoomState(result.roomState);
       setConnection("connecting");
@@ -278,7 +279,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     return () => {
       alive = false;
     };
-  }, [roomCode]);
+  }, [roomCode, selectedRole]);
 
   useEffect(() => {
     let alive = true;
