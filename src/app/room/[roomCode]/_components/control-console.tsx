@@ -164,7 +164,7 @@ export function ControlConsole({
         return;
       }
       const pendingId = `pending_${crypto.randomUUID()}`;
-      const selected = richEditorRef.current.getSelectionMarkdown().trim();
+      const selected = selectedEditorText() || richEditorRef.current.getSelectionMarkdown().trim();
       const label = escapeDirectiveAttr(selected || "新标记");
       const marker = `\n\n::marker[${nextMarkerId(markers)}]{type="section" label="${label}" note="现场跳转点" pending="${pendingId}"}\n\n`;
       setFloatingEditorPosition(floatingPositionForCurrentSelection());
@@ -183,13 +183,13 @@ export function ControlConsole({
       if (!richEditorRef.current) {
         return;
       }
-      const selected = richEditorRef.current.getSelectionMarkdown().trim();
+      const selected = selectedEditorText() || richEditorRef.current.getSelectionMarkdown().trim();
       if (!selected) {
         richEditorRef.current.focus();
         return;
       }
       const pendingId = `pending_${crypto.randomUUID()}`;
-      const note = "注释";
+      const note = escapeDirectiveAttr(selected);
       const stage = `:stage[${escapeDirectiveLabel(selected)}]{cue="${note}" label="${note}" pending="${pendingId}"}`;
       setFloatingEditorPosition(floatingPositionForCurrentSelection());
       setRichPendingEditorAction({ kind: "comment", pendingId, value: note });
@@ -259,6 +259,19 @@ export function ControlConsole({
       left: clamp(rangeRect.left - surfaceRect.left, 20, Math.max(20, surfaceRect.width - 390)),
       top: clamp(rangeRect.bottom - surfaceRect.top + 10, 18, Math.max(18, surfaceRect.height - 72)),
     };
+  }
+
+  function selectedEditorText() {
+    const surface = scriptSurfaceRef.current;
+    const selection = window.getSelection();
+    if (!surface || !selection || selection.rangeCount === 0 || selection.isCollapsed) {
+      return "";
+    }
+    const range = selection.getRangeAt(0);
+    if (!surface.contains(range.commonAncestorContainer)) {
+      return "";
+    }
+    return selection.toString().trim();
   }
 
   return (

@@ -628,7 +628,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     }
 
     const pendingId = `pending_${crypto.randomUUID()}`;
-    const note = "注释";
+    const note = escapeDirectiveAttr(selected);
     const stageText = escapeDirectiveLabel(selected);
     const stage = `:stage[${stageText}]{cue="${note}" label="${note}" pending="${pendingId}"}`;
     const nextValue = `${source.slice(0, start)}${stage}${source.slice(end)}`;
