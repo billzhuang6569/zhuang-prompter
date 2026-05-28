@@ -52,6 +52,20 @@ function currentTime() {
   return Date.now();
 }
 
+function playerDisplayMetrics(positionPx: number) {
+  const content = document.querySelector<HTMLElement>(".player-stage .teleprompter-content");
+  const viewportHeightPx = window.innerHeight;
+  const contentHeightPx = content?.scrollHeight;
+  const centerPositionRatio =
+    contentHeightPx && contentHeightPx > 0 ? Math.max(0, Math.min(1, (positionPx + viewportHeightPx / 2) / contentHeightPx)) : undefined;
+
+  return {
+    viewportHeightPx,
+    contentHeightPx,
+    centerPositionRatio,
+  };
+}
+
 type VersionSummary = {
   versionId: string;
   message?: string;
@@ -205,7 +219,21 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
         JSON.stringify(activeScrollClock.anchor),
       ].join(":")
     : "";
-  const primaryPlayerReportedPosition = playerReports[0]?.playbackState?.positionPx;
+  const primaryPlaybackState =
+    playerReports.find((device) => device.role === "player")?.playbackState ?? playerReports[0]?.playbackState;
+  const primaryPlayerReportedPosition = primaryPlaybackState?.positionPx;
+  const playbackCenterRatio =
+    typeof primaryPlaybackState?.centerPositionRatio === "number"
+      ? Math.max(0, Math.min(1, primaryPlaybackState.centerPositionRatio))
+      : typeof primaryPlaybackState?.positionPx === "number" &&
+          typeof primaryPlaybackState.viewportHeightPx === "number" &&
+          typeof primaryPlaybackState.contentHeightPx === "number" &&
+          primaryPlaybackState.contentHeightPx > 0
+        ? Math.max(
+            0,
+            Math.min(1, (primaryPlaybackState.positionPx + primaryPlaybackState.viewportHeightPx / 2) / primaryPlaybackState.contentHeightPx),
+          )
+        : undefined;
   const playerEntryLink = roomLinks.find((link) => link.kind === "lan") ?? roomLinks[0];
 
   const sendEvent = useCallback(
@@ -780,10 +808,12 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       if (!joinResult) {
         return;
       }
+      const displayMetrics = playerDisplayMetrics(positionPx);
       const playbackState: PlaybackState = {
         scriptVersionId: clock.scriptVersionId,
         state: clock.state,
         positionPx,
+        ...displayMetrics,
         currentAnchor: clock.anchor,
         velocityPxPerSecond: clock.velocityPxPerSecond,
         controlMode: clock.controlMode,
@@ -796,6 +826,31 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     },
     [joinResult, sendEvent],
   );
+
+  useEffect(() => {
+    if (mode !== "player" || !joinResult || !bundle || activeScrollClockKey) {
+      return;
+    }
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      const positionPx = playbackPositionRef.current;
+      const playbackState: PlaybackState = {
+        scriptVersionId: roomState?.currentScriptVersionId ?? SCRIPT_VERSION_ID,
+        state: "paused",
+        positionPx,
+        ...playerDisplayMetrics(positionPx),
+        currentAnchor: defaultAnchor,
+        velocityPxPerSecond: 0,
+        controlMode: "fixedSpeed",
+        sourceDeviceId: joinResult.deviceId,
+        reportedAt: currentTime(),
+      };
+      const payload: PlaybackReportPayload = { playbackState };
+      sendEvent("playback.reportState", payload);
+    });
+
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [activeScrollClockKey, bundle, defaultAnchor, joinResult, mode, roomState?.currentScriptVersionId, sendEvent]);
 
   useEffect(() => {
     if (mode !== "player" || !activeScrollClockKey || !joinResult) {
@@ -1079,6 +1134,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           setVersionMessage={setVersionMessage}
           bundle={bundle}
           versions={versions}
+          playbackCenterRatio={playbackCenterRatio}
           speed={speed}
           isPlaying={isControlPlaying}
           playerEntryLink={playerEntryLink}
@@ -1106,13 +1162,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           pendingEditorAction={pendingEditorAction}
           onPendingEditorValueChange={updatePendingEditorValue}
           onConfirmPendingEditorAction={confirmPendingEditorAction}
-          onPreviewScroll={(scrollTop) => {
-            if (activeScrollClock?.state === "playing") {
-              return;
-            }
-            setPlaybackPositionPx(Math.max(0, scrollTop));
-            playbackPositionRef.current = Math.max(0, scrollTop);
-          }}
+          onPreviewScroll={() => undefined}
         />
         {expandedQrLink && (
           <div className="qrm open" role="dialog" aria-modal="true" aria-label="播放端入口" onClick={() => setExpandedQrLink(null)}>

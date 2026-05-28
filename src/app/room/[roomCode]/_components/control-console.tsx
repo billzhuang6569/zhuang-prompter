@@ -68,6 +68,7 @@ type ControlConsoleProps = {
   setVersionMessage: (value: string) => void;
   bundle?: RenderBundle;
   versions: VersionSummary[];
+  playbackCenterRatio?: number;
   speed: number;
   isPlaying: boolean;
   playerEntryLink?: PlayerLink;
@@ -109,6 +110,7 @@ export function ControlConsole({
   setVersionMessage,
   bundle,
   versions,
+  playbackCenterRatio,
   speed,
   isPlaying,
   playerEntryLink,
@@ -136,12 +138,14 @@ export function ControlConsole({
   const quickInputRef = useRef<HTMLInputElement | null>(null);
   const richEditorRef = useRef<MDXEditorMethods | null>(null);
   const scriptSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const richContentWrapRef = useRef<HTMLDivElement | null>(null);
   const previousMarkdownRef = useRef(markdown);
   const undoStackRef = useRef<string[]>([]);
   const restoringRef = useRef(false);
   const [floatingEditorPosition, setFloatingEditorPosition] = useState<FloatingEditorPosition | null>(null);
   const [richPendingEditorAction, setRichPendingEditorAction] = useState<PendingEditorAction | null>(null);
   const [canUndo, setCanUndo] = useState(false);
+  const [guideMetrics, setGuideMetrics] = useState({ height: 0, offsetTop: 0 });
 
   const markers = bundle?.markerIndex ?? [];
   const safePlayerLink = playerEntryLink ?? roomLinks[0];
@@ -161,6 +165,34 @@ export function ControlConsole({
       window.requestAnimationFrame(() => markdownEditorRef.current?.focus());
     }
   }, [markdownEditorRef, view]);
+
+  useEffect(() => {
+    if (view !== "render") {
+      return;
+    }
+
+    const updateGuideMetrics = () => {
+      const element = richContentWrapRef.current;
+      if (!element) {
+        return;
+      }
+      setGuideMetrics({
+        height: element.scrollHeight,
+        offsetTop: element.offsetTop,
+      });
+    };
+
+    updateGuideMetrics();
+    const observer = new ResizeObserver(updateGuideMetrics);
+    if (richContentWrapRef.current) {
+      observer.observe(richContentWrapRef.current);
+    }
+    window.addEventListener("resize", updateGuideMetrics);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateGuideMetrics);
+    };
+  }, [markdown, view]);
 
   useEffect(() => {
     if (previousMarkdownRef.current === markdown) {
@@ -528,7 +560,6 @@ export function ControlConsole({
           </div>
 
           <div className={`nike-srw ${isPlaying ? "playing" : ""}`} data-od-id="script-render-wrapper" ref={scriptSurfaceRef}>
-            <div className="nike-iline" />
             {activePendingEditorAction && floatingEditorPosition && (
               <div className="nike-floating-editor" style={{ left: floatingEditorPosition.left, top: floatingEditorPosition.top }}>
                 <span>
@@ -574,7 +605,13 @@ export function ControlConsole({
                 onClick={beginExistingDirectiveEdit}
                 onScroll={(event) => onPreviewScroll(event.currentTarget.scrollTop)}
               >
-                <div className="nike-sc nike-rich-editor-wrap">
+                <div
+                  className="nike-iline"
+                  style={{
+                    top: `${guideMetrics.offsetTop + Math.max(0, Math.min(1, playbackCenterRatio ?? 0.5)) * guideMetrics.height}px`,
+                  }}
+                />
+                <div className="nike-sc nike-rich-editor-wrap" ref={richContentWrapRef}>
                   <RichMarkdownEditor
                     ref={richEditorRef}
                     className="nike-rich-editor"

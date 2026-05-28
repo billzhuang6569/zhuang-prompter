@@ -33,6 +33,9 @@ export type PlaybackState = {
   scriptVersionId: string;
   state: PlaybackStatus;
   positionPx: number;
+  viewportHeightPx?: number;
+  contentHeightPx?: number;
+  centerPositionRatio?: number;
   currentAnchor: Anchor;
   velocityPxPerSecond: number;
   controlMode: ControlMode;
