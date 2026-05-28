@@ -352,7 +352,7 @@ function addRenderLineAnchor(node: MarkdownNode, scriptVersionId: string, scroll
 }
 
 function cleanText(value?: string) {
-  return (value ?? "").replace(/\s+/g, " ").trim();
+  return (value ?? "").replace(/\u200B/g, "").replace(/\s+/g, " ").trim();
 }
 
 function normalizeSpeech(value: string) {

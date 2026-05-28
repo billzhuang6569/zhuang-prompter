@@ -45,6 +45,14 @@ test("notes directive is accepted for editor inserted comments", () => {
   assert.equal(bundle.htmlTree[0].type, "stageCue");
 });
 
+test("inline notes directive is accepted for rich editor comments", () => {
+  const bundle = parseMarkdown('口播前。:notes{text="给拍摄或后期看的提示"}继续。');
+
+  assert.equal(bundle.parseWarnings.length, 0);
+  assert.ok(bundle.htmlTree.some((node) => node.type === "paragraph" && node.cue?.text === "给拍摄或后期看的提示"));
+  assert.ok(!bundle.speechIndex.some((item) => item.rawText.includes("给拍摄或后期看的提示")));
+});
+
 test("duplicate marker id creates parse warning", () => {
   const bundle = parseMarkdown(`::marker[01]{text="开场"}
 ::marker[01]{text="重录"}`);

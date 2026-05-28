@@ -321,7 +321,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     ]);
     if (draftResponse.ok) {
       const draft = (await draftResponse.json()) as { markdown: string; draftRevision: number; parseStatus: string };
-      setMarkdown(draft.markdown);
+      setMarkdown(normalizeEditableDirectives(draft.markdown));
     }
     if (versionsResponse.ok) {
       const data = (await versionsResponse.json()) as { versions: VersionSummary[] };
@@ -344,7 +344,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       return;
     }
     const timer = window.setTimeout(() => {
-      setMarkdown(scriptDraft.markdown);
+      setMarkdown(normalizeEditableDirectives(scriptDraft.markdown));
     }, 0);
     return () => window.clearTimeout(timer);
   }, [mode, scriptDraft]);
@@ -392,7 +392,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     if (response.ok) {
       const data = (await response.json()) as { roomState: RoomState; draft: { markdown: string } };
       setRoomState(data.roomState);
-      setMarkdown(data.draft.markdown);
+      setMarkdown(normalizeEditableDirectives(data.draft.markdown));
       await loadDraftAndVersions();
     }
   }
@@ -571,7 +571,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
   function renumberMarkerDirectives(source: string) {
     let markerIndex = 0;
-    return source.replace(/((?::|::)marker\[)(?:M)?\d{2,3}(\]\{)/g, (_match, before: string, after: string) => {
+    return source.replace(/(:{1,2}marker\[)(?:M)?\d{2,3}(\]\{)/g, (_match, before: string, after: string) => {
       markerIndex += 1;
       return `${before}${markerIndex.toString().padStart(2, "0")}${after}`;
     });
@@ -606,7 +606,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     const end = target?.end ?? editor?.selectionEnd ?? source.length;
     const pendingId = `pending_${crypto.randomUUID()}`;
     const label = "标记点";
-    const marker = `::marker[${nextMarkerId()}]{text="${label}" pending="${pendingId}"}`;
+    const marker = `:marker[${nextMarkerId()}]{text="${label}" pending="${pendingId}"}\u00A0`;
     const nextValue = renumberMarkerDirectives(sourceWithBlockInsertion(source, start, end, marker));
 
     setMarkdown(nextValue);
@@ -623,7 +623,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     const end = target?.end ?? editor?.selectionEnd ?? source.length;
     const pendingId = `pending_${crypto.randomUUID()}`;
     const note = "提示内容";
-    const stage = `::notes{text="${note}" pending="${pendingId}"}`;
+    const stage = `:notes{text="${note}" pending="${pendingId}"}\u00A0`;
     const nextValue = sourceWithBlockInsertion(source, start, end, stage);
 
     setMarkdown(nextValue);
@@ -1536,6 +1536,20 @@ function normalizeMarkerId(markerId: string) {
   return numeric ? Number(numeric).toString().padStart(2, "0") : markerId;
 }
 
+function normalizeEditableDirectives(source: string) {
+  return source
+    .replace(/^(\s*)::(marker\[[^\]]+\]\{[^}]*\})(\s*)$/gm, (_match, indent: string, body: string, tail: string) => {
+      return `${indent}:${body}\u00A0${tail}`;
+    })
+    .replace(/^(\s*)::(notes\{[^}]*\})(\s*)$/gm, (_match, indent: string, body: string, tail: string) => {
+      return `${indent}:${body}\u00A0${tail}`;
+    })
+    .replace(/(:{1,2}marker\[[^\]]+\]\{[^}]*\})\u200B/g, "$1\u00A0")
+    .replace(/(:{1,2}notes\{[^}]*\})\u200B/g, "$1\u00A0")
+    .replace(/(:{1,2}marker\[[^\]]+\]\{[^}]*\})(?![\u200B\u00A0])/g, "$1\u00A0")
+    .replace(/(:{1,2}notes\{[^}]*\})(?![\u200B\u00A0])/g, "$1\u00A0");
+}
+
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -1552,8 +1566,8 @@ function updatePendingDirective(source: string, action: PendingEditorAction, val
   const pendingPattern = escapeRegExp(action.pendingId);
   const directivePattern =
     action.kind === "marker"
-      ? new RegExp(`::marker\\[(?:M)?\\d{2,3}\\]\\{[^}]*pending="${pendingPattern}"[^}]*\\}`)
-      : new RegExp(`::notes\\{[^}]*pending="${pendingPattern}"[^}]*\\}`);
+    ? new RegExp(`:{1,2}marker\\[(?:M)?\\d{2,3}\\]\\{[^}]*pending="${pendingPattern}"[^}]*\\}`)
+    : new RegExp(`:{1,2}notes\\{[^}]*pending="${pendingPattern}"[^}]*\\}`);
 
   return source.replace(directivePattern, (directive) => {
     const nextDirective = replaceDirectiveAttribute(directive, "text", value);

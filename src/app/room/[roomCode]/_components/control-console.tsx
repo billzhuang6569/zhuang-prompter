@@ -223,7 +223,7 @@ export function ControlConsole({
       }
       const pendingId = `pending_${crypto.randomUUID()}`;
       const label = "标记点";
-      const marker = `\n\n::marker[${nextMarkerId(markers)}]{text="${label}" pending="${pendingId}"}\n\n`;
+      const marker = `\n\n:marker[${nextMarkerId(markers)}]{text="${label}" pending="${pendingId}"}\u00A0\n\n`;
       const insertionIndex = markdownInsertionIndexFromSelection(markdown);
       setFloatingEditorPosition(floatingPositionForCurrentSelection());
       setRichPendingEditorAction({ kind: "marker", pendingId, value: label });
@@ -246,7 +246,7 @@ export function ControlConsole({
       }
       const pendingId = `pending_${crypto.randomUUID()}`;
       const note = "提示内容";
-      const stage = `\n\n::notes{text="${note}" pending="${pendingId}"}\n\n`;
+      const stage = `\n\n:notes{text="${note}" pending="${pendingId}"}\u00A0\n\n`;
       const insertionIndex = markdownInsertionIndexFromSelection(markdown);
       setFloatingEditorPosition(floatingPositionForCurrentSelection());
       setRichPendingEditorAction({ kind: "notes", pendingId, value: note });
@@ -401,6 +401,40 @@ export function ControlConsole({
     });
   }
 
+  function placeCaretAfterDirective(event: MouseEvent<HTMLDivElement>) {
+    if (event.button !== 0) {
+      return;
+    }
+    const surface = scriptSurfaceRef.current;
+    const target = event.target instanceof Element ? event.target : null;
+    if (!surface || !target || target.closest(".nike-mdx-directive")) {
+      return;
+    }
+
+    const directive = Array.from(surface.querySelectorAll<HTMLElement>(".nike-mdx-directive")).find((element) => {
+      const rect = element.getBoundingClientRect();
+      return event.clientY >= rect.top && event.clientY <= rect.bottom && event.clientX >= rect.right && event.clientX <= rect.right + 28;
+    });
+    const decorator = directive?.parentElement;
+    const trailingText = decorator?.nextSibling;
+    const textNode = trailingText?.firstChild;
+    if (!decorator || (textNode && textNode.nodeType !== Node.TEXT_NODE)) {
+      return;
+    }
+
+    const range = document.createRange();
+    if (textNode) {
+      range.setStart(textNode, Math.min(1, textNode.textContent?.length ?? 0));
+    } else {
+      range.setStartAfter(decorator);
+    }
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    directive?.closest<HTMLElement>("[contenteditable='true']")?.focus();
+  }
+
   return (
     <main className="nike-control">
       <header className="nike-ubar" data-od-id="status-bar">
@@ -536,6 +570,7 @@ export function ControlConsole({
                 className="nike-sr"
                 ref={previewScrollRef}
                 data-od-id="script-render"
+                onMouseDown={placeCaretAfterDirective}
                 onClick={beginExistingDirectiveEdit}
                 onScroll={(event) => onPreviewScroll(event.currentTarget.scrollTop)}
               >
@@ -721,7 +756,7 @@ function nextMarkerId(markers: Array<{ markerId: string }>) {
 
 function renumberMarkerDirectives(source: string) {
   let markerIndex = 0;
-  return source.replace(/((?::|::)marker\[)(?:M)?\d{2,3}(\]\{)/g, (_match, before: string, after: string) => {
+  return source.replace(/(:{1,2}marker\[)(?:M)?\d{2,3}(\]\{)/g, (_match, before: string, after: string) => {
     markerIndex += 1;
     return `${before}${markerIndex.toString().padStart(2, "0")}${after}`;
   });
@@ -760,8 +795,8 @@ function updatePendingDirective(source: string, action: PendingEditorAction, val
   const pendingPattern = escapeRegExp(action.pendingId);
   const directivePattern =
     action.kind === "marker"
-      ? new RegExp(`::marker\\[(?:M)?\\d{2,3}\\]\\{[^}]*pending="${pendingPattern}"[^}]*\\}`)
-      : new RegExp(`::notes\\{[^}]*pending="${pendingPattern}"[^}]*\\}`);
+    ? new RegExp(`:{1,2}marker\\[(?:M)?\\d{2,3}\\]\\{[^}]*pending="${pendingPattern}"[^}]*\\}`)
+    : new RegExp(`:{1,2}notes\\{[^}]*pending="${pendingPattern}"[^}]*\\}`);
 
   return source.replace(directivePattern, (directive) => {
     const nextDirective = replaceDirectiveAttribute(directive, "text", value);
@@ -776,8 +811,8 @@ function removePendingDirective(source: string, action: PendingEditorAction) {
   const pendingPattern = escapeRegExp(action.pendingId);
   const directivePattern =
     action.kind === "marker"
-      ? new RegExp(`\\n*::marker\\[(?:M)?\\d{2,3}\\]\\{[^}]*pending="${pendingPattern}"[^}]*\\}\\n*`)
-      : new RegExp(`\\n*::notes\\{[^}]*pending="${pendingPattern}"[^}]*\\}\\n*`);
+    ? new RegExp(`\\n*:{1,2}marker\\[(?:M)?\\d{2,3}\\]\\{[^}]*pending="${pendingPattern}"[^}]*\\}[\\u200B\\u00A0]?\\n*`)
+    : new RegExp(`\\n*:{1,2}notes\\{[^}]*pending="${pendingPattern}"[^}]*\\}[\\u200B\\u00A0]?\\n*`);
 
   return source.replace(directivePattern, "\n\n").replace(/\n{3,}/g, "\n\n").trimEnd();
 }
