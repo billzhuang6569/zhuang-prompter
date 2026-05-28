@@ -25,7 +25,7 @@ type PlayerLink = {
 type MarkdownCommand = "heading" | "marker" | "comment";
 
 type PendingEditorAction = {
-  kind: "marker" | "comment";
+  kind: "marker" | "notes";
   pendingId?: string;
   value: string;
 };
@@ -127,8 +127,12 @@ export function ControlConsole({
   const quickInputRef = useRef<HTMLInputElement | null>(null);
   const richEditorRef = useRef<MDXEditorMethods | null>(null);
   const scriptSurfaceRef = useRef<HTMLDivElement | null>(null);
+  const previousMarkdownRef = useRef(markdown);
+  const undoStackRef = useRef<string[]>([]);
+  const restoringRef = useRef(false);
   const [floatingEditorPosition, setFloatingEditorPosition] = useState<FloatingEditorPosition | null>(null);
   const [richPendingEditorAction, setRichPendingEditorAction] = useState<PendingEditorAction | null>(null);
+  const [canUndo, setCanUndo] = useState(false);
 
   const markers = bundle?.markerIndex ?? [];
   const safePlayerLink = playerEntryLink ?? roomLinks[0];
@@ -149,6 +153,24 @@ export function ControlConsole({
     }
   }, [markdownEditorRef, view]);
 
+  useEffect(() => {
+    if (previousMarkdownRef.current === markdown) {
+      return;
+    }
+    if (restoringRef.current) {
+      previousMarkdownRef.current = markdown;
+      restoringRef.current = false;
+      return;
+    }
+    if (hasPendingDirective(previousMarkdownRef.current)) {
+      previousMarkdownRef.current = markdown;
+      return;
+    }
+    undoStackRef.current = [...undoStackRef.current.slice(-79), previousMarkdownRef.current];
+    previousMarkdownRef.current = markdown;
+    setCanUndo(true);
+  }, [markdown]);
+
   function runInRawEditor(action: () => void) {
     if (view !== "raw") {
       setView("raw");
@@ -164,13 +186,16 @@ export function ControlConsole({
         return;
       }
       const pendingId = `pending_${crypto.randomUUID()}`;
-      const selected = selectedEditorText() || richEditorRef.current.getSelectionMarkdown().trim();
-      const label = escapeDirectiveAttr(selected || "新标记");
-      const marker = `\n\n::marker[${nextMarkerId(markers)}]{type="section" label="${label}" note="现场跳转点" pending="${pendingId}"}\n\n`;
+      const label = "标记点";
+      const marker = `\n\n::marker[${nextMarkerId(markers)}]{text="${label}" pending="${pendingId}"}\n\n`;
+      const insertionIndex = markdownInsertionIndexFromSelection(markdown);
       setFloatingEditorPosition(floatingPositionForCurrentSelection());
       setRichPendingEditorAction({ kind: "marker", pendingId, value: label });
-      richEditorRef.current.insertMarkdown(marker);
-      window.setTimeout(() => setMarkdown((source) => renumberMarkerDirectives(source)), 0);
+      setMarkdown((source) =>
+        renumberMarkerDirectives(
+          sourceWithBlockInsertion(source, insertionIndex ?? source.length, insertionIndex ?? source.length, marker.trim()),
+        ),
+      );
       return;
     }
 
@@ -183,22 +208,31 @@ export function ControlConsole({
       if (!richEditorRef.current) {
         return;
       }
-      const selected = selectedEditorText() || richEditorRef.current.getSelectionMarkdown().trim();
-      if (!selected) {
-        richEditorRef.current.focus();
-        return;
-      }
       const pendingId = `pending_${crypto.randomUUID()}`;
-      const note = escapeDirectiveAttr(selected);
-      const stage = `:stage[${escapeDirectiveLabel(selected)}]{cue="${note}" label="${note}" pending="${pendingId}"}`;
+      const note = "提示内容";
+      const stage = `\n\n::notes{text="${note}" pending="${pendingId}"}\n\n`;
+      const insertionIndex = markdownInsertionIndexFromSelection(markdown);
       setFloatingEditorPosition(floatingPositionForCurrentSelection());
-      setRichPendingEditorAction({ kind: "comment", pendingId, value: note });
-      richEditorRef.current.insertMarkdown(stage);
+      setRichPendingEditorAction({ kind: "notes", pendingId, value: note });
+      setMarkdown((source) =>
+        sourceWithBlockInsertion(source, insertionIndex ?? source.length, insertionIndex ?? source.length, stage.trim()),
+      );
       return;
     }
 
     setFloatingEditorPosition(fallbackFloatingEditorPosition());
     runInRawEditor(() => onBeginCommentEdit());
+  }
+
+  function undoMarkdown() {
+    const previous = undoStackRef.current.pop();
+    if (!previous) {
+      setCanUndo(false);
+      return;
+    }
+    restoringRef.current = true;
+    setCanUndo(undoStackRef.current.length > 0);
+    setMarkdown(previous);
   }
 
   function insertHeading() {
@@ -215,7 +249,7 @@ export function ControlConsole({
 
   function confirmFloatingEditorAction() {
     if (richPendingEditorAction) {
-      const fallback = richPendingEditorAction.kind === "marker" ? "新标记" : "注释";
+      const fallback = richPendingEditorAction.kind === "marker" ? "标记点" : "提示内容";
       const cleanValue = escapeDirectiveAttr(richPendingEditorAction.value || fallback);
       setMarkdown((source) => updatePendingDirective(source, richPendingEditorAction, cleanValue, true));
       setRichPendingEditorAction(null);
@@ -227,7 +261,7 @@ export function ControlConsole({
 
   function updateFloatingEditorValue(value: string) {
     if (richPendingEditorAction) {
-      const fallback = richPendingEditorAction.kind === "marker" ? "新标记" : "注释";
+      const fallback = richPendingEditorAction.kind === "marker" ? "标记点" : "提示内容";
       const cleanValue = escapeDirectiveAttr(value || fallback);
       const nextAction = { ...richPendingEditorAction, value };
       setRichPendingEditorAction(nextAction);
@@ -261,17 +295,25 @@ export function ControlConsole({
     };
   }
 
-  function selectedEditorText() {
-    const surface = scriptSurfaceRef.current;
+  function markdownInsertionIndexFromSelection(source: string) {
     const selection = window.getSelection();
-    if (!surface || !selection || selection.rangeCount === 0 || selection.isCollapsed) {
-      return "";
+    const surface = scriptSurfaceRef.current;
+    const anchorNode = selection?.anchorNode;
+    if (!surface || !selection || !anchorNode || !surface.contains(anchorNode)) {
+      return null;
     }
-    const range = selection.getRangeAt(0);
-    if (!surface.contains(range.commonAncestorContainer)) {
-      return "";
+
+    const anchorText = anchorNode.textContent ?? "";
+    if (!anchorText.trim()) {
+      return null;
     }
-    return selection.toString().trim();
+
+    const sourceIndex = source.indexOf(anchorText);
+    if (sourceIndex < 0) {
+      return null;
+    }
+
+    return sourceIndex + clamp(selection.anchorOffset, 0, anchorText.length);
   }
 
   return (
@@ -333,6 +375,16 @@ export function ControlConsole({
                 <button
                   className="nike-tlb"
                   type="button"
+                  disabled={!canUndo}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={undoMarkdown}
+                >
+                  <UndoIcon />
+                  撤销
+                </button>
+                <button
+                  className="nike-tlb"
+                  type="button"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={beginInlineMarkerEdit}
                 >
@@ -380,7 +432,7 @@ export function ControlConsole({
                       confirmFloatingEditorAction();
                     }
                   }}
-                  placeholder={activePendingEditorAction.kind === "marker" ? "输入标记名称" : "输入注释内容"}
+                  placeholder={activePendingEditorAction.kind === "marker" ? "输入标记文本" : "输入注释文本"}
                 />
                 <button type="button" title="完成" onClick={confirmFloatingEditorAction}>
                   <CheckIcon />
@@ -558,38 +610,49 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function sourceWithBlockInsertion(source: string, start: number, end: number, replacement: string) {
+  const prefix = start > 0 && !source.slice(0, start).endsWith("\n\n") ? "\n\n" : "";
+  const suffix = end < source.length && !source.slice(end).startsWith("\n\n") ? "\n\n" : "";
+  return `${source.slice(0, start)}${prefix}${replacement}${suffix}${source.slice(end)}`;
+}
+
 function nextMarkerId(markers: Array<{ markerId: string }>) {
-  const usedIds = new Set(markers.map((marker) => marker.markerId));
-  let nextIndex = markers.length + 1;
-  let markerId = `M${nextIndex.toString().padStart(3, "0")}`;
+  const usedIds = new Set(markers.map((marker) => normalizeMarkerId(marker.markerId)));
+  let nextIndex = Math.max(0, ...Array.from(usedIds).map((id) => Number(id) || 0)) + 1;
+  let markerId = nextIndex.toString().padStart(2, "0");
   while (usedIds.has(markerId)) {
     nextIndex += 1;
-    markerId = `M${nextIndex.toString().padStart(3, "0")}`;
+    markerId = nextIndex.toString().padStart(2, "0");
   }
   return markerId;
 }
 
 function renumberMarkerDirectives(source: string) {
   let markerIndex = 0;
-  return source.replace(/((?::|::)marker\[)M\d{3}(\]\{)/g, (_match, before: string, after: string) => {
+  return source.replace(/((?::|::)marker\[)(?:M)?\d{2,3}(\]\{)/g, (_match, before: string, after: string) => {
     markerIndex += 1;
-    return `${before}M${markerIndex.toString().padStart(3, "0")}${after}`;
+    return `${before}${markerIndex.toString().padStart(2, "0")}${after}`;
   });
+}
+
+function normalizeMarkerId(markerId: string) {
+  const numeric = markerId.match(/\d+/)?.[0];
+  return numeric ? Number(numeric).toString().padStart(2, "0") : markerId;
 }
 
 function escapeDirectiveAttr(value: string) {
   return value.replace(/["\\\n\r]/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function escapeDirectiveLabel(value: string) {
-  return value.replace(/[\][\n\r]/g, " ").replace(/\s+/g, " ").trim();
-}
-
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function replaceDirectiveAttribute(directive: string, attr: "label" | "cue", value: string) {
+function hasPendingDirective(source: string) {
+  return /\spending="[^"]*"/.test(source);
+}
+
+function replaceDirectiveAttribute(directive: string, attr: "label" | "cue" | "text", value: string) {
   const attrPattern = new RegExp(`${attr}="[^"]*"`);
   if (attrPattern.test(directive)) {
     return directive.replace(attrPattern, `${attr}="${value}"`);
@@ -605,16 +668,11 @@ function updatePendingDirective(source: string, action: PendingEditorAction, val
   const pendingPattern = escapeRegExp(action.pendingId);
   const directivePattern =
     action.kind === "marker"
-      ? new RegExp(`::marker\\[M\\d{3}\\]\\{[^}]*pending="${pendingPattern}"[^}]*\\}`)
-      : new RegExp(`:stage\\[[^\\]]*\\]\\{[^}]*pending="${pendingPattern}"[^}]*\\}`);
+      ? new RegExp(`::marker\\[(?:M)?\\d{2,3}\\]\\{[^}]*pending="${pendingPattern}"[^}]*\\}`)
+      : new RegExp(`::notes\\{[^}]*pending="${pendingPattern}"[^}]*\\}`);
 
   return source.replace(directivePattern, (directive) => {
-    let nextDirective = directive;
-    if (action.kind === "marker") {
-      nextDirective = replaceDirectiveAttribute(nextDirective, "label", value);
-    } else {
-      nextDirective = replaceDirectiveAttribute(replaceDirectiveAttribute(nextDirective, "cue", value), "label", value);
-    }
+    const nextDirective = replaceDirectiveAttribute(directive, "text", value);
     return finalize ? nextDirective.replace(/\s+pending="[^"]*"/, "") : nextDirective;
   });
 }
@@ -702,6 +760,15 @@ function CheckIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
       <path d="m2 6.2 2.4 2.3L10 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function UndoIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <path d="M5 3H2v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2.4 5.7A4.2 4.2 0 1 0 4 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

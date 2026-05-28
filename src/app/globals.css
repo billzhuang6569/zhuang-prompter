@@ -1671,6 +1671,16 @@ input {
   color: var(--nike-ink);
 }
 
+.nike-tlb:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.nike-tlb:disabled:hover {
+  border-color: var(--nike-hl);
+  color: var(--nike-mute);
+}
+
 .nike-t-sep {
   width: 1px;
   height: 16px;

@@ -41,6 +41,7 @@ export type StageCueData = {
   label?: string;
   level?: string;
   duration?: string;
+  text?: string;
 };
 
 export type MarkerData = {
@@ -48,6 +49,7 @@ export type MarkerData = {
   type: string;
   label?: string;
   note?: string;
+  text?: string;
 };
 
 export type SpeechIndexItem = {
@@ -67,6 +69,7 @@ export type MarkerAnchor = {
   type: string;
   label?: string;
   note?: string;
+  text?: string;
   sourceRange: SourceRange;
   nearestSpeechAnchorId?: string;
   blockIndex: number;

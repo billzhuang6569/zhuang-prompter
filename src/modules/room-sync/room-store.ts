@@ -264,6 +264,7 @@ export function saveScriptVersion(input: {
       type: marker.type,
       label: marker.label,
       note: marker.note,
+      text: marker.text,
     })),
     contentHash: hashContent(record.state.scriptDraft.markdown),
     createdBy: input.deviceId,

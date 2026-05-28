@@ -112,7 +112,7 @@ type MarkdownCommand =
   | "comment";
 
 type PendingEditorAction = {
-  kind: "marker" | "comment";
+  kind: "marker" | "notes";
   pendingId: string;
   value: string;
 };
@@ -558,21 +558,21 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }
 
   function nextMarkerId() {
-    const usedIds = new Set(bundle?.markerIndex.map((marker) => marker.markerId) ?? []);
-    let nextIndex = (bundle?.markerIndex.length ?? 0) + 1;
-    let markerId = `M${nextIndex.toString().padStart(3, "0")}`;
+    const usedIds = new Set((bundle?.markerIndex ?? []).map((marker) => normalizeMarkerId(marker.markerId)));
+    let nextIndex = Math.max(0, ...Array.from(usedIds).map((id) => Number(id) || 0)) + 1;
+    let markerId = nextIndex.toString().padStart(2, "0");
     while (usedIds.has(markerId)) {
       nextIndex += 1;
-      markerId = `M${nextIndex.toString().padStart(3, "0")}`;
+      markerId = nextIndex.toString().padStart(2, "0");
     }
     return markerId;
   }
 
   function renumberMarkerDirectives(source: string) {
     let markerIndex = 0;
-    return source.replace(/((?::|::)marker\[)M\d{3}(\]\{)/g, (_match, before: string, after: string) => {
+    return source.replace(/((?::|::)marker\[)(?:M)?\d{2,3}(\]\{)/g, (_match, before: string, after: string) => {
       markerIndex += 1;
-      return `${before}M${markerIndex.toString().padStart(3, "0")}${after}`;
+      return `${before}${markerIndex.toString().padStart(2, "0")}${after}`;
     });
   }
 
@@ -603,10 +603,9 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     const source = editor?.value ?? markdown;
     const start = target?.start ?? editor?.selectionStart ?? source.length;
     const end = target?.end ?? editor?.selectionEnd ?? source.length;
-    const selected = source.slice(start, end).trim();
     const pendingId = `pending_${crypto.randomUUID()}`;
-    const label = escapeDirectiveAttr(selected || "新标记");
-    const marker = `::marker[${nextMarkerId()}]{type="section" label="${label}" note="现场跳转点" pending="${pendingId}"}`;
+    const label = "标记点";
+    const marker = `::marker[${nextMarkerId()}]{text="${label}" pending="${pendingId}"}`;
     const nextValue = renumberMarkerDirectives(sourceWithBlockInsertion(source, start, end, marker));
 
     setMarkdown(nextValue);
@@ -621,20 +620,13 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     const source = editor?.value ?? markdown;
     const start = target?.start ?? editor?.selectionStart ?? source.length;
     const end = target?.end ?? editor?.selectionEnd ?? source.length;
-    const selected = source.slice(start, end).trim();
-    if (!selected) {
-      editor?.focus();
-      return;
-    }
-
     const pendingId = `pending_${crypto.randomUUID()}`;
-    const note = escapeDirectiveAttr(selected);
-    const stageText = escapeDirectiveLabel(selected);
-    const stage = `:stage[${stageText}]{cue="${note}" label="${note}" pending="${pendingId}"}`;
-    const nextValue = `${source.slice(0, start)}${stage}${source.slice(end)}`;
+    const note = "提示内容";
+    const stage = `::notes{text="${note}" pending="${pendingId}"}`;
+    const nextValue = sourceWithBlockInsertion(source, start, end, stage);
 
     setMarkdown(nextValue);
-    setPendingEditorAction({ kind: "comment", pendingId, value: note });
+    setPendingEditorAction({ kind: "notes", pendingId, value: note });
     if (!target) {
       focusPendingDirective(pendingId, note);
     }
@@ -644,7 +636,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     if (!pendingEditorAction) {
       return;
     }
-    const fallback = pendingEditorAction.kind === "marker" ? "新标记" : "注释";
+    const fallback = pendingEditorAction.kind === "marker" ? "标记点" : "提示内容";
     const cleanValue = escapeDirectiveAttr(value || fallback);
     setPendingEditorAction({ ...pendingEditorAction, value });
     setMarkdown((source) => updatePendingDirective(source, pendingEditorAction, cleanValue, false));
@@ -654,7 +646,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     if (!pendingEditorAction) {
       return;
     }
-    const fallback = pendingEditorAction.kind === "marker" ? "新标记" : "注释";
+    const fallback = pendingEditorAction.kind === "marker" ? "标记点" : "提示内容";
     const cleanValue = escapeDirectiveAttr(pendingEditorAction.value || fallback);
     setMarkdown((source) => updatePendingDirective(source, pendingEditorAction, cleanValue, true));
     setPendingEditorAction(null);
@@ -1510,15 +1502,16 @@ function escapeDirectiveAttr(value: string) {
   return value.replace(/["\\\n\r]/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function escapeDirectiveLabel(value: string) {
-  return value.replace(/[\][\n\r]/g, " ").replace(/\s+/g, " ").trim();
+function normalizeMarkerId(markerId: string) {
+  const numeric = markerId.match(/\d+/)?.[0];
+  return numeric ? Number(numeric).toString().padStart(2, "0") : markerId;
 }
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function replaceDirectiveAttribute(directive: string, attr: "label" | "cue", value: string) {
+function replaceDirectiveAttribute(directive: string, attr: "label" | "cue" | "text", value: string) {
   const attrPattern = new RegExp(`${attr}="[^"]*"`);
   if (attrPattern.test(directive)) {
     return directive.replace(attrPattern, `${attr}="${value}"`);
@@ -1530,16 +1523,11 @@ function updatePendingDirective(source: string, action: PendingEditorAction, val
   const pendingPattern = escapeRegExp(action.pendingId);
   const directivePattern =
     action.kind === "marker"
-      ? new RegExp(`::marker\\[M\\d{3}\\]\\{[^}]*pending="${pendingPattern}"[^}]*\\}`)
-      : new RegExp(`:stage\\[[^\\]]*\\]\\{[^}]*pending="${pendingPattern}"[^}]*\\}`);
+      ? new RegExp(`::marker\\[(?:M)?\\d{2,3}\\]\\{[^}]*pending="${pendingPattern}"[^}]*\\}`)
+      : new RegExp(`::notes\\{[^}]*pending="${pendingPattern}"[^}]*\\}`);
 
   return source.replace(directivePattern, (directive) => {
-    let nextDirective = directive;
-    if (action.kind === "marker") {
-      nextDirective = replaceDirectiveAttribute(nextDirective, "label", value);
-    } else {
-      nextDirective = replaceDirectiveAttribute(replaceDirectiveAttribute(nextDirective, "cue", value), "label", value);
-    }
+    const nextDirective = replaceDirectiveAttribute(directive, "text", value);
     return finalize ? nextDirective.replace(/\s+pending="[^"]*"/, "") : nextDirective;
   });
 }

@@ -33,18 +33,19 @@ type InitializedRichMarkdownEditorProps = {
 const markerDirectiveDescriptor: DirectiveDescriptor = {
   name: "marker",
   testNode: (node) => node.name === "marker",
-  attributes: ["type", "label", "note", "pending"],
+  attributes: ["text", "pending"],
   hasChildren: false,
   type: "leafDirective",
   Editor: MarkerDirectiveEditor,
 };
 
-const stageDirectiveDescriptor: DirectiveDescriptor = {
-  name: "stage",
-  testNode: (node) => node.name === "stage" || node.name === "stageCue",
-  attributes: ["cue", "label", "level", "duration", "pending"],
+const notesDirectiveDescriptor: DirectiveDescriptor = {
+  name: "notes",
+  testNode: (node) => node.name === "notes" || node.name === "stage" || node.name === "stageCue",
+  attributes: ["text", "pending"],
   hasChildren: false,
-  Editor: StageDirectiveEditor,
+  type: "leafDirective",
+  Editor: NotesDirectiveEditor,
 };
 
 export default function InitializedRichMarkdownEditor({ editorRef, ...props }: InitializedRichMarkdownEditorProps) {
@@ -60,7 +61,7 @@ export default function InitializedRichMarkdownEditor({ editorRef, ...props }: I
         linkPlugin(),
         tablePlugin(),
         codeBlockPlugin(),
-        directivesPlugin({ directiveDescriptors: [markerDirectiveDescriptor, stageDirectiveDescriptor] }),
+        directivesPlugin({ directiveDescriptors: [markerDirectiveDescriptor, notesDirectiveDescriptor] }),
         markdownShortcutPlugin(),
       ]}
     />
@@ -70,27 +71,25 @@ export default function InitializedRichMarkdownEditor({ editorRef, ...props }: I
 function MarkerDirectiveEditor({ mdastNode }: DirectiveEditorProps) {
   const node = mdastNode as DirectiveNodeLike;
   const attributes = directiveAttributes(node);
-  const markerId = directiveLabel(node) || "M000";
-  const label = stringValue(attributes.label);
+  const markerId = directiveLabel(node) || "00";
+  const text = stringValue(attributes.text) || stringValue(attributes.label);
   return (
     <span className="nike-mtag nike-mdx-directive" contentEditable={false}>
       <span className="nike-dot-mini" />
       {markerId}
-      {label ? ` · ${label}` : ""}
+      {text ? ` · ${text}` : ""}
     </span>
   );
 }
 
-function StageDirectiveEditor({ mdastNode }: DirectiveEditorProps) {
+function NotesDirectiveEditor({ mdastNode }: DirectiveEditorProps) {
   const node = mdastNode as DirectiveNodeLike;
   const attributes = directiveAttributes(node);
-  const label = stringValue(attributes.label) || stringValue(attributes.cue) || directiveLabel(node) || "注释";
-  const level = stringValue(attributes.level);
-  const duration = stringValue(attributes.duration);
+  const text = stringValue(attributes.text) || stringValue(attributes.label) || stringValue(attributes.cue) || directiveLabel(node) || "提示内容";
   return (
     <span className="nike-scue nike-mdx-directive" contentEditable={false}>
       <span className="nike-scue-arrow">↳</span>
-      {[label, levelLabel(level), duration].filter(Boolean).join(" · ")}
+      {text}
     </span>
   );
 }
@@ -111,13 +110,4 @@ function directiveLabel(node: DirectiveNodeLike): string {
 
 function stringValue(value: unknown) {
   return typeof value === "string" ? value : "";
-}
-
-function levelLabel(value: string) {
-  const labels: Record<string, string> = {
-    important: "重点",
-    warning: "注意",
-    soft: "轻声",
-  };
-  return labels[value] ?? value;
 }

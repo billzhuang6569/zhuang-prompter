@@ -88,7 +88,7 @@ export function parseMarkdown(markdown: string, options: ParseOptions = {}): Ren
   function addMarker(node: MarkdownNode, inline: boolean) {
     const marker = markerFromNode(node);
     const sourceRange = rangeOf(node);
-    const textHash = hashText(`${marker.markerId}:${marker.label ?? ""}:${marker.note ?? ""}`);
+    const textHash = hashText(`${marker.markerId}:${marker.text ?? marker.label ?? ""}`);
     const anchorId = addScrollAnchor({
       anchorId: `anchor_marker_${marker.markerId}`,
       scriptVersionId,
@@ -107,10 +107,10 @@ export function parseMarkdown(markdown: string, options: ParseOptions = {}): Ren
     }
     seenMarkerIds.add(marker.markerId);
 
-    if (!marker.label) {
+    if (!marker.text && !marker.label) {
       parseWarnings.push({
         code: "MISSING_MARKER_LABEL",
-        message: `Marker ${marker.markerId} has no label.`,
+        message: `Marker ${marker.markerId} has no text.`,
         sourceRange,
       });
     }
@@ -200,7 +200,7 @@ export function parseMarkdown(markdown: string, options: ParseOptions = {}): Ren
       return;
     }
 
-    if (isStageDirective(node)) {
+    if (isNoteDirective(node)) {
       htmlTree.push({
         renderNodeId: `render_stage_${blockIndex}`,
         type: "stageCue",
@@ -236,7 +236,7 @@ export function parseMarkdown(markdown: string, options: ParseOptions = {}): Ren
 function collectUnsupportedDirectives(node: MarkdownNode, warnings: ParseWarning[]) {
   if (
     (node.type === "textDirective" || node.type === "leafDirective" || node.type === "containerDirective") &&
-    !isStageDirective(node) &&
+    !isNoteDirective(node) &&
     node.name !== "marker"
   ) {
     warnings.push({
@@ -266,9 +266,9 @@ function paragraphSegments(node: MarkdownNode) {
   }
 
   for (const child of node.children ?? []) {
-    if (isStageDirective(child)) {
+    if (isNoteDirective(child)) {
       flush();
-      flush(cueFromNode(child), child.label ?? toString(child));
+      segments.push({ spokenText: "", cue: cueFromNode(child), markers: [] });
       continue;
     }
     if (isDirective(child, "marker")) {
@@ -297,21 +297,29 @@ function isStageDirective(node: MarkdownNode) {
   return isDirective(node, "stage") || isDirective(node, "stageCue");
 }
 
+function isNoteDirective(node: MarkdownNode) {
+  return isDirective(node, "notes") || isStageDirective(node);
+}
+
 function markerFromNode(node: MarkdownNode): MarkerData {
+  const text = stringAttr(node, "text") ?? stringAttr(node, "label");
   return {
     markerId: cleanText(node.label ?? toString(node) ?? "UNLABELED"),
-    type: stringAttr(node, "type") ?? "section",
-    label: stringAttr(node, "label"),
+    type: stringAttr(node, "type") ?? "marker",
+    label: text,
+    text,
     note: stringAttr(node, "note"),
   };
 }
 
 function cueFromNode(node: MarkdownNode): StageCueData {
+  const text = stringAttr(node, "text") ?? stringAttr(node, "label") ?? stringAttr(node, "cue") ?? cleanText(node.label ?? undefined);
   return {
-    cue: stringAttr(node, "cue") ?? cleanText(node.label ?? undefined),
-    label: stringAttr(node, "label") ?? cleanText(node.label ?? undefined),
+    cue: stringAttr(node, "cue") ?? text,
+    label: text,
     level: stringAttr(node, "level"),
     duration: stringAttr(node, "duration"),
+    text,
   };
 }
 

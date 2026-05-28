@@ -63,6 +63,7 @@ export type ScriptVersion = {
     type: string;
     label?: string;
     note?: string;
+    text?: string;
   }>;
   contentHash: string;
   createdBy: string;
