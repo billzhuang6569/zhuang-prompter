@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type Dispatch, type KeyboardEvent, type RefObject, type SetStateAction } from "react";
 import type { RoomJoinResult } from "@/domain/room/types";
 import type { MarkerAnchor, RenderBundle, RenderNode } from "@/modules/script-engine/types";
 
@@ -39,7 +39,7 @@ type ControlConsoleProps = {
   parseStatus?: string;
   hasSavedVersion: boolean;
   markdown: string;
-  setMarkdown: (value: string) => void;
+  setMarkdown: Dispatch<SetStateAction<string>>;
   versionMessage: string;
   setVersionMessage: (value: string) => void;
   bundle?: RenderBundle;
@@ -112,6 +112,7 @@ export function ControlConsole({
 }: ControlConsoleProps) {
   const [view, setView] = useState<"render" | "raw">("render");
   const quickInputRef = useRef<HTMLInputElement | null>(null);
+  const renderEditTimerRef = useRef<number | null>(null);
 
   const markers = bundle?.markerIndex ?? [];
   const safePlayerLink = playerEntryLink ?? roomLinks[0];
@@ -129,6 +130,14 @@ export function ControlConsole({
     }
   }, [markdownEditorRef, view]);
 
+  useEffect(() => {
+    return () => {
+      if (renderEditTimerRef.current) {
+        window.clearTimeout(renderEditTimerRef.current);
+      }
+    };
+  }, []);
+
   function runInRawEditor(action: () => void) {
     if (view !== "raw") {
       setView("raw");
@@ -136,6 +145,15 @@ export function ControlConsole({
       return;
     }
     action();
+  }
+
+  function updateRenderedNode(node: RenderNode, value: string) {
+    if (renderEditTimerRef.current) {
+      window.clearTimeout(renderEditTimerRef.current);
+    }
+    renderEditTimerRef.current = window.setTimeout(() => {
+      setMarkdown((current) => replaceRenderedNodeText(current, node, value));
+    }, 220);
   }
 
   return (
@@ -262,7 +280,12 @@ export function ControlConsole({
                 <div className="nike-sc">
                   {bundle ? (
                     bundle.htmlTree.map((node) => (
-                      <ControlRenderNode key={node.renderNodeId} node={node} onJumpToMarker={onJumpToMarker} />
+                      <ControlRenderNode
+                        key={node.renderNodeId}
+                        node={node}
+                        onJumpToMarker={onJumpToMarker}
+                        onEdit={updateRenderedNode}
+                      />
                     ))
                   ) : (
                     <p>开始输入 Markdown 文稿，右侧播放端会同步显示。</p>
@@ -417,10 +440,28 @@ export function ControlConsole({
   );
 }
 
-function ControlRenderNode({ node, onJumpToMarker }: { node: RenderNode; onJumpToMarker: (markerId: string) => void }) {
+function ControlRenderNode({
+  node,
+  onJumpToMarker,
+  onEdit,
+}: {
+  node: RenderNode;
+  onJumpToMarker: (markerId: string) => void;
+  onEdit: (node: RenderNode, value: string) => void;
+}) {
   if (node.type === "heading") {
     const HeadingTag = node.depth <= 1 ? "h1" : "h2";
-    return <HeadingTag>{node.text}</HeadingTag>;
+    return (
+      <HeadingTag
+        className="nike-editable-text"
+        contentEditable="plaintext-only"
+        suppressContentEditableWarning
+        onInput={(event) => onEdit(node, editableText(event.currentTarget))}
+        onKeyDown={handlePlaintextEditKeyDown}
+      >
+        {node.text}
+      </HeadingTag>
+    );
   }
 
   if (node.type === "marker") {
@@ -433,7 +474,13 @@ function ControlRenderNode({ node, onJumpToMarker }: { node: RenderNode; onJumpT
 
   return (
     <div className={`nike-script-text ${node.type === "listItem" ? "is-list-item" : ""}`}>
-      <p>
+      <p
+        className="nike-editable-text"
+        contentEditable="plaintext-only"
+        suppressContentEditableWarning
+        onInput={(event) => onEdit(node, editableText(event.currentTarget))}
+        onKeyDown={handlePlaintextEditKeyDown}
+      >
         {node.inlineMarkers?.map((marker) => (
           <MarkerTag key={marker.markerId} marker={marker} onJumpToMarker={onJumpToMarker} inline />
         ))}
@@ -442,6 +489,58 @@ function ControlRenderNode({ node, onJumpToMarker }: { node: RenderNode; onJumpT
       {node.cue && <StageCue label={cueText(node.cue)} />}
     </div>
   );
+}
+
+function editableText(element: HTMLElement) {
+  const clone = element.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll("[data-edit-lock]").forEach((child) => child.remove());
+  return clone.textContent ?? "";
+}
+
+function handlePlaintextEditKeyDown(event: KeyboardEvent<HTMLElement>) {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    event.currentTarget.blur();
+  }
+}
+
+function replaceRenderedNodeText(markdown: string, node: RenderNode, value: string) {
+  if (node.type === "marker" || node.type === "stageCue") {
+    return markdown;
+  }
+
+  const nextText = normalizeEditedText(value);
+  const start = Math.max(0, Math.min(node.sourceRange.start, markdown.length));
+  const end = Math.max(start, Math.min(node.sourceRange.end, markdown.length));
+  const before = markdown.slice(0, start);
+  const source = markdown.slice(start, end);
+  const after = markdown.slice(end);
+
+  if (node.type === "heading") {
+    const match = source.match(/^(\s{0,3}#{1,6}\s+)([\s\S]*?)(\s*)$/);
+    if (match) {
+      return `${before}${match[1]}${nextText}${match[3]}${after}`;
+    }
+  }
+
+  if (node.type === "listItem") {
+    const match = source.match(/^(\s*(?:[-*+]|\d+[.)])\s+)([\s\S]*?)(\s*)$/);
+    if (match) {
+      return `${before}${match[1]}${nextText}${match[3]}${after}`;
+    }
+  }
+
+  const textIndex = source.indexOf(node.text);
+  if (textIndex >= 0) {
+    const patched = `${source.slice(0, textIndex)}${nextText}${source.slice(textIndex + node.text.length)}`;
+    return `${before}${patched}${after}`;
+  }
+
+  return `${before}${nextText}${after}`;
+}
+
+function normalizeEditedText(value: string) {
+  return value.replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function MarkerTag({
@@ -454,7 +553,13 @@ function MarkerTag({
   onJumpToMarker: (markerId: string) => void;
 }) {
   return (
-    <button className={`nike-mtag ${inline ? "inline" : ""}`} type="button" onClick={() => onJumpToMarker(marker.markerId)}>
+    <button
+      className={`nike-mtag ${inline ? "inline" : ""}`}
+      type="button"
+      contentEditable={false}
+      data-edit-lock
+      onClick={() => onJumpToMarker(marker.markerId)}
+    >
       <span className="nike-dot-mini" />
       {marker.markerId}
       {marker.label ? ` · ${marker.label}` : ""}

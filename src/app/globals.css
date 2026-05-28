@@ -1791,6 +1791,25 @@ input {
   font-weight: 500;
 }
 
+.nike-editable-text {
+  min-height: 1lh;
+  border-radius: 6px;
+  outline: 0;
+  caret-color: var(--nike-info);
+  transition:
+    background var(--nike-t),
+    box-shadow var(--nike-t);
+}
+
+.nike-editable-text:hover {
+  background: rgb(255 255 255 / 3%);
+}
+
+.nike-editable-text:focus {
+  background: rgb(68 147 248 / 8%);
+  box-shadow: 0 0 0 1px rgb(68 147 248 / 28%);
+}
+
 .nike-script-text {
   margin-bottom: var(--nike-lg);
 }
