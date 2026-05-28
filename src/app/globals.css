@@ -1848,15 +1848,27 @@ input {
   height: 280px;
 }
 
-.nike-raw {
+.nike-raw-editor {
+  width: min(100%, 860px);
+  min-height: 100%;
+  display: block;
   max-width: 640px;
   margin: 0 auto;
+  resize: none;
+  border: 1px solid var(--nike-hl);
+  outline: 0;
   background: transparent;
   color: var(--nike-ink);
+  padding: var(--nike-md);
   font-family: var(--nike-fm);
   font-size: 12px;
   line-height: 1.72;
   white-space: pre-wrap;
+}
+
+.nike-raw-editor:focus,
+.nike-mde-note:focus {
+  border-color: var(--nike-ink);
 }
 
 .nike-mde-w {
@@ -1918,26 +1930,6 @@ input {
   background: var(--nike-ink);
   color: var(--nike-canvas);
   cursor: pointer;
-}
-
-.nike-mde-ta {
-  width: 100%;
-  height: 184px;
-  resize: vertical;
-  border: 1px solid var(--nike-hl);
-  border-radius: 0;
-  outline: 0;
-  background: var(--nike-s1);
-  color: var(--nike-ink);
-  padding: var(--nike-md);
-  font-family: var(--nike-fm);
-  font-size: 12px;
-  line-height: 1.65;
-}
-
-.nike-mde-ta:focus,
-.nike-mde-note:focus {
-  border-color: var(--nike-ink);
 }
 
 .nike-mde-acts {

@@ -123,6 +123,15 @@ export function ControlConsole({
     }
   }, [pendingEditorAction]);
 
+  function runInRawEditor(action: () => void) {
+    if (view !== "raw") {
+      setView("raw");
+      window.requestAnimationFrame(action);
+      return;
+    }
+    action();
+  }
+
   return (
     <main className="nike-control">
       <header className="nike-ubar" data-od-id="status-bar">
@@ -199,7 +208,13 @@ export function ControlConsole({
               </div>
             ) : (
               <div className="nike-sr" data-od-id="script-raw">
-                <pre className="nike-raw">{markdown}</pre>
+                <textarea
+                  ref={markdownEditorRef}
+                  className="nike-raw-editor"
+                  spellCheck={false}
+                  value={markdown}
+                  onChange={(event) => setMarkdown(event.target.value)}
+                />
               </div>
             )}
           </div>
@@ -211,7 +226,7 @@ export function ControlConsole({
                   className="nike-tlb"
                   type="button"
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={onBeginMarkerEdit}
+                  onClick={() => runInRawEditor(onBeginMarkerEdit)}
                 >
                   <StarIcon />
                   增加标记
@@ -220,7 +235,7 @@ export function ControlConsole({
                   className="nike-tlb"
                   type="button"
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={onBeginCommentEdit}
+                  onClick={() => runInRawEditor(onBeginCommentEdit)}
                 >
                   <CommentIcon />
                   增加注释
@@ -230,7 +245,7 @@ export function ControlConsole({
                   className="nike-tlb"
                   type="button"
                   onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => onMarkdownCommand("heading")}
+                  onClick={() => runInRawEditor(() => onMarkdownCommand("heading"))}
                 >
                   标题
                 </button>
@@ -259,13 +274,6 @@ export function ControlConsole({
                   </button>
                 </div>
               )}
-              <textarea
-                ref={markdownEditorRef}
-                className="nike-mde-ta"
-                spellCheck={false}
-                value={markdown}
-                onChange={(event) => setMarkdown(event.target.value)}
-              />
               <div className="nike-mde-acts">
                 <input
                   className="nike-mde-note"
