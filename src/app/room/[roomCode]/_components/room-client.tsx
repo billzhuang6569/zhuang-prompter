@@ -53,6 +53,23 @@ function currentTime() {
   return Date.now();
 }
 
+function monotonicTime() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function scrollClockRuntimeKey(clock: ScrollClock | null) {
+  return clock
+    ? [
+        clock.scrollClockId,
+        clock.state,
+        clock.offsetPx,
+        clock.velocityPxPerSecond,
+        clock.issuedAt,
+        JSON.stringify(clock.anchor),
+      ].join(":")
+    : "";
+}
+
 function playerDisplayMetrics(positionPx: number) {
   const content = document.querySelector<HTMLElement>(".player-stage .teleprompter-content");
   const viewportHeightPx = window.innerHeight;
@@ -148,6 +165,13 @@ type WakeLockNavigator = Navigator & {
   };
 };
 
+type LocalScrollClockTiming = {
+  key: string;
+  receivedAt: number;
+  offsetPx: number;
+  velocityPxPerSecond: number;
+};
+
 export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const socketRef = useRef<WebSocket | null>(null);
   const sessionIdRef = useRef<string | null>(null);
@@ -159,6 +183,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const wakeLockReleaseHandlerRef = useRef<(() => void) | null>(null);
   const wakeLockWantedRef = useRef(false);
   const scrollClockRef = useRef<ScrollClock | null>(null);
+  const scrollClockTimingRef = useRef<LocalScrollClockTiming | null>(null);
   const markdownEditorRef = useRef<HTMLTextAreaElement | null>(null);
   const controlPreviewScrollRef = useRef<HTMLDivElement | null>(null);
   const [connection, setConnection] = useState<ConnectionState>("joining");
@@ -210,16 +235,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     return parseMarkdown(markdown, { scriptVersionId: roomState?.currentScriptVersionId ?? "draft" });
   }, [markdown, roomState?.currentScriptVersionId]);
   const activeScrollClock = roomState?.scrollClock ?? null;
-  const activeScrollClockKey = activeScrollClock
-    ? [
-        activeScrollClock.scrollClockId,
-        activeScrollClock.state,
-        activeScrollClock.offsetPx,
-        activeScrollClock.velocityPxPerSecond,
-        activeScrollClock.issuedAt,
-        JSON.stringify(activeScrollClock.anchor),
-      ].join(":")
-    : "";
+  const activeScrollClockKey = scrollClockRuntimeKey(activeScrollClock);
   const primaryPlaybackState =
     playerReports.find((device) => device.role === "player")?.playbackState ?? playerReports[0]?.playbackState;
   const primaryPlayerReportedPosition = primaryPlaybackState?.positionPx;
@@ -268,7 +284,25 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
   useEffect(() => {
     scrollClockRef.current = activeScrollClock;
-  }, [activeScrollClock, activeScrollClockKey]);
+  }, [activeScrollClock]);
+
+  useEffect(() => {
+    if (!activeScrollClock || !activeScrollClockKey) {
+      scrollClockTimingRef.current = null;
+      return;
+    }
+
+    scrollClockTimingRef.current = {
+      key: activeScrollClockKey,
+      receivedAt: monotonicTime(),
+      offsetPx: Math.max(0, activeScrollClock.offsetPx),
+      velocityPxPerSecond: activeScrollClock.velocityPxPerSecond,
+    };
+    // The timing baseline must reset only when the semantic clock changes.
+    // RoomState patches for playback reports reuse the same ScrollClock object
+    // values and must not restart the local elapsed-time counter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeScrollClockKey]);
 
   useEffect(() => {
     let alive = true;
@@ -588,11 +622,23 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     sendEvent("playback.setScrollClock", payload);
   }
 
+  function positionFromScrollClock(clock: ScrollClock) {
+    if (clock.state !== "playing") {
+      return Math.max(0, clock.offsetPx);
+    }
+
+    const key = scrollClockRuntimeKey(clock);
+    const timing = scrollClockTimingRef.current;
+    const offsetPx = timing?.key === key ? timing.offsetPx : clock.offsetPx;
+    const velocityPxPerSecond = timing?.key === key ? timing.velocityPxPerSecond : clock.velocityPxPerSecond;
+    const elapsedMs = timing?.key === key ? Math.max(0, monotonicTime() - timing.receivedAt) : 0;
+    return Math.max(0, offsetPx + (elapsedMs / 1000) * velocityPxPerSecond);
+  }
+
   function currentControlOffset() {
     const clock = roomState?.scrollClock;
     if (clock?.state === "playing") {
-      const elapsedSeconds = Math.max(0, Date.now() - clock.issuedAt) / 1000;
-      return Math.max(0, clock.offsetPx + elapsedSeconds * clock.velocityPxPerSecond);
+      return positionFromScrollClock(clock);
     }
     if (clock) {
       return Math.max(0, clock.offsetPx);
@@ -926,8 +972,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     let animationFrame = 0;
     let lastReportedAt = 0;
     const tick = () => {
-      const elapsedSeconds = Math.max(0, Date.now() - clock.issuedAt) / 1000;
-      const position = clock.offsetPx + elapsedSeconds * clock.velocityPxPerSecond;
+      const position = positionFromScrollClock(clock);
       setPlaybackPositionPx(position);
       playbackPositionRef.current = position;
       if (Date.now() - lastReportedAt >= 350) {
@@ -963,8 +1008,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
     let animationFrame = 0;
     const tick = () => {
-      const elapsedSeconds = Math.max(0, Date.now() - clock.issuedAt) / 1000;
-      const position = Math.max(0, clock.offsetPx + elapsedSeconds * clock.velocityPxPerSecond);
+      const position = positionFromScrollClock(clock);
       scrollEl.scrollTop = position;
       setPlaybackPositionPx(position);
       playbackPositionRef.current = position;
