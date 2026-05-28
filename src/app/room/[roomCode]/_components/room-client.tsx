@@ -111,6 +111,12 @@ type MarkdownCommand =
   | "marker"
   | "comment";
 
+type PendingEditorAction = {
+  kind: "marker" | "comment";
+  pendingId: string;
+  value: string;
+};
+
 type WakeLockSentinelLike = EventTarget & {
   released: boolean;
   release: () => Promise<void>;
@@ -156,6 +162,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [expandedQrLink, setExpandedQrLink] = useState<(NetworkOrigin & { playerUrl: string }) | null>(null);
   const [projectName, setProjectName] = useState("小庄Sir013");
   const [inviteStatus, setInviteStatus] = useState<"idle" | "copied" | "fallback">("idle");
+  const [pendingEditorAction, setPendingEditorAction] = useState<PendingEditorAction | null>(null);
 
   const selectedRole = preferredRole(mode);
   const scriptDraft = roomState?.scriptDraft;
@@ -556,7 +563,105 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     return markerId;
   }
 
+  function renumberMarkerDirectives(source: string) {
+    let markerIndex = 0;
+    return source.replace(/((?::|::)marker\[)M\d{3}(\]\{)/g, (_match, before: string, after: string) => {
+      markerIndex += 1;
+      return `${before}M${markerIndex.toString().padStart(3, "0")}${after}`;
+    });
+  }
+
+  function sourceWithBlockInsertion(source: string, start: number, end: number, replacement: string) {
+    const prefix = start > 0 && !source.slice(0, start).endsWith("\n\n") ? "\n\n" : "";
+    const suffix = end < source.length && !source.slice(end).startsWith("\n\n") ? "\n\n" : "";
+    return `${source.slice(0, start)}${prefix}${replacement}${suffix}${source.slice(end)}`;
+  }
+
+  function focusPendingDirective(pendingId: string, value: string) {
+    window.requestAnimationFrame(() => {
+      const editor = markdownEditorRef.current;
+      if (!editor) {
+        return;
+      }
+      const source = editor.value;
+      const pendingIndex = source.indexOf(`pending="${pendingId}"`);
+      const valueIndex = pendingIndex >= 0 ? source.lastIndexOf(value, pendingIndex) : -1;
+      editor.focus();
+      if (valueIndex >= 0) {
+        editor.setSelectionRange(valueIndex, valueIndex + value.length);
+      }
+    });
+  }
+
+  function beginMarkerEdit() {
+    const editor = markdownEditorRef.current;
+    const source = editor?.value ?? markdown;
+    const start = editor?.selectionStart ?? source.length;
+    const end = editor?.selectionEnd ?? source.length;
+    const selected = source.slice(start, end).trim();
+    const pendingId = `pending_${crypto.randomUUID()}`;
+    const label = escapeDirectiveAttr(selected || "新标记");
+    const marker = `::marker[${nextMarkerId()}]{type="section" label="${label}" note="现场跳转点" pending="${pendingId}"}`;
+    const nextValue = renumberMarkerDirectives(sourceWithBlockInsertion(source, start, end, marker));
+
+    setMarkdown(nextValue);
+    setPendingEditorAction({ kind: "marker", pendingId, value: label });
+    focusPendingDirective(pendingId, label);
+  }
+
+  function beginCommentEdit() {
+    const editor = markdownEditorRef.current;
+    const source = editor?.value ?? markdown;
+    const start = editor?.selectionStart ?? source.length;
+    const end = editor?.selectionEnd ?? source.length;
+    const selected = source.slice(start, end).trim();
+    if (!selected) {
+      editor?.focus();
+      return;
+    }
+
+    const pendingId = `pending_${crypto.randomUUID()}`;
+    const note = "注释";
+    const stageText = escapeDirectiveLabel(selected);
+    const stage = `:stage[${stageText}]{cue="${note}" label="${note}" pending="${pendingId}"}`;
+    const nextValue = `${source.slice(0, start)}${stage}${source.slice(end)}`;
+
+    setMarkdown(nextValue);
+    setPendingEditorAction({ kind: "comment", pendingId, value: note });
+    focusPendingDirective(pendingId, note);
+  }
+
+  function updatePendingEditorValue(value: string) {
+    if (!pendingEditorAction) {
+      return;
+    }
+    const fallback = pendingEditorAction.kind === "marker" ? "新标记" : "注释";
+    const cleanValue = escapeDirectiveAttr(value || fallback);
+    setPendingEditorAction({ ...pendingEditorAction, value });
+    setMarkdown((source) => updatePendingDirective(source, pendingEditorAction, cleanValue, false));
+  }
+
+  function confirmPendingEditorAction() {
+    if (!pendingEditorAction) {
+      return;
+    }
+    const fallback = pendingEditorAction.kind === "marker" ? "新标记" : "注释";
+    const cleanValue = escapeDirectiveAttr(pendingEditorAction.value || fallback);
+    setMarkdown((source) => updatePendingDirective(source, pendingEditorAction, cleanValue, true));
+    setPendingEditorAction(null);
+    window.requestAnimationFrame(() => markdownEditorRef.current?.focus());
+  }
+
   function applyMarkdownCommand(command: MarkdownCommand) {
+    if (command === "marker") {
+      beginMarkerEdit();
+      return;
+    }
+    if (command === "comment") {
+      beginCommentEdit();
+      return;
+    }
+
     const editor = markdownEditorRef.current;
     const source = editor?.value ?? markdown;
     const start = editor?.selectionStart ?? source.length;
@@ -634,25 +739,9 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
         selectionOffsetStart = 2;
         selectionOffsetEnd = 4;
         break;
-      case "marker": {
-        const markerId = nextMarkerId();
-        const label = escapeDirectiveAttr(cleanSelection || "新标记");
-        replacement = `::marker[${markerId}]{type="section" label="${label}" note="现场跳转点"}`;
-        selectionOffsetStart = replacement.length;
-        selectionOffsetEnd = replacement.length;
-        break;
-      }
-      case "comment": {
-        const label = escapeDirectiveAttr(cleanSelection || "注释");
-        replacement = `::stage[${label}]{cue="给拍摄或后期看的提示"}`;
-        selectionOffsetStart = replacement.length;
-        selectionOffsetEnd = replacement.length;
-        break;
-      }
     }
 
-    const needsBlockBreak =
-      command === "heading" || command === "list" || command === "quote" || command === "table" || command === "marker" || command === "comment";
+    const needsBlockBreak = command === "heading" || command === "list" || command === "quote" || command === "table";
     const prefix = needsBlockBreak && start > 0 && !source.slice(0, start).endsWith("\n\n") ? "\n\n" : "";
     const suffix = needsBlockBreak && end < source.length && !source.slice(end).startsWith("\n\n") ? "\n\n" : "";
     const nextValue = `${source.slice(0, start)}${prefix}${replacement}${suffix}${source.slice(end)}`;
@@ -968,6 +1057,11 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           onJumpToMarker={jumpToMarker}
           onSpeedChange={setBoundedSpeed}
           onMarkdownCommand={applyMarkdownCommand}
+          onBeginMarkerEdit={beginMarkerEdit}
+          onBeginCommentEdit={beginCommentEdit}
+          pendingEditorAction={pendingEditorAction}
+          onPendingEditorValueChange={updatePendingEditorValue}
+          onConfirmPendingEditorAction={confirmPendingEditorAction}
           onPreviewScroll={(scrollTop) => {
             if (activeScrollClock?.state === "playing") {
               return;
@@ -1405,6 +1499,40 @@ function devicesWithPlayback(roomState: RoomState | null) {
 
 function escapeDirectiveAttr(value: string) {
   return value.replace(/["\\\n\r]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function escapeDirectiveLabel(value: string) {
+  return value.replace(/[\][\n\r]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function replaceDirectiveAttribute(directive: string, attr: "label" | "cue", value: string) {
+  const attrPattern = new RegExp(`${attr}="[^"]*"`);
+  if (attrPattern.test(directive)) {
+    return directive.replace(attrPattern, `${attr}="${value}"`);
+  }
+  return directive.replace(/\}$/, ` ${attr}="${value}"}`);
+}
+
+function updatePendingDirective(source: string, action: PendingEditorAction, value: string, finalize: boolean) {
+  const pendingPattern = escapeRegExp(action.pendingId);
+  const directivePattern =
+    action.kind === "marker"
+      ? new RegExp(`::marker\\[M\\d{3}\\]\\{[^}]*pending="${pendingPattern}"[^}]*\\}`)
+      : new RegExp(`:stage\\[[^\\]]*\\]\\{[^}]*pending="${pendingPattern}"[^}]*\\}`);
+
+  return source.replace(directivePattern, (directive) => {
+    let nextDirective = directive;
+    if (action.kind === "marker") {
+      nextDirective = replaceDirectiveAttribute(nextDirective, "label", value);
+    } else {
+      nextDirective = replaceDirectiveAttribute(replaceDirectiveAttribute(nextDirective, "cue", value), "label", value);
+    }
+    return finalize ? nextDirective.replace(/\s+pending="[^"]*"/, "") : nextDirective;
+  });
 }
 
 function Icon({ name }: { name: IconName }) {

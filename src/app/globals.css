@@ -1554,6 +1554,15 @@ input {
   padding: 0 var(--nike-xl);
 }
 
+.nike-editor-tools {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--nike-sm);
+  margin-bottom: var(--nike-sm);
+}
+
 .nike-title-input {
   min-width: 120px;
   max-width: 320px;
@@ -1894,9 +1903,55 @@ input {
   display: block;
 }
 
+.nike-quick-editor {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 360px) 34px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--nike-sm);
+  margin-bottom: var(--nike-sm);
+  border: 1px solid var(--nike-hl);
+  background: var(--nike-s1);
+  padding: var(--nike-sm);
+}
+
+.nike-quick-editor span {
+  color: var(--nike-mute);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.nike-quick-editor input {
+  min-width: 0;
+  border: 1px solid var(--nike-hl);
+  border-radius: var(--nike-pill);
+  outline: 0;
+  background: var(--nike-canvas);
+  color: var(--nike-ink);
+  padding: 6px var(--nike-md);
+  font-size: 13px;
+}
+
+.nike-quick-editor input:focus {
+  border-color: var(--nike-ink);
+}
+
+.nike-quick-editor button {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--nike-hl);
+  border-radius: var(--nike-full);
+  background: var(--nike-ink);
+  color: var(--nike-canvas);
+  cursor: pointer;
+}
+
 .nike-mde-ta {
   width: 100%;
-  height: 128px;
+  height: 184px;
   resize: vertical;
   border: 1px solid var(--nike-hl);
   border-radius: 0;

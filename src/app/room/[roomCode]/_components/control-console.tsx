@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import type { RoomJoinResult } from "@/domain/room/types";
 import type { MarkerAnchor, RenderBundle, RenderNode } from "@/modules/script-engine/types";
 
@@ -21,6 +21,11 @@ type PlayerLink = {
 };
 
 type MarkdownCommand = "heading" | "marker" | "comment";
+
+type PendingEditorAction = {
+  kind: "marker" | "comment";
+  value: string;
+};
 
 type ControlConsoleProps = {
   roomCode: string;
@@ -56,6 +61,11 @@ type ControlConsoleProps = {
   onJumpToMarker: (markerId: string) => void;
   onSpeedChange: (speed: number) => void;
   onMarkdownCommand: (command: MarkdownCommand) => void;
+  onBeginMarkerEdit: () => void;
+  onBeginCommentEdit: () => void;
+  pendingEditorAction: PendingEditorAction | null;
+  onPendingEditorValueChange: (value: string) => void;
+  onConfirmPendingEditorAction: () => void;
   onPreviewScroll: (scrollTop: number) => void;
 };
 
@@ -93,13 +103,25 @@ export function ControlConsole({
   onJumpToMarker,
   onSpeedChange,
   onMarkdownCommand,
+  onBeginMarkerEdit,
+  onBeginCommentEdit,
+  pendingEditorAction,
+  onPendingEditorValueChange,
+  onConfirmPendingEditorAction,
   onPreviewScroll,
 }: ControlConsoleProps) {
   const [view, setView] = useState<"render" | "raw">("render");
-  const [editorOpen, setEditorOpen] = useState(false);
+  const quickInputRef = useRef<HTMLInputElement | null>(null);
 
   const markers = bundle?.markerIndex ?? [];
   const safePlayerLink = playerEntryLink ?? roomLinks[0];
+
+  useEffect(() => {
+    if (pendingEditorAction) {
+      quickInputRef.current?.focus();
+      quickInputRef.current?.select();
+    }
+  }, [pendingEditorAction]);
 
   return (
     <main className="nike-control">
@@ -154,25 +176,6 @@ export function ControlConsole({
             </div>
           </div>
 
-          <div className="nike-tb" data-od-id="toolbar">
-            <button className="nike-tlb" type="button" onClick={() => onMarkdownCommand("marker")}>
-              <StarIcon />
-              增加标记
-            </button>
-            <button className="nike-tlb" type="button" onClick={() => onMarkdownCommand("comment")}>
-              <CommentIcon />
-              增加注释
-            </button>
-            <div className="nike-t-sep" />
-            <button className="nike-tlb" type="button" onClick={() => onMarkdownCommand("heading")}>
-              标题
-            </button>
-            <button className="nike-t-save" type="button" onClick={onSaveVersion}>
-              <SaveIcon />
-              保存
-            </button>
-          </div>
-
           <div className={`nike-srw ${isPlaying ? "playing" : ""}`} data-od-id="script-render-wrapper">
             <div className="nike-iline" />
 
@@ -202,11 +205,64 @@ export function ControlConsole({
           </div>
 
           <div className="nike-mde-w" data-od-id="md-editor">
-            <button className="nike-mde-row" type="button" onClick={() => setEditorOpen((value) => !value)}>
+            <button className="nike-mde-row" type="button" onClick={() => markdownEditorRef.current?.focus()}>
               <span className="nike-mde-lbl">Markdown 原文编辑</span>
-              <span className={`nike-mde-caret ${editorOpen ? "open" : ""}`}>⌄</span>
+              <span className="nike-mde-caret open">⌄</span>
             </button>
-            <div className={`nike-mde-b ${editorOpen ? "open" : ""}`}>
+            <div className="nike-mde-b open">
+              <div className="nike-editor-tools" data-od-id="toolbar">
+                <button
+                  className="nike-tlb"
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={onBeginMarkerEdit}
+                >
+                  <StarIcon />
+                  增加标记
+                </button>
+                <button
+                  className="nike-tlb"
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={onBeginCommentEdit}
+                >
+                  <CommentIcon />
+                  增加注释
+                </button>
+                <div className="nike-t-sep" />
+                <button
+                  className="nike-tlb"
+                  type="button"
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => onMarkdownCommand("heading")}
+                >
+                  标题
+                </button>
+                <button className="nike-t-save" type="button" onClick={onSaveVersion}>
+                  <SaveIcon />
+                  保存
+                </button>
+              </div>
+              {pendingEditorAction && (
+                <div className="nike-quick-editor">
+                  <span>{pendingEditorAction.kind === "marker" ? "标记内容" : "注释内容"}</span>
+                  <input
+                    ref={quickInputRef}
+                    value={pendingEditorAction.value}
+                    onChange={(event) => onPendingEditorValueChange(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        onConfirmPendingEditorAction();
+                      }
+                    }}
+                    placeholder={pendingEditorAction.kind === "marker" ? "输入标记名称" : "输入注释内容"}
+                  />
+                  <button type="button" title="完成" onClick={onConfirmPendingEditorAction}>
+                    <CheckIcon />
+                  </button>
+                </div>
+              )}
               <textarea
                 ref={markdownEditorRef}
                 className="nike-mde-ta"
@@ -457,6 +513,14 @@ function SaveIcon() {
         strokeLinejoin="round"
       />
       <rect x="3.5" y="1.5" width="4" height="2.5" rx=".3" stroke="currentColor" strokeWidth="1" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <path d="m2 6.2 2.4 2.3L10 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
