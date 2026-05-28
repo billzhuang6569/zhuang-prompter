@@ -493,6 +493,8 @@ input {
 
 .control-document-panel {
   min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
 }
 
@@ -555,13 +557,119 @@ input {
 
 .control-document-panel .script-surface {
   width: 100%;
-  height: calc(100% - 72px);
-  min-height: 540px;
+  height: 100%;
+  min-height: 0;
   margin: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   padding: 0;
+}
+
+.markdown-editor-workbench {
+  min-height: 540px;
+  display: grid;
+  grid-template-columns: minmax(320px, 0.86fr) minmax(0, 1.14fr);
+  overflow: hidden;
+}
+
+.markdown-source-pane,
+.markdown-preview-pane {
+  min-width: 0;
+  min-height: 0;
+}
+
+.markdown-source-pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border-right: 1px solid rgb(255 255 255 / 10%);
+  background: rgb(3 4 4 / 34%);
+}
+
+.pane-heading {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid rgb(255 255 255 / 8%);
+  padding: 0 18px;
+}
+
+.pane-heading strong {
+  color: #f4f3ef;
+  font-size: 14px;
+}
+
+.text-save-button {
+  min-height: 34px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 5%);
+  color: #f2f1eb;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.text-save-button:hover {
+  border-color: rgb(240 75 8 / 55%);
+  color: #fff;
+}
+
+.markdown-editor-textarea {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+  border: 0;
+  outline: 0;
+  resize: none;
+  background: transparent;
+  color: #e7e5dc;
+  padding: 24px 22px;
+  font-family: var(--font-geist-mono), "SFMono-Regular", Consolas, monospace;
+  font-size: 15px;
+  line-height: 1.78;
+  caret-color: #ff5a13;
+}
+
+.markdown-editor-textarea::selection {
+  background: rgb(255 91 19 / 28%);
+}
+
+.version-note-input {
+  width: calc(100% - 36px);
+  min-height: 42px;
+  margin: 0 18px 18px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 5%);
+  color: #f4f3ef;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.markdown-preview-pane {
+  background: radial-gradient(circle at 50% 44%, rgb(255 255 255 / 5%), transparent 24rem);
+}
+
+.markdown-preview-pane .render-bundle-layout {
+  grid-template-columns: minmax(0, 1fr) 112px;
+}
+
+.markdown-preview-pane .marker-index-panel {
+  padding-inline: 14px;
+}
+
+.markdown-preview-pane .script-surface.has-center-guide .render-bundle-layout::before {
+  right: 112px;
+}
+
+.markdown-preview-pane .script-surface.has-center-guide .render-bundle-layout::after {
+  right: calc(112px + 50%);
+  white-space: nowrap;
 }
 
 .control-document-panel .script-header {
@@ -1202,6 +1310,21 @@ input {
     height: auto;
   }
 
+  .markdown-editor-workbench {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  .markdown-source-pane {
+    min-height: 360px;
+    border-right: 0;
+    border-bottom: 1px solid rgb(255 255 255 / 10%);
+  }
+
+  .markdown-preview-pane {
+    min-height: 520px;
+  }
+
   .control-document-panel .render-bundle-layout {
     grid-template-columns: 1fr;
   }
@@ -1251,6 +1374,965 @@ input {
   height: 9px;
   border-radius: 999px;
   background: var(--accent);
+}
+
+.nike-control {
+  --nike-canvas: #111;
+  --nike-s1: #1a1a1a;
+  --nike-s2: #222;
+  --nike-s3: #2a2a2a;
+  --nike-ink: #f5f5f5;
+  --nike-ink2: #9e9ea0;
+  --nike-mute: #707072;
+  --nike-hl: #2c2c2c;
+  --nike-ok: #1eaa52;
+  --nike-info: #4493f8;
+  --nike-fm: "SF Mono", Menlo, ui-monospace, "Courier New", monospace;
+  --nike-xs: 4px;
+  --nike-sm: 8px;
+  --nike-md: 12px;
+  --nike-lg: 18px;
+  --nike-xl: 24px;
+  --nike-xxl: 30px;
+  --nike-sec: 48px;
+  --nike-pill: 30px;
+  --nike-full: 9999px;
+  --nike-t: 110ms ease;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: 40px 1fr;
+  overflow: hidden;
+  background: var(--nike-canvas);
+  color: var(--nike-ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.nike-control button,
+.nike-control input,
+.nike-control textarea {
+  font: inherit;
+}
+
+.nike-ubar {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border-bottom: 1px solid var(--nike-hl);
+  background: var(--nike-s1);
+  padding: 0 var(--nike-xl);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.nike-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--nike-sm);
+  margin-right: var(--nike-xl);
+  color: var(--nike-ink);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.nike-brand-ic {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--nike-full);
+  background: var(--nike-ink);
+  flex: 0 0 auto;
+}
+
+.nike-u-div {
+  width: 1px;
+  height: 13px;
+  background: var(--nike-hl);
+  margin: 0 var(--nike-lg);
+}
+
+.nike-u-it {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--nike-mute);
+  white-space: nowrap;
+}
+
+.nike-u-value {
+  color: var(--nike-ink);
+  font-family: var(--nike-fm);
+  letter-spacing: 0.08em;
+}
+
+.nike-u-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--nike-full);
+  background: var(--nike-ok);
+  animation: nike-udot 2.4s infinite;
+}
+
+.nike-u-dot.is-muted {
+  background: var(--nike-mute);
+}
+
+@keyframes nike-udot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 0.3;
+  }
+}
+
+.nike-u-ok {
+  color: var(--nike-ok);
+}
+
+.nike-u-sp {
+  flex: 1;
+}
+
+.nike-u-did {
+  max-width: 260px;
+  overflow: hidden;
+  color: var(--nike-mute);
+  font-family: var(--nike-fm);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nike-top-btn {
+  margin-left: var(--nike-lg);
+  border: 1px solid var(--nike-hl);
+  border-radius: var(--nike-pill);
+  background: transparent;
+  color: var(--nike-mute);
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.nike-top-btn:hover {
+  border-color: var(--nike-ink);
+  color: var(--nike-ink);
+}
+
+.nike-main {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 272px;
+  overflow: hidden;
+}
+
+.nike-lp {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--nike-hl);
+}
+
+.nike-shdr,
+.nike-tb {
+  height: 48px;
+  display: flex;
+  align-items: center;
+  gap: var(--nike-sm);
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--nike-hl);
+  background: var(--nike-canvas);
+  padding: 0 var(--nike-xl);
+}
+
+.nike-title-input {
+  min-width: 120px;
+  max-width: 320px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--nike-ink);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.nike-bdg {
+  border: 1px solid var(--nike-hl);
+  border-radius: var(--nike-pill);
+  color: var(--nike-mute);
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.nike-bdg-ok {
+  color: var(--nike-ok);
+}
+
+.nike-bdg-ink {
+  color: var(--nike-ink);
+}
+
+.nike-vtabs {
+  display: flex;
+  gap: var(--nike-xs);
+  margin-left: auto;
+}
+
+.nike-vtab,
+.nike-tlb,
+.nike-t-save,
+.nike-mde-row,
+.nike-mde-save,
+.nike-stpb,
+.nike-play-btn,
+.nike-sadjb,
+.nike-srowb,
+.nike-mkb,
+.nike-vib,
+.nike-btn,
+.nike-qrb,
+.nike-ql-v,
+.nike-mtag {
+  cursor: pointer;
+}
+
+.nike-vtab {
+  border: 1px solid var(--nike-hl);
+  border-radius: var(--nike-pill);
+  background: transparent;
+  color: var(--nike-mute);
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all var(--nike-t);
+}
+
+.nike-vtab.on {
+  background: var(--nike-ink);
+  border-color: var(--nike-ink);
+  color: var(--nike-canvas);
+}
+
+.nike-vtab:hover:not(.on) {
+  color: var(--nike-ink);
+}
+
+.nike-tlb {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--nike-hl);
+  border-radius: var(--nike-pill);
+  background: transparent;
+  color: var(--nike-mute);
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all var(--nike-t);
+}
+
+.nike-tlb:hover {
+  border-color: var(--nike-ink);
+  color: var(--nike-ink);
+}
+
+.nike-t-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--nike-hl);
+}
+
+.nike-t-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  border: 0;
+  border-radius: var(--nike-pill);
+  background: var(--nike-ink);
+  color: var(--nike-canvas);
+  padding: 6px 20px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.nike-t-save:hover {
+  opacity: 0.82;
+}
+
+.nike-srw {
+  position: relative;
+  min-height: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.nike-iline {
+  position: absolute;
+  z-index: 10;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--nike-info) 18%, var(--nike-info) 82%, transparent);
+  box-shadow: 0 0 12px rgb(68 147 248 / 45%);
+  pointer-events: none;
+}
+
+.nike-iline::before,
+.nike-iline::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--nike-full);
+  background: var(--nike-info);
+  box-shadow: 0 0 6px rgb(68 147 248 / 70%);
+}
+
+.nike-iline::before {
+  left: var(--nike-sec);
+}
+
+.nike-iline::after {
+  right: var(--nike-sec);
+}
+
+.nike-srw.playing .nike-iline {
+  animation: nike-ipulse 2s ease-in-out infinite;
+}
+
+@keyframes nike-ipulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.nike-sr {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--nike-sec);
+}
+
+.nike-sr::-webkit-scrollbar,
+.nike-rp::-webkit-scrollbar {
+  width: 3px;
+}
+
+.nike-sr::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.nike-sr::-webkit-scrollbar-thumb,
+.nike-rp::-webkit-scrollbar-thumb {
+  background: var(--nike-hl);
+  border-radius: 1px;
+}
+
+.nike-sc {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.nike-sc h1 {
+  margin-bottom: var(--nike-md);
+  color: var(--nike-ink);
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.nike-sc h2 {
+  margin: var(--nike-xxl) 0 var(--nike-sm);
+  color: var(--nike-ink);
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.nike-sc p {
+  max-width: 60ch;
+  margin-bottom: var(--nike-lg);
+  color: var(--nike-ink);
+  font-size: 18px;
+  font-weight: 400;
+  line-height: 1.65;
+}
+
+.nike-mtag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 8px 8px var(--nike-sm) 0;
+  border: 1px solid var(--nike-hl);
+  border-radius: var(--nike-pill);
+  background: transparent;
+  color: var(--nike-mute);
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all var(--nike-t);
+}
+
+.nike-mtag.inline {
+  margin: 0 8px;
+  vertical-align: middle;
+}
+
+.nike-mtag:hover {
+  border-color: var(--nike-ink);
+  color: var(--nike-ink);
+}
+
+.nike-dot-mini,
+.nike-scue-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--nike-full);
+  background: currentColor;
+}
+
+.nike-scue {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: var(--nike-md);
+  border: 1px solid var(--nike-hl);
+  border-radius: var(--nike-pill);
+  color: var(--nike-mute);
+  padding: 3px 12px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.nike-scue.inline {
+  margin-left: 8px;
+}
+
+.nike-scue-dot {
+  color: var(--nike-ok);
+  background: var(--nike-ok);
+}
+
+.nike-bottom-space {
+  height: 280px;
+}
+
+.nike-raw {
+  max-width: 640px;
+  margin: 0 auto;
+  background: transparent;
+  color: var(--nike-ink);
+  font-family: var(--nike-fm);
+  font-size: 12px;
+  line-height: 1.72;
+  white-space: pre-wrap;
+}
+
+.nike-mde-w {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--nike-hl);
+  background: var(--nike-canvas);
+}
+
+.nike-mde-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  border-bottom: 1px solid var(--nike-hl);
+  background: transparent;
+  color: inherit;
+  padding: var(--nike-lg) var(--nike-xl);
+  text-align: left;
+  transition: background var(--nike-t);
+}
+
+.nike-mde-row:hover {
+  background: var(--nike-s1);
+}
+
+.nike-mde-lbl {
+  color: var(--nike-ink);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.nike-mde-caret {
+  color: var(--nike-mute);
+  transition: transform var(--nike-t);
+}
+
+.nike-mde-caret.open {
+  transform: rotate(180deg);
+}
+
+.nike-mde-b {
+  display: none;
+  padding: var(--nike-md) var(--nike-xl) var(--nike-xl);
+}
+
+.nike-mde-b.open {
+  display: block;
+}
+
+.nike-mde-ta {
+  width: 100%;
+  height: 128px;
+  resize: vertical;
+  border: 1px solid var(--nike-hl);
+  border-radius: 0;
+  outline: 0;
+  background: var(--nike-s1);
+  color: var(--nike-ink);
+  padding: var(--nike-md);
+  font-family: var(--nike-fm);
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.nike-mde-ta:focus,
+.nike-mde-note:focus {
+  border-color: var(--nike-ink);
+}
+
+.nike-mde-acts {
+  display: flex;
+  gap: var(--nike-sm);
+  margin-top: var(--nike-sm);
+}
+
+.nike-mde-note {
+  flex: 1;
+  border: 1px solid var(--nike-hl);
+  border-radius: var(--nike-pill);
+  outline: 0;
+  background: var(--nike-s1);
+  color: var(--nike-ink);
+  padding: 6px var(--nike-lg);
+  font-size: 13px;
+}
+
+.nike-mde-note::placeholder {
+  color: var(--nike-mute);
+}
+
+.nike-mde-save,
+.nike-sadjb,
+.nike-srowb,
+.nike-mkb,
+.nike-vib,
+.nike-btn {
+  border: 1px solid var(--nike-hl);
+  border-radius: var(--nike-pill);
+  background: transparent;
+  color: var(--nike-mute);
+  font-size: 12px;
+  font-weight: 500;
+  transition: all var(--nike-t);
+}
+
+.nike-mde-save {
+  padding: 6px 16px;
+  white-space: nowrap;
+}
+
+.nike-mde-save:hover,
+.nike-sadjb:hover,
+.nike-srowb:hover,
+.nike-mkb:hover,
+.nike-vib:hover,
+.nike-btn:hover {
+  border-color: var(--nike-ink);
+  color: var(--nike-ink);
+}
+
+.nike-rp {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: var(--nike-canvas);
+}
+
+.nike-psec {
+  border-bottom: 1px solid var(--nike-hl);
+  padding: var(--nike-xl) var(--nike-lg);
+}
+
+.nike-psec:last-child {
+  border-bottom: 0;
+}
+
+.nike-ph {
+  margin-bottom: var(--nike-md);
+  color: var(--nike-mute);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.nike-pb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--nike-md);
+  margin-bottom: var(--nike-lg);
+}
+
+.nike-play-btn {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--nike-full);
+  background: var(--nike-ink);
+  color: var(--nike-canvas);
+}
+
+.nike-play-btn:hover {
+  opacity: 0.82;
+}
+
+.nike-stpb {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--nike-hl);
+  border-radius: var(--nike-full);
+  background: transparent;
+  color: var(--nike-mute);
+  font-size: 24px;
+  line-height: 1;
+  transition: all var(--nike-t);
+}
+
+.nike-stpb:hover {
+  border-color: var(--nike-ink);
+  color: var(--nike-ink);
+}
+
+.nike-spdr {
+  display: flex;
+  align-items: center;
+  gap: var(--nike-sm);
+  margin-bottom: var(--nike-sm);
+}
+
+.nike-spd-l {
+  width: 32px;
+  flex: 0 0 auto;
+  color: var(--nike-mute);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.nike-spdr input[type="range"] {
+  flex: 1;
+  height: 1px;
+  appearance: none;
+  outline: none;
+  background: var(--nike-hl);
+}
+
+.nike-spdr input[type="range"]::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  appearance: none;
+  border-radius: var(--nike-full);
+  background: var(--nike-ink);
+}
+
+.nike-spd-v {
+  width: 48px;
+  flex: 0 0 auto;
+  color: var(--nike-ink);
+  font-family: var(--nike-fm);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: right;
+}
+
+.nike-sadj,
+.nike-srow,
+.nike-qr-acts {
+  display: flex;
+  gap: var(--nike-sm);
+  margin-top: var(--nike-sm);
+}
+
+.nike-sadjb,
+.nike-srowb {
+  flex: 1;
+  padding: 6px 0;
+  font-family: var(--nike-fm);
+  font-size: 11px;
+  text-align: center;
+}
+
+.nike-mkg {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nike-sm);
+}
+
+.nike-mkb {
+  padding: 5px 12px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.nike-vl {
+  display: flex;
+  flex-direction: column;
+}
+
+.nike-vi {
+  display: flex;
+  align-items: center;
+  gap: var(--nike-md);
+  border-bottom: 1px solid var(--nike-hl);
+  padding: 10px var(--nike-sm);
+  transition: background var(--nike-t);
+}
+
+.nike-vi:hover,
+.nike-vi.cur {
+  background: var(--nike-s1);
+}
+
+.nike-vi:last-child {
+  border-bottom: 0;
+}
+
+.nike-vi-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.nike-vi-name {
+  overflow: hidden;
+  color: var(--nike-ink);
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nike-vi-meta {
+  color: var(--nike-mute);
+  font-family: var(--nike-fm);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.nike-vi.cur .nike-vi-meta {
+  color: var(--nike-ok);
+}
+
+.nike-vib {
+  flex: 0 0 auto;
+  padding: 3px 10px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.nike-empty {
+  color: var(--nike-mute);
+  font-size: 12px;
+}
+
+.nike-qra {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--nike-md);
+}
+
+.nike-qrb {
+  width: 68px;
+  height: 68px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid var(--nike-hl);
+  border-radius: 0;
+  background: #fff;
+  padding: 0;
+}
+
+.nike-qrb img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.nike-qrl {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--nike-sm);
+}
+
+.nike-ql {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.nike-ql-lbl {
+  color: var(--nike-mute);
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.nike-ql-v {
+  width: 100%;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: var(--nike-ink2);
+  padding: 0;
+  font-family: var(--nike-fm);
+  font-size: 10px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nike-ql-v:hover {
+  color: var(--nike-ink);
+}
+
+.nike-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 7px var(--nike-lg);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.nike-btn-ink {
+  background: var(--nike-ink);
+  border-color: var(--nike-ink);
+  color: var(--nike-canvas);
+}
+
+.nike-btn-ink:hover {
+  opacity: 0.82;
+  color: var(--nike-canvas);
+}
+
+.qrm {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 85%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+.qrm.open {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.qrm-in {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  border: 1px solid #2c2c2c;
+  background: #1a1a1a;
+  padding: 48px;
+}
+
+.qrm-h {
+  color: #f5f5f5;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.qrm-card {
+  display: inline-flex;
+  border: 1px solid #2c2c2c;
+  background: #fff;
+  padding: 14px;
+}
+
+.qrm-card img {
+  width: 180px;
+  height: 180px;
+}
+
+.qrm-url {
+  max-width: 320px;
+  color: #707072;
+  font-family: var(--nike-fm, "SF Mono", Menlo, monospace);
+  font-size: 11px;
+  text-align: center;
+  word-break: break-all;
+}
+
+@media (max-width: 960px) {
+  .nike-control {
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
+  }
+
+  .nike-ubar,
+  .nike-shdr,
+  .nike-tb {
+    height: auto;
+    flex-wrap: wrap;
+    padding: 14px;
+  }
+
+  .nike-main {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  .nike-lp,
+  .nike-rp {
+    overflow: visible;
+  }
+
+  .nike-srw {
+    min-height: 620px;
+  }
 }
 
 .status-pill.connected span,

@@ -13,6 +13,7 @@ import type {
 } from "@/shared/protocol";
 import type { RenderBundle } from "@/modules/script-engine";
 import { parseMarkdown } from "@/modules/script-engine";
+import { ControlConsole } from "./control-console";
 import { RenderBundleView } from "./render-bundle-view";
 
 type RoomClientProps = {
@@ -96,6 +97,20 @@ type IconName =
   | "table"
   | "save";
 
+type MarkdownCommand =
+  | "heading"
+  | "bold"
+  | "italic"
+  | "strike"
+  | "list"
+  | "quote"
+  | "code"
+  | "link"
+  | "image"
+  | "table"
+  | "marker"
+  | "comment";
+
 type WakeLockSentinelLike = EventTarget & {
   released: boolean;
   release: () => Promise<void>;
@@ -118,6 +133,8 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const wakeLockReleaseHandlerRef = useRef<(() => void) | null>(null);
   const wakeLockWantedRef = useRef(false);
   const scrollClockRef = useRef<ScrollClock | null>(null);
+  const markdownEditorRef = useRef<HTMLTextAreaElement | null>(null);
+  const controlPreviewScrollRef = useRef<HTMLDivElement | null>(null);
   const [connection, setConnection] = useState<ConnectionState>("joining");
   const [joinResult, setJoinResult] = useState<RoomJoinResult | null>(null);
   const [roomState, setRoomState] = useState<RoomState | null>(null);
@@ -528,14 +545,129 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     sendScrollClock("paused", targetOffset, 0, { type: "marker", markerId, textHash: marker.textHash });
   }
 
-  function insertMarkdownSnippet(kind: "marker" | "comment") {
-    if (kind === "marker") {
-      const nextIndex = (bundle?.markerIndex.length ?? 0) + 1;
-      const markerId = `M${nextIndex.toString().padStart(3, "0")}`;
-      setMarkdown((value) => `${value.trimEnd()}\n\n::marker[${markerId}]{type="section" label="新标记" note="现场跳转点"}\n`);
-      return;
+  function nextMarkerId() {
+    const usedIds = new Set(bundle?.markerIndex.map((marker) => marker.markerId) ?? []);
+    let nextIndex = (bundle?.markerIndex.length ?? 0) + 1;
+    let markerId = `M${nextIndex.toString().padStart(3, "0")}`;
+    while (usedIds.has(markerId)) {
+      nextIndex += 1;
+      markerId = `M${nextIndex.toString().padStart(3, "0")}`;
     }
-    setMarkdown((value) => `${value.trimEnd()}\n\n::stageCue[注释]{cue="给拍摄或后期看的提示"}\n`);
+    return markerId;
+  }
+
+  function applyMarkdownCommand(command: MarkdownCommand) {
+    const editor = markdownEditorRef.current;
+    const source = editor?.value ?? markdown;
+    const start = editor?.selectionStart ?? source.length;
+    const end = editor?.selectionEnd ?? source.length;
+    const selected = source.slice(start, end);
+    const cleanSelection = selected.trim();
+
+    let replacement = "";
+    let selectionOffsetStart = 0;
+    let selectionOffsetEnd = 0;
+
+    const wrap = (before: string, after = before, placeholder = "文字") => {
+      const body = selected || placeholder;
+      replacement = `${before}${body}${after}`;
+      selectionOffsetStart = before.length;
+      selectionOffsetEnd = before.length + body.length;
+    };
+
+    switch (command) {
+      case "heading":
+        replacement = `## ${cleanSelection || "小标题"}`;
+        selectionOffsetStart = 3;
+        selectionOffsetEnd = replacement.length;
+        break;
+      case "bold":
+        wrap("**", "**", "加粗文字");
+        break;
+      case "italic":
+        wrap("*", "*", "斜体文字");
+        break;
+      case "strike":
+        wrap("~~", "~~", "删除线文字");
+        break;
+      case "list":
+        replacement = selected
+          ? selected
+              .split("\n")
+              .map((line) => (line.trim() ? `- ${line.replace(/^[-*]\s+/, "")}` : line))
+              .join("\n")
+          : "- 列表项";
+        selectionOffsetStart = replacement.startsWith("- ") ? 2 : 0;
+        selectionOffsetEnd = replacement.length;
+        break;
+      case "quote":
+        replacement = selected
+          ? selected
+              .split("\n")
+              .map((line) => (line.trim() ? `> ${line.replace(/^>\s?/, "")}` : line))
+              .join("\n")
+          : "> 引用内容";
+        selectionOffsetStart = replacement.startsWith("> ") ? 2 : 0;
+        selectionOffsetEnd = replacement.length;
+        break;
+      case "code":
+        if (selected.includes("\n")) {
+          replacement = `\`\`\`\n${selected || "代码"}\n\`\`\``;
+          selectionOffsetStart = 4;
+          selectionOffsetEnd = replacement.length - 4;
+        } else {
+          wrap("`", "`", "代码");
+        }
+        break;
+      case "link":
+        replacement = `[${cleanSelection || "链接文字"}](https://example.com)`;
+        selectionOffsetStart = 1;
+        selectionOffsetEnd = 1 + (cleanSelection || "链接文字").length;
+        break;
+      case "image":
+        replacement = `![${cleanSelection || "图片说明"}](https://example.com/image.png)`;
+        selectionOffsetStart = 2;
+        selectionOffsetEnd = 2 + (cleanSelection || "图片说明").length;
+        break;
+      case "table":
+        replacement = `| 项目 | 内容 |\n| --- | --- |\n| 标题 | 说明 |`;
+        selectionOffsetStart = 2;
+        selectionOffsetEnd = 4;
+        break;
+      case "marker": {
+        const markerId = nextMarkerId();
+        const label = escapeDirectiveAttr(cleanSelection || "新标记");
+        replacement = `::marker[${markerId}]{type="section" label="${label}" note="现场跳转点"}`;
+        selectionOffsetStart = replacement.length;
+        selectionOffsetEnd = replacement.length;
+        break;
+      }
+      case "comment": {
+        const label = escapeDirectiveAttr(cleanSelection || "注释");
+        replacement = `::stage[${label}]{cue="给拍摄或后期看的提示"}`;
+        selectionOffsetStart = replacement.length;
+        selectionOffsetEnd = replacement.length;
+        break;
+      }
+    }
+
+    const needsBlockBreak =
+      command === "heading" || command === "list" || command === "quote" || command === "table" || command === "marker" || command === "comment";
+    const prefix = needsBlockBreak && start > 0 && !source.slice(0, start).endsWith("\n\n") ? "\n\n" : "";
+    const suffix = needsBlockBreak && end < source.length && !source.slice(end).startsWith("\n\n") ? "\n\n" : "";
+    const nextValue = `${source.slice(0, start)}${prefix}${replacement}${suffix}${source.slice(end)}`;
+    const nextStart = start + prefix.length + selectionOffsetStart;
+    const nextEnd = start + prefix.length + selectionOffsetEnd;
+
+    setMarkdown(nextValue);
+    window.requestAnimationFrame(() => {
+      markdownEditorRef.current?.focus();
+      markdownEditorRef.current?.setSelectionRange(nextStart, nextEnd);
+    });
+  }
+
+  function insertMarkdownSnippet(kind: "marker" | "comment") {
+    applyMarkdownCommand(kind);
   }
 
   useEffect(() => {
@@ -605,6 +737,39 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
     return () => window.cancelAnimationFrame(animationFrame);
   }, [activeScrollClockKey, joinResult, mode, reportPlayerState]);
+
+  useEffect(() => {
+    if (mode !== "control" || !activeScrollClockKey) {
+      return;
+    }
+
+    const scrollEl = controlPreviewScrollRef.current;
+    const clock = scrollClockRef.current;
+    if (!scrollEl || !clock) {
+      return;
+    }
+
+    if (clock.state !== "playing") {
+      const offset = Math.max(0, clock.offsetPx);
+      scrollEl.scrollTop = offset;
+      setPlaybackPositionPx(offset);
+      playbackPositionRef.current = offset;
+      return;
+    }
+
+    let animationFrame = 0;
+    const tick = () => {
+      const elapsedSeconds = Math.max(0, Date.now() - clock.issuedAt) / 1000;
+      const position = Math.max(0, clock.offsetPx + elapsedSeconds * clock.velocityPxPerSecond);
+      scrollEl.scrollTop = position;
+      setPlaybackPositionPx(position);
+      playbackPositionRef.current = position;
+      animationFrame = window.requestAnimationFrame(tick);
+    };
+
+    animationFrame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [activeScrollClockKey, mode]);
 
   useEffect(() => {
     if (mode !== "player") {
@@ -751,7 +916,86 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     );
   }
 
+  const isControlPlaying = activeScrollClock?.state === "playing";
+  const setBoundedSpeed = (nextSpeed: number) => {
+    const boundedSpeed = Math.max(10, Math.min(150, Math.round(nextSpeed)));
+    setSpeed(boundedSpeed);
+    if (activeScrollClock?.state === "playing") {
+      playFromCurrentOffset(boundedSpeed);
+    }
+  };
+
   if (mode === "control") {
+    return (
+      <>
+        <ControlConsole
+          roomCode={roomCode}
+          connectionLabel={connection === "connected" ? "已连接" : connection}
+          isConnected={connection === "connected"}
+          deviceCount={devices.length}
+          joinResult={joinResult}
+          projectName={projectName}
+          setProjectName={setProjectName}
+          draftRevision={scriptDraft?.draftRevision}
+          parseStatus={scriptDraft?.parseStatus}
+          hasSavedVersion={versions.length > 0}
+          markdown={markdown}
+          setMarkdown={setMarkdown}
+          versionMessage={versionMessage}
+          setVersionMessage={setVersionMessage}
+          bundle={bundle}
+          versions={versions}
+          speed={speed}
+          isPlaying={isControlPlaying}
+          playerEntryLink={playerEntryLink}
+          roomLinks={roomLinks}
+          inviteStatus={inviteStatus}
+          previewScrollRef={controlPreviewScrollRef}
+          markdownEditorRef={markdownEditorRef}
+          onInvite={() => void invitePlayer()}
+          onOpenQr={setExpandedQrLink}
+          onSaveDraft={() => void saveDraft()}
+          onSaveVersion={() => void saveVersion()}
+          onRestoreVersion={(versionId) => void restoreVersion(versionId)}
+          onTogglePlay={() => {
+            if (isControlPlaying) {
+              pauseAtCurrentOffset();
+              return;
+            }
+            playFromCurrentOffset();
+          }}
+          onNudge={nudgePlayback}
+          onJumpToMarker={jumpToMarker}
+          onSpeedChange={setBoundedSpeed}
+          onMarkdownCommand={applyMarkdownCommand}
+          onPreviewScroll={(scrollTop) => {
+            if (activeScrollClock?.state === "playing") {
+              return;
+            }
+            setPlaybackPositionPx(Math.max(0, scrollTop));
+            playbackPositionRef.current = Math.max(0, scrollTop);
+          }}
+        />
+        {expandedQrLink && (
+          <div className="qrm open" role="dialog" aria-modal="true" aria-label="播放端入口" onClick={() => setExpandedQrLink(null)}>
+            <div className="qrm-in" onClick={(event) => event.stopPropagation()}>
+              <div className="qrm-h">播放端入口 · 扫码进入房间 {roomCode}</div>
+              <div className="qrm-card">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img alt={`${expandedQrLink.label} 播放端二维码`} src={`/api/qr?text=${encodeURIComponent(expandedQrLink.playerUrl)}`} />
+              </div>
+              <div className="qrm-url">{expandedQrLink.playerUrl}</div>
+              <button className="nike-btn" type="button" onClick={() => setExpandedQrLink(null)}>
+                关闭
+              </button>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  if ((process.env.NEXT_PUBLIC_LEGACY_CONTROL ?? "") === "1") {
     return (
       <main className="control-workspace">
         <header className="control-appbar">
@@ -853,34 +1097,34 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             <section className="control-document-panel" id="script">
               <div className="document-toolbar">
                 <div className="format-tools" aria-label="文稿格式工具栏">
-                  <button type="button" title="标题">
+                  <button type="button" title="标题" onClick={() => applyMarkdownCommand("heading")}>
                     <Icon name="heading" />
                   </button>
-                  <button type="button" title="加粗">
+                  <button type="button" title="加粗" onClick={() => applyMarkdownCommand("bold")}>
                     <Icon name="bold" />
                   </button>
-                  <button type="button" title="斜体">
+                  <button type="button" title="斜体" onClick={() => applyMarkdownCommand("italic")}>
                     <Icon name="italic" />
                   </button>
-                  <button type="button" title="删除线">
+                  <button type="button" title="删除线" onClick={() => applyMarkdownCommand("strike")}>
                     <Icon name="strike" />
                   </button>
-                  <button type="button" title="列表">
+                  <button type="button" title="列表" onClick={() => applyMarkdownCommand("list")}>
                     <Icon name="list" />
                   </button>
-                  <button type="button" title="引用">
+                  <button type="button" title="引用" onClick={() => applyMarkdownCommand("quote")}>
                     <Icon name="quote" />
                   </button>
-                  <button type="button" title="代码">
+                  <button type="button" title="代码" onClick={() => applyMarkdownCommand("code")}>
                     <Icon name="code" />
                   </button>
-                  <button type="button" title="链接">
+                  <button type="button" title="链接" onClick={() => applyMarkdownCommand("link")}>
                     <Icon name="link" />
                   </button>
-                  <button type="button" title="图片">
+                  <button type="button" title="图片" onClick={() => applyMarkdownCommand("image")}>
                     <Icon name="image" />
                   </button>
-                  <button type="button" title="表格">
+                  <button type="button" title="表格" onClick={() => applyMarkdownCommand("table")}>
                     <Icon name="table" />
                   </button>
                 </div>
@@ -900,25 +1144,37 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
                 </div>
               </div>
 
-              {bundle && (
-                <RenderBundleView bundle={bundle} variant="control" playbackPositionPx={playbackPositionPx} showCenterGuide />
-              )}
-
-              <details className="source-editor control-source-editor">
-                <summary>编辑 Markdown 原文</summary>
-                <textarea value={markdown} onChange={(event) => setMarkdown(event.target.value)} />
-                <div className="source-actions">
-                  <button className="chrome-button" type="button" onClick={saveDraft}>
-                    保存草稿
-                  </button>
+              <div className="markdown-editor-workbench">
+                <section className="markdown-source-pane" aria-label="Markdown 原文编辑">
+                  <div className="pane-heading">
+                    <strong>文稿编辑</strong>
+                    <button className="text-save-button" type="button" onClick={saveDraft}>
+                      保存草稿
+                    </button>
+                  </div>
+                  <textarea
+                    ref={markdownEditorRef}
+                    className="markdown-editor-textarea"
+                    value={markdown}
+                    onChange={(event) => setMarkdown(event.target.value)}
+                    spellCheck={false}
+                    placeholder="# 写下你的题词文稿"
+                  />
                   <input
+                    className="version-note-input"
                     aria-label="版本备注"
                     value={versionMessage}
                     onChange={(event) => setVersionMessage(event.target.value)}
                     placeholder="版本备注，例如：发布会开场版"
                   />
-                </div>
-              </details>
+                </section>
+
+                <section className="markdown-preview-pane" aria-label="播放端渲染预览">
+                  {bundle && (
+                    <RenderBundleView bundle={bundle} variant="control" playbackPositionPx={playbackPositionPx} showCenterGuide />
+                  )}
+                </section>
+              </div>
             </section>
 
             {bundle && (
@@ -1145,6 +1401,10 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
 function devicesWithPlayback(roomState: RoomState | null) {
   return Object.values(roomState?.devices ?? {}).filter((device) => device.playbackState);
+}
+
+function escapeDirectiveAttr(value: string) {
+  return value.replace(/["\\\n\r]/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function Icon({ name }: { name: IconName }) {

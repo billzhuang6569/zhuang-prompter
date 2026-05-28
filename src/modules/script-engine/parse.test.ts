@@ -40,6 +40,13 @@ test("standalone and block stage cues do not enter speech index", () => {
   );
 });
 
+test("stageCue alias is accepted for editor inserted comments", () => {
+  const bundle = parseMarkdown('::stageCue[注释]{cue="给拍摄或后期看的提示"}');
+
+  assert.equal(bundle.parseWarnings.length, 0);
+  assert.equal(bundle.htmlTree[0].type, "stageCue");
+});
+
 test("duplicate marker id creates parse warning", () => {
   const bundle = parseMarkdown(`::marker[M001]{type="section" label="开场"}
 ::marker[M001]{type="retake" label="重录"}`);

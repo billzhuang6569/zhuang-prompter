@@ -200,7 +200,7 @@ export function parseMarkdown(markdown: string, options: ParseOptions = {}): Ren
       return;
     }
 
-    if (isDirective(node, "stage")) {
+    if (isStageDirective(node)) {
       htmlTree.push({
         renderNodeId: `render_stage_${blockIndex}`,
         type: "stageCue",
@@ -236,7 +236,7 @@ export function parseMarkdown(markdown: string, options: ParseOptions = {}): Ren
 function collectUnsupportedDirectives(node: MarkdownNode, warnings: ParseWarning[]) {
   if (
     (node.type === "textDirective" || node.type === "leafDirective" || node.type === "containerDirective") &&
-    node.name !== "stage" &&
+    !isStageDirective(node) &&
     node.name !== "marker"
   ) {
     warnings.push({
@@ -266,7 +266,7 @@ function paragraphSegments(node: MarkdownNode) {
   }
 
   for (const child of node.children ?? []) {
-    if (isDirective(child, "stage")) {
+    if (isStageDirective(child)) {
       flush();
       flush(cueFromNode(child), child.label ?? toString(child));
       continue;
@@ -291,6 +291,10 @@ function isDirective(node: MarkdownNode, name: string) {
     (node.type === "textDirective" || node.type === "leafDirective" || node.type === "containerDirective") &&
     node.name === name
   );
+}
+
+function isStageDirective(node: MarkdownNode) {
+  return isDirective(node, "stage") || isDirective(node, "stageCue");
 }
 
 function markerFromNode(node: MarkdownNode): MarkerData {
