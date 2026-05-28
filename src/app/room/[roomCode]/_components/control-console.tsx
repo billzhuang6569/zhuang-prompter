@@ -415,13 +415,15 @@ function ControlRenderNode({ node, onJumpToMarker }: { node: RenderNode; onJumpT
   }
 
   return (
-    <p>
-      {node.inlineMarkers?.map((marker) => (
-        <MarkerTag key={marker.markerId} marker={marker} onJumpToMarker={onJumpToMarker} inline />
-      ))}
-      {node.text}
-      {node.cue && <StageCue label={cueText(node.cue)} inline />}
-    </p>
+    <div className={`nike-script-text ${node.type === "listItem" ? "is-list-item" : ""}`}>
+      <p>
+        {node.inlineMarkers?.map((marker) => (
+          <MarkerTag key={marker.markerId} marker={marker} onJumpToMarker={onJumpToMarker} inline />
+        ))}
+        {node.text}
+      </p>
+      {node.cue && <StageCue label={cueText(node.cue)} />}
+    </div>
   );
 }
 
@@ -443,17 +445,24 @@ function MarkerTag({
   );
 }
 
-function StageCue({ label, inline = false }: { label: string; inline?: boolean }) {
+function StageCue({ label }: { label: string }) {
   return (
-    <span className={`nike-scue ${inline ? "inline" : ""}`}>
-      <span className="nike-scue-dot" />
+    <div className="nike-scue">
+      <span className="nike-scue-arrow">↳</span>
       {label}
-    </span>
+    </div>
   );
 }
 
 function cueText(cue: { label?: string; cue?: string; level?: string; duration?: string }) {
-  return [cue.label ?? cue.cue, cue.level, cue.duration].filter(Boolean).join(" · ");
+  const levelLabels: Record<string, string> = {
+    important: "重点",
+    warning: "注意",
+    soft: "轻声",
+  };
+  const level = cue.level ? (levelLabels[cue.level] ?? cue.level) : undefined;
+  const cueValue = cue.label ? undefined : cue.cue;
+  return [cue.label ?? cueValue, level, cue.duration].filter(Boolean).join(" · ");
 }
 
 function formatTime(value: number) {

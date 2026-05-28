@@ -1776,13 +1776,23 @@ input {
   font-weight: 500;
 }
 
-.nike-sc p {
-  max-width: 60ch;
+.nike-script-text {
   margin-bottom: var(--nike-lg);
+}
+
+.nike-sc p,
+.nike-script-text p {
+  max-width: 60ch;
+  margin-bottom: 0;
   color: var(--nike-ink);
   font-size: 18px;
   font-weight: 400;
   line-height: 1.65;
+}
+
+.nike-script-text.is-list-item p::before {
+  content: "• ";
+  color: var(--nike-mute);
 }
 
 .nike-mtag {
@@ -1810,8 +1820,7 @@ input {
   color: var(--nike-ink);
 }
 
-.nike-dot-mini,
-.nike-scue-dot {
+.nike-dot-mini {
   width: 5px;
   height: 5px;
   border-radius: var(--nike-full);
@@ -1819,25 +1828,21 @@ input {
 }
 
 .nike-scue {
-  display: inline-flex;
+  max-width: 60ch;
+  display: flex;
   align-items: center;
-  gap: 5px;
-  margin-bottom: var(--nike-md);
-  border: 1px solid var(--nike-hl);
-  border-radius: var(--nike-pill);
-  color: var(--nike-mute);
-  padding: 3px 12px;
-  font-size: 11px;
+  gap: 7px;
+  margin: 6px 0 0 1.3em;
+  color: var(--nike-ink2);
+  font-size: 13px;
   font-weight: 500;
+  line-height: 1.45;
 }
 
-.nike-scue.inline {
-  margin-left: 8px;
-}
-
-.nike-scue-dot {
+.nike-scue-arrow {
   color: var(--nike-ok);
-  background: var(--nike-ok);
+  font-family: var(--nike-fm);
+  font-size: 13px;
 }
 
 .nike-bottom-space {
