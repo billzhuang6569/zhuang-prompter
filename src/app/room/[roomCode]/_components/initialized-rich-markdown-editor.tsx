@@ -80,7 +80,7 @@ function MarkerDirectiveEditor({ mdastNode }: DirectiveEditorProps) {
       data-directive-kind="marker"
       data-marker-id={markerId}
       data-directive-text={text}
-      title="双击编辑标记"
+      title="点击编辑标记"
     >
       <span className="nike-dot-mini" />
       {markerId}
@@ -99,7 +99,7 @@ function NotesDirectiveEditor({ mdastNode }: DirectiveEditorProps) {
       contentEditable={false}
       data-directive-kind="notes"
       data-directive-text={text}
-      title="双击编辑注释"
+      title="点击编辑注释"
     >
       <span className="nike-scue-arrow">↳</span>
       {text}

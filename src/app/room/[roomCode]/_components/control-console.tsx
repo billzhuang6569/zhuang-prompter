@@ -541,7 +541,7 @@ export function ControlConsole({
                 className="nike-sr"
                 ref={previewScrollRef}
                 data-od-id="script-render"
-                onDoubleClick={beginExistingDirectiveEdit}
+                onClick={beginExistingDirectiveEdit}
                 onScroll={(event) => onPreviewScroll(event.currentTarget.scrollTop)}
               >
                 <div className="nike-sc nike-rich-editor-wrap">
