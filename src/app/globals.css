@@ -1755,7 +1755,7 @@ input {
   z-index: 30;
   width: min(360px, calc(100% - 40px));
   display: grid;
-  grid-template-columns: auto minmax(120px, 1fr) 34px;
+  grid-template-columns: auto minmax(120px, 1fr) 34px 34px;
   align-items: center;
   gap: var(--nike-sm);
   border: 1px solid rgb(68 147 248 / 45%);
@@ -1813,6 +1813,17 @@ input {
   background: var(--nike-ink);
   color: var(--nike-canvas);
   cursor: pointer;
+}
+
+.nike-floating-editor button.muted {
+  border: 1px solid var(--nike-hl);
+  background: var(--nike-s1);
+  color: var(--nike-mute);
+}
+
+.nike-floating-editor button.muted:hover {
+  border-color: var(--nike-ink);
+  color: var(--nike-ink);
 }
 
 @keyframes nike-ipulse {
@@ -1930,6 +1941,7 @@ input {
 }
 
 .nike-mdx-directive {
+  cursor: pointer;
   user-select: none;
 }
 

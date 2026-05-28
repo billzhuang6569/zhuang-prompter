@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type Dispatch, type RefObject, type SetStateAction } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type Dispatch,
+  type MouseEvent,
+  type RefObject,
+  type SetStateAction,
+} from "react";
 import type { MDXEditorMethods } from "@mdxeditor/editor";
 import type { RoomJoinResult } from "@/domain/room/types";
 import type { RenderBundle } from "@/modules/script-engine/types";
@@ -28,6 +37,10 @@ type PendingEditorAction = {
   kind: "marker" | "notes";
   pendingId?: string;
   value: string;
+  editTarget?: {
+    markerId?: string;
+    occurrence: number;
+  };
 };
 
 type EditorInsertionTarget = {
@@ -267,7 +280,11 @@ export function ControlConsole({
     if (richPendingEditorAction) {
       const fallback = richPendingEditorAction.kind === "marker" ? "标记点" : "提示内容";
       const cleanValue = escapeDirectiveAttr(richPendingEditorAction.value || fallback);
-      setMarkdown((source) => updatePendingDirective(source, richPendingEditorAction, cleanValue, true));
+      setMarkdown((source) =>
+        richPendingEditorAction.editTarget
+          ? updateExistingDirective(source, richPendingEditorAction, cleanValue)
+          : updatePendingDirective(source, richPendingEditorAction, cleanValue, true),
+      );
       setRichPendingEditorAction(null);
     } else {
       onConfirmPendingEditorAction();
@@ -281,10 +298,21 @@ export function ControlConsole({
       const cleanValue = escapeDirectiveAttr(value || fallback);
       const nextAction = { ...richPendingEditorAction, value };
       setRichPendingEditorAction(nextAction);
+      if (richPendingEditorAction.editTarget) {
+        return;
+      }
       setMarkdown((source) => updatePendingDirective(source, richPendingEditorAction, cleanValue, false));
       return;
     }
     onPendingEditorValueChange(value);
+  }
+
+  function cancelFloatingEditorAction() {
+    if (richPendingEditorAction?.pendingId && !richPendingEditorAction.editTarget) {
+      setMarkdown((source) => removePendingDirective(source, richPendingEditorAction));
+    }
+    setRichPendingEditorAction(null);
+    setFloatingEditorPosition(null);
   }
 
   function fallbackFloatingEditorPosition() {
@@ -330,6 +358,43 @@ export function ControlConsole({
     }
 
     return sourceIndex + clamp(selection.anchorOffset, 0, anchorText.length);
+  }
+
+  function beginExistingDirectiveEdit(event: MouseEvent<HTMLDivElement>) {
+    const target = event.target instanceof Element ? event.target.closest<HTMLElement>(".nike-mdx-directive") : null;
+    if (!target || !scriptSurfaceRef.current?.contains(target)) {
+      return;
+    }
+
+    const kind = target.dataset.directiveKind === "marker" ? "marker" : target.dataset.directiveKind === "notes" ? "notes" : null;
+    if (!kind) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const directiveElements = Array.from(
+      scriptSurfaceRef.current.querySelectorAll<HTMLElement>(`.nike-mdx-directive[data-directive-kind="${kind}"]`),
+    );
+    const occurrence = Math.max(0, directiveElements.indexOf(target));
+    const markerId = target.dataset.markerId;
+    const value = target.dataset.directiveText || directiveTextFromElement(target, kind);
+    const surfaceRect = scriptSurfaceRef.current.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+
+    setFloatingEditorPosition({
+      left: clamp(targetRect.left - surfaceRect.left, 20, Math.max(20, surfaceRect.width - 390)),
+      top: clamp(targetRect.bottom - surfaceRect.top + 10, 18, Math.max(18, surfaceRect.height - 72)),
+    });
+    setRichPendingEditorAction({
+      kind,
+      value,
+      editTarget: {
+        markerId,
+        occurrence,
+      },
+    });
   }
 
   return (
@@ -437,7 +502,15 @@ export function ControlConsole({
             <div className="nike-iline" />
             {activePendingEditorAction && floatingEditorPosition && (
               <div className="nike-floating-editor" style={{ left: floatingEditorPosition.left, top: floatingEditorPosition.top }}>
-                <span>{activePendingEditorAction.kind === "marker" ? "标记" : "注释"}</span>
+                <span>
+                  {activePendingEditorAction.editTarget
+                    ? activePendingEditorAction.kind === "marker"
+                      ? "编辑标记"
+                      : "编辑注释"
+                    : activePendingEditorAction.kind === "marker"
+                      ? "标记"
+                      : "注释"}
+                </span>
                 <input
                   ref={quickInputRef}
                   value={activePendingEditorAction.value}
@@ -447,9 +520,16 @@ export function ControlConsole({
                       event.preventDefault();
                       confirmFloatingEditorAction();
                     }
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      cancelFloatingEditorAction();
+                    }
                   }}
                   placeholder={activePendingEditorAction.kind === "marker" ? "输入标记文本" : "输入注释文本"}
                 />
+                <button className="muted" type="button" title="取消" onClick={cancelFloatingEditorAction}>
+                  <CloseIcon />
+                </button>
                 <button type="button" title="完成" onClick={confirmFloatingEditorAction}>
                   <CheckIcon />
                 </button>
@@ -461,6 +541,7 @@ export function ControlConsole({
                 className="nike-sr"
                 ref={previewScrollRef}
                 data-od-id="script-render"
+                onDoubleClick={beginExistingDirectiveEdit}
                 onScroll={(event) => onPreviewScroll(event.currentTarget.scrollTop)}
               >
                 <div className="nike-sc nike-rich-editor-wrap">
@@ -693,6 +774,60 @@ function updatePendingDirective(source: string, action: PendingEditorAction, val
   });
 }
 
+function removePendingDirective(source: string, action: PendingEditorAction) {
+  if (!action.pendingId) {
+    return source;
+  }
+  const pendingPattern = escapeRegExp(action.pendingId);
+  const directivePattern =
+    action.kind === "marker"
+      ? new RegExp(`\\n*::marker\\[(?:M)?\\d{2,3}\\]\\{[^}]*pending="${pendingPattern}"[^}]*\\}\\n*`)
+      : new RegExp(`\\n*::notes\\{[^}]*pending="${pendingPattern}"[^}]*\\}\\n*`);
+
+  return source.replace(directivePattern, "\n\n").replace(/\n{3,}/g, "\n\n").trimEnd();
+}
+
+function updateExistingDirective(source: string, action: PendingEditorAction, value: string) {
+  const target = action.editTarget;
+  if (!target) {
+    return source;
+  }
+
+  if (action.kind === "marker") {
+    return updateMarkerDirective(source, target.markerId, target.occurrence, value);
+  }
+
+  return updateNthDirectiveText(source, /:{1,3}(?:notes|stage|stageCue)(?:\[[^\]]*\])?\{[^}]*\}/g, target.occurrence, value);
+}
+
+function updateMarkerDirective(source: string, markerId: string | undefined, occurrence: number, value: string) {
+  const markerPattern = /:{1,2}marker\[([^\]]+)\]\{[^}]*\}/g;
+  let markerOccurrence = -1;
+  return source.replace(markerPattern, (directive, currentMarkerId: string) => {
+    markerOccurrence += 1;
+    const isTarget = markerId
+      ? currentMarkerId === markerId || normalizeMarkerId(currentMarkerId) === normalizeMarkerId(markerId)
+      : markerOccurrence === occurrence;
+    return isTarget ? replaceDirectiveAttribute(directive, "text", value) : directive;
+  });
+}
+
+function updateNthDirectiveText(source: string, pattern: RegExp, occurrence: number, value: string) {
+  let currentOccurrence = -1;
+  return source.replace(pattern, (directive) => {
+    currentOccurrence += 1;
+    return currentOccurrence === occurrence ? replaceDirectiveAttribute(directive, "text", value) : directive;
+  });
+}
+
+function directiveTextFromElement(element: HTMLElement, kind: "marker" | "notes") {
+  const text = (element.textContent ?? "").replace(/\s+/g, " ").trim();
+  if (kind === "marker") {
+    return text.replace(/^(?:M)?\d{2,3}\s*·?\s*/, "").trim() || "标记点";
+  }
+  return text.replace(/^↳\s*/, "").trim() || "提示内容";
+}
+
 function formatTime(value: number) {
   return new Date(value).toLocaleTimeString("zh-CN", { hour12: false });
 }
@@ -776,6 +911,14 @@ function CheckIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
       <path d="m2 6.2 2.4 2.3L10 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+      <path d="m3 3 6 6M9 3 3 9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
   );
 }

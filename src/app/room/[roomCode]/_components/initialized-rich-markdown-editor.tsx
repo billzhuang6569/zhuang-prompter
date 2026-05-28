@@ -74,7 +74,14 @@ function MarkerDirectiveEditor({ mdastNode }: DirectiveEditorProps) {
   const markerId = directiveLabel(node) || "00";
   const text = stringValue(attributes.text) || stringValue(attributes.label);
   return (
-    <span className="nike-mtag nike-mdx-directive" contentEditable={false}>
+    <span
+      className="nike-mtag nike-mdx-directive"
+      contentEditable={false}
+      data-directive-kind="marker"
+      data-marker-id={markerId}
+      data-directive-text={text}
+      title="双击编辑标记"
+    >
       <span className="nike-dot-mini" />
       {markerId}
       {text ? ` · ${text}` : ""}
@@ -87,7 +94,13 @@ function NotesDirectiveEditor({ mdastNode }: DirectiveEditorProps) {
   const attributes = directiveAttributes(node);
   const text = stringValue(attributes.text) || stringValue(attributes.label) || stringValue(attributes.cue) || directiveLabel(node) || "提示内容";
   return (
-    <span className="nike-scue nike-mdx-directive" contentEditable={false}>
+    <span
+      className="nike-scue nike-mdx-directive"
+      contentEditable={false}
+      data-directive-kind="notes"
+      data-directive-text={text}
+      title="双击编辑注释"
+    >
       <span className="nike-scue-arrow">↳</span>
       {text}
     </span>
