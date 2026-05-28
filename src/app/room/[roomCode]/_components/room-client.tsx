@@ -1237,6 +1237,8 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           playbackCenterRatio={playbackCenterRatio}
           speed={speed}
           isPlaying={isControlPlaying}
+          playerMirrorX={playerMirrorX}
+          playerMirrorY={playerMirrorY}
           playerEntryLink={playerEntryLink}
           roomLinks={roomLinks}
           inviteStatus={inviteStatus}
@@ -1257,6 +1259,8 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           onNudge={nudgePlayback}
           onJumpToMarker={jumpToMarker}
           onSpeedChange={setBoundedSpeed}
+          onPlayerMirrorXChange={setPlayerMirrorX}
+          onPlayerMirrorYChange={setPlayerMirrorY}
           onBeginMarkerEdit={beginMarkerEdit}
           onBeginCommentEdit={beginCommentEdit}
           pendingEditorAction={pendingEditorAction}

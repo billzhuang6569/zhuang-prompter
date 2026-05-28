@@ -72,6 +72,8 @@ type ControlConsoleProps = {
   playbackCenterRatio?: number;
   speed: number;
   isPlaying: boolean;
+  playerMirrorX: boolean;
+  playerMirrorY: boolean;
   playerEntryLink?: PlayerLink;
   roomLinks: PlayerLink[];
   inviteStatus: "idle" | "copied" | "fallback";
@@ -86,6 +88,8 @@ type ControlConsoleProps = {
   onNudge: (deltaPx: number) => void;
   onJumpToMarker: (markerId: string) => void;
   onSpeedChange: (speed: number) => void;
+  onPlayerMirrorXChange: (enabled: boolean) => void;
+  onPlayerMirrorYChange: (enabled: boolean) => void;
   onBeginMarkerEdit: (target?: EditorInsertionTarget) => void;
   onBeginCommentEdit: (target?: EditorInsertionTarget) => void;
   pendingEditorAction: PendingEditorAction | null;
@@ -113,6 +117,8 @@ export function ControlConsole({
   playbackCenterRatio,
   speed,
   isPlaying,
+  playerMirrorX,
+  playerMirrorY,
   playerEntryLink,
   roomLinks,
   inviteStatus,
@@ -127,6 +133,8 @@ export function ControlConsole({
   onNudge,
   onJumpToMarker,
   onSpeedChange,
+  onPlayerMirrorXChange,
+  onPlayerMirrorYChange,
   onBeginMarkerEdit,
   onBeginCommentEdit,
   pendingEditorAction,
@@ -691,6 +699,25 @@ export function ControlConsole({
               </button>
               <button className="nike-srowb" type="button" onClick={() => onNudge(160)}>
                 160px →
+              </button>
+            </div>
+            <div className="nike-control-label">播放端显示</div>
+            <div className="nike-srow">
+              <button
+                className="nike-srowb"
+                type="button"
+                aria-pressed={playerMirrorX}
+                onClick={() => onPlayerMirrorXChange(!playerMirrorX)}
+              >
+                水平镜像
+              </button>
+              <button
+                className="nike-srowb"
+                type="button"
+                aria-pressed={playerMirrorY}
+                onClick={() => onPlayerMirrorYChange(!playerMirrorY)}
+              >
+                垂直镜像
               </button>
             </div>
           </section>

@@ -2309,6 +2309,12 @@ input {
   color: var(--nike-ink);
 }
 
+.nike-srowb[aria-pressed="true"] {
+  border-color: rgb(94 234 212 / 44%);
+  background: rgb(20 184 166 / 12%);
+  color: #5eead4;
+}
+
 .nike-rp {
   min-width: 0;
   display: flex;
@@ -2426,6 +2432,15 @@ input {
   display: flex;
   gap: var(--nike-sm);
   margin-top: var(--nike-sm);
+}
+
+.nike-control-label {
+  margin-top: var(--nike-lg);
+  color: var(--nike-mute);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .nike-sadjb,
