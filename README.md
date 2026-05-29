@@ -1,118 +1,277 @@
-# 庄Sir 的提词器
+# 庄Sir的提词器
 
-Markdown-first teleprompter for recorded video production.
+一个为视频创作者、知识博主、课程录制者和小型拍摄团队设计的本地提词器。
 
-庄Sir 的提词器 lets one control computer manage a script while one or more player screens display the teleprompter on the same local network. It is designed for solo creators, small production teams, and script-heavy recording sessions.
+它的核心目标很简单：让你在一台电脑上编辑和控制文稿，让另一块屏幕、另一台电脑、iPad 或手机显示提词内容。整个过程优先在本地局域网内完成，不需要账号，不需要云端服务器，也不需要把文稿上传到第三方平台。
 
-## What It Does
+## 它适合谁
 
-- Create a local room for each shooting project.
-- Edit a script in a friendly rendered Markdown editor.
-- Add simple `marker` and `notes` directives for jump points and production cues.
-- Open a player screen from a QR code or local network URL.
-- Control play, pause, speed, start/end, marker jumps, mirror mode, and player display.
-- Save local drafts and versions.
-- Use experimental voice-assisted scrolling that adjusts playback while you speak.
+- 录制口播视频、课程、访谈、发布会、直播开场的创作者
+- 需要一台电脑控制文稿，另一块屏幕给嘉宾看词的拍摄团队
+- 不想把脚本上传到云端，希望文稿尽量留在本机的人
+- 经常使用 Markdown 写稿，希望文稿结构清晰、可标记、可快速跳转的人
+- 想在 Mac 和 Windows 上开箱即用，而不是先安装一堆开发环境的人
 
-## Who It Is For
+## 这个工具解决什么问题
 
-- Creators recording talking-head videos.
-- Teams that need one control screen and one teleprompter screen.
-- Local/offline-first workflows where the script should stay on the control computer.
+传统提词器常见的问题是：写稿、改稿、播放、跳段、标注、现场控制分散在不同工具里。拍摄时一旦要临时改词、跳到某一段、调整速度，操作就会变得很笨重。
 
-## Download
+庄Sir的提词器把这些动作放在同一个工作流里：
 
-Use the latest GitHub Release:
+1. 在控制端创建一个房间。
+2. 在控制端编辑文稿。
+3. 播放端通过网址或二维码加入同一个房间。
+4. 控制端控制播放、暂停、速度、跳转、镜像和显示状态。
+5. 文稿和设置保存在本机，下次可以继续使用。
 
-[Releases](https://github.com/billzhuang6569/zhuang-prompter/releases)
+## 主要功能
 
-The first release is unsigned. macOS and Windows may show standard security warnings the first time you open the app.
+### 控制端
 
-## Desktop App Usage
+控制端是创作者或导播使用的页面，负责写稿、改稿和控制播放。
 
-1. Open `庄Sir的提词器`.
-2. Create or open a room.
-3. Use the control window on the main computer.
-4. Open the player URL or scan the QR code on another screen in the same local network.
-5. Start playback from the control window.
+- 创建和打开不同项目房间
+- 直接编辑 Markdown 文稿
+- 使用渲染后的文稿视图，不用一直面对原始代码
+- 添加标记点，用于快速跳到某个章节或段落
+- 添加备注，用于提示拍摄动作、镜头、停顿或后期处理
+- 保存草稿和历史版本
+- 控制播放端开始、暂停、回到开头、跳到结尾
+- 调整滚动速度
+- 跳转到指定标记点
+- 控制播放端水平镜像、垂直镜像
+- 显示播放端加入网址，方便复制或扫码打开
 
-The desktop app starts a local web server inside the app. Player devices join through your local network; there is no cloud account or server required.
+### 播放端
 
-## Local Network Notes
+播放端是给被拍摄者看的提词画面。
 
-- Keep the control computer and player device on the same Wi-Fi or hotspot.
-- The app prints and displays the player URL, usually like `http://192.168.x.x:3000/room/123456/player`.
-- If another app already uses port `3000`, the desktop app will try nearby ports automatically.
-- For browser-based development with microphone testing over LAN HTTPS, see [docs/local-network-usage.md](docs/local-network-usage.md).
+- 大字号显示文稿
+- 支持自动滚动
+- 支持播放、暂停、速度调整
+- 支持水平镜像和垂直镜像，适配不同提词器反射镜
+- 支持全屏显示
+- 默认隐藏标记点，让被拍摄者只看到需要念的内容
+- 可以按需要显示或隐藏标记点
 
-## Data Storage
+### 本地房间和项目
 
-Room data, drafts, versions, and display settings are stored locally.
+每一个房间都可以理解为一个项目画册。
 
-- Development mode: `.local-data/rooms.json`
-- Desktop app: the operating system app-data folder
+你可以为不同视频、课程、拍摄任务创建不同房间。房间里会保存：
 
-No database or cloud service is required for the current local-first release.
+- 文稿内容
+- 标记点和备注
+- 历史版本
+- 播放设置
+- 当前项目状态
 
-## Development
+这些数据默认保存在本机，不需要数据库，也不需要登录账号。
+
+### 局域网播放
+
+庄Sir的提词器适合现场拍摄：
+
+- 控制端电脑打开应用
+- 播放端设备连接同一个 Wi-Fi、热点或局域网
+- 播放端打开控制端提供的网址
+- 控制端即可远程控制播放端
+
+典型播放端网址类似：
+
+```text
+http://192.168.1.20:3000/room/123456/player
+```
+
+只要两台设备在同一个网络里，播放端就可以加入。
+
+### 语音辅助滚动
+
+当前版本包含实验性的语音辅助滚动。
+
+它不是完全用语音识别替代滚动，而是在自动滚动的基础上，根据你实际朗读的位置，辅助调整滚动速度，让文稿尽量跟上你的口播节奏。
+
+这是一个早期功能，正式拍摄前建议先试读一遍。
+
+## 下载安装
+
+请到 GitHub Release 页面下载最新版：
+
+[下载庄Sir的提词器](https://github.com/billzhuang6569/zhuang-prompter/releases)
+
+当前提供：
+
+- macOS Apple Silicon 版本
+- Windows 安装版
+- Windows 便携版
+
+### 首次打开提示
+
+当前版本是第一版公开发布包，尚未进行商业代码签名。
+
+因此：
+
+- macOS 可能提示“无法验证开发者”
+- Windows 可能提示来自未知发布者
+
+这是未签名软件的正常系统提示，不代表应用一定有问题。后续版本会逐步加入正式签名和更完整的安装体验。
+
+## 快速开始
+
+### 1. 打开应用
+
+启动“庄Sir的提词器”。
+
+应用会自动在你的电脑本地启动一个提词服务。你不需要手动配置服务器。
+
+### 2. 创建房间
+
+在首页创建一个新房间。
+
+一个房间可以对应一条视频、一节课、一场直播或一次拍摄任务。
+
+### 3. 编辑文稿
+
+进入控制端后，你可以直接编辑文稿。
+
+建议把文稿写成结构清晰的段落，例如：
+
+```markdown
+# AI 到底是在猜，还是在想？
+
+今天我们讲一个很多人都好奇的问题：AI 到底是在猜，还是在想？
+
+如果你问一个大模型：“苹果为什么会落到地上？”
+它会给你一个看起来非常合理的答案。
+```
+
+你也可以添加标记点和备注：
+
+```markdown
+::marker[01]{text="开场"}
+
+::notes{text="这里看镜头，语速放慢一点"}
+```
+
+标记点适合用于章节跳转，备注适合给自己、拍摄同事或后期同事看。
+
+### 4. 打开播放端
+
+在控制端右侧找到播放端网址，复制到另一台设备，或用另一台设备扫码打开。
+
+播放端设备需要和控制端电脑在同一个网络中。
+
+### 5. 开始提词
+
+在控制端点击播放。
+
+你可以随时：
+
+- 暂停
+- 调整速度
+- 跳到开头
+- 跳到结尾
+- 跳到某个标记点
+- 调整播放端镜像
+- 打开全屏
+
+## 常见使用场景
+
+### 一个人录口播
+
+你可以在 Mac 或 Windows 上打开控制端，把 iPad、手机或另一台显示器作为播放端。录制时用控制端控制速度和跳转，播放端只显示清爽的大字提词。
+
+### 小团队拍摄
+
+导演或助理使用控制端，嘉宾看播放端。现场需要改词时，控制端直接修改并保存，播放端同步更新。
+
+### 课程和长文稿录制
+
+长稿可以用标记点拆成多个章节。录制时可以快速跳到某一节，减少来回拖动和寻找段落的时间。
+
+### 使用提词器反射镜
+
+播放端支持水平镜像和垂直镜像。你可以根据硬件提词器的反射方式调整画面，避免文字方向不对。
+
+## 数据保存在哪里
+
+庄Sir的提词器当前采用本地优先设计。
+
+这意味着：
+
+- 房间数据保存在你的电脑上
+- 文稿不会默认上传到云端
+- 不需要注册账号
+- 不依赖远程数据库
+
+桌面应用会把房间数据保存在系统的应用数据目录中。这样做的好处是简单、稳定、离线可用，也更适合拍摄现场。
+
+## 为什么现在不需要登录和云端服务器
+
+提词器的核心场景通常发生在同一个现场：控制端和播放端在同一个 Wi-Fi 或热点里。对这个场景来说，本地连接比云端中转更直接。
+
+本地优先的好处：
+
+- 启动快
+- 延迟低
+- 不依赖外网
+- 文稿更私密
+- 现场更少受服务器状态影响
+
+未来如果要支持远程协作、跨城市控制、团队账号、云端模板库、在线同步，就可以再加入服务器和登录系统。当前版本先把本地拍摄这条主线做好。
+
+## 局域网使用注意事项
+
+如果播放端打不开，通常检查这几件事：
+
+1. 控制端和播放端是否连接同一个 Wi-Fi 或热点。
+2. 播放端网址里的 IP 是否是控制端电脑当前的局域网 IP。
+3. 控制端电脑的防火墙是否允许应用被局域网访问。
+4. 端口是否被其他软件占用。
+5. 如果使用语音识别，建议优先在桌面应用的控制端里使用麦克风。
+
+更多局域网和 HTTPS 说明见：
+
+[本地网络使用说明](docs/local-network-usage.md)
+
+## 当前版本状态
+
+v0.1.0 是第一版公开发布。
+
+它已经可以用于真实本地测试和轻量拍摄，但仍属于早期版本。尤其是语音辅助滚动、安装包签名、跨平台体验，还会继续打磨。
+
+如果你在使用中遇到问题，可以在 GitHub Issues 里反馈：
+
+[提交问题反馈](https://github.com/billzhuang6569/zhuang-prompter/issues)
+
+## 给开发者
+
+如果你只是使用这个应用，可以不用看这一节。
+
+本项目基于 Next.js、Node HTTP Server、WebSocket 和 Electron。开发者可以本地运行：
 
 ```bash
 pnpm install
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
-
-For trusted local HTTPS during development:
-
-```bash
-brew install mkcert
-pnpm cert:trust
-pnpm dev:https
-```
-
-## Build Desktop Packages
-
-macOS:
+打包桌面应用：
 
 ```bash
 pnpm dist:mac
-```
-
-Windows:
-
-```bash
 pnpm dist:win
 ```
 
-Build output is written to `release/`.
-
-More details: [docs/release-packaging.md](docs/release-packaging.md)
-
-## Verification
+常用验证：
 
 ```bash
 pnpm lint
 pnpm typecheck
 pnpm test:contracts
-pnpm smoke:network
-pnpm smoke:m0
-pnpm smoke:m2
-pnpm smoke:m3
-pnpm smoke:m4
-pnpm smoke:m5:reconnect
-pnpm smoke:m5:session
-pnpm acceptance:local
 ```
 
-Run smoke tests while the local server is running.
+开发交接文档在 `dev-handoff/`，产品和本地网络说明在 `docs/`。
 
-## Project Documents
+## 许可证
 
-Development handoff documents live in `dev-handoff/`.
-
-Original product documents live in `docs/`.
-
-## License
-
-MIT
+MIT License
