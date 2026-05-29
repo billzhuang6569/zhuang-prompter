@@ -94,12 +94,16 @@ export function RenderBundleView({
 function RenderNodeView({ node }: { node: RenderNode }) {
   if (node.type === "heading") {
     const HeadingTag = `h${Math.min(Math.max(node.depth, 1), 3)}` as "h1" | "h2" | "h3";
-    return <HeadingTag className="script-heading">{node.text}</HeadingTag>;
+    return (
+      <HeadingTag className="script-heading" data-scroll-anchor-id={node.scrollAnchorId}>
+        {node.text}
+      </HeadingTag>
+    );
   }
 
   if (node.type === "marker") {
     return (
-      <div className="script-marker">
+      <div className="script-marker" data-scroll-anchor-id={node.scrollAnchorId} data-marker-id={node.marker.markerId}>
         <strong>
           ◆ {node.marker.markerId}
           {node.marker.label ? ` · ${node.marker.label}` : ""}
@@ -119,9 +123,9 @@ function RenderNodeView({ node }: { node: RenderNode }) {
   }
 
   return (
-    <p className={node.type === "listItem" ? "script-list-item" : "script-paragraph"}>
+    <p className={node.type === "listItem" ? "script-list-item" : "script-paragraph"} data-scroll-anchor-id={node.scrollAnchorId}>
       {node.inlineMarkers?.map((marker) => (
-        <span className="inline-marker" key={marker.markerId}>
+        <span className="inline-marker" data-marker-id={marker.markerId} key={marker.markerId}>
           ◆ {marker.markerId}
           {marker.label ? ` · ${marker.label}` : ""}
         </span>

@@ -7,11 +7,12 @@ function getLanDevOrigins() {
   for (const addresses of Object.values(networkInterfaces())) {
     for (const address of addresses ?? []) {
       if (address.family !== "IPv4" || address.internal) {
-        continue;
-      }
-      origins.add(address.address);
-      origins.add(`http://${address.address}:3000`);
+      continue;
     }
+    origins.add(address.address);
+    origins.add(`http://${address.address}:3000`);
+    origins.add(`https://${address.address}:3000`);
+  }
   }
 
   return Array.from(origins);

@@ -37,6 +37,7 @@ export type PlaybackState = {
   contentHeightPx?: number;
   centerPositionRatio?: number;
   currentAnchor: Anchor;
+  currentAnchorProgress?: number;
   velocityPxPerSecond: number;
   controlMode: ControlMode;
   sourceDeviceId: string;

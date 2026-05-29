@@ -647,7 +647,8 @@ export function processVoiceTranscript(input: {
     scriptVersionId: record.state.currentScriptVersionId ?? "draft",
   });
   const match = findBestVoiceMatch(normalizedText, bundle.speechIndex, input.transcript.asrConfidence);
-  const shouldAdvance = input.transcript.isFinal && match.confidence >= 0.85 && Boolean(match.matchedScrollAnchorId);
+  const shouldAdvance =
+    Boolean(match.matchedScrollAnchorId) && (input.transcript.isFinal ? match.confidence >= 0.48 : match.confidence >= 0.56);
   record.state.voiceState = {
     ...record.state.voiceState,
     transcript,
@@ -655,37 +656,11 @@ export function processVoiceTranscript(input: {
       ...match,
       transcriptSegmentId: transcript.segmentId,
       shouldAdvance,
-      reason: input.transcript.isFinal ? match.reason : "partial_transcript_hold",
+      reason: input.transcript.isFinal ? (shouldAdvance ? "voice_speed_adjust_ready" : match.reason) : "partial_transcript_hold",
       updatedAt: at,
     },
   };
-
-  if (shouldAdvance) {
-    const anchor = bundle.scrollAnchorIndex.find((item) => item.anchorId === match.matchedScrollAnchorId);
-    bumpRoomFact(record, at);
-    record.state.scrollClock = {
-      scrollClockId: `clk_voice_${crypto.randomUUID()}`,
-      scriptVersionId: record.state.currentScriptVersionId ?? "draft",
-      state: "playing",
-      controlMode: "voiceFollow",
-      anchor: anchor?.markerId
-        ? { type: "marker", markerId: anchor.markerId, textHash: anchor.textHash }
-        : {
-            type: "speechSegment",
-            speechSegmentId: match.matchedSpeechSegmentId,
-            paragraphIndex: anchor?.paragraphIndex,
-            textHash: anchor?.textHash,
-          },
-      offsetPx: match.targetOffsetPx ?? 0,
-      velocityPxPerSecond: 48,
-      issuedAt: at,
-      sourceDeviceId: input.transcript.sourceDeviceId,
-      roomRevision: record.state.roomRevision,
-    };
-    record.state.currentControlMode = "voiceFollow";
-  } else {
-    record.state.serverSeq += 1;
-  }
+  record.state.serverSeq += 1;
   touchRoom(record, at);
   return cloneState(record.state);
 }
@@ -718,8 +693,8 @@ function findBestVoiceMatch(
     if (confidence > best.confidence) {
       best = {
         confidence,
-        level: confidence >= 0.85 ? "locked" : confidence >= 0.65 ? "probable" : confidence >= 0.4 ? "uncertain" : "lost",
-        reason: confidence >= 0.85 ? "nearby_final_match" : "low_confidence_hold",
+        level: confidence >= 0.78 ? "locked" : confidence >= 0.48 ? "probable" : confidence >= 0.28 ? "uncertain" : "lost",
+        reason: confidence >= 0.78 ? "nearby_final_match" : "low_confidence_hold",
         matchedScrollAnchorId: item.scrollAnchorId,
         matchedSpeechSegmentId: item.speechSegmentId,
         targetOffsetPx: Math.max(0, (item.paragraphIndex - 1) * 360),
@@ -734,15 +709,61 @@ function normalizedOverlap(needle: string, haystack: string) {
     return 0;
   }
   if (haystack.includes(needle) || needle.includes(haystack)) {
-    return Math.min(1, Math.min(needle.length, haystack.length) / Math.max(needle.length, haystack.length) + 0.35);
+    return 1;
+  }
+
+  const lcs = longestCommonSubstringLength(needle, haystack);
+  const contiguousScore = lcs / Math.max(1, Math.min(needle.length, haystack.length));
+  const bigramScore = diceCoefficient(bigrams(needle), bigrams(haystack));
+  const charScore = diceCoefficient(Array.from(needle), Array.from(haystack));
+  return Math.max(contiguousScore, bigramScore, charScore * 0.72);
+}
+
+function longestCommonSubstringLength(left: string, right: string) {
+  const previous = new Array(right.length + 1).fill(0);
+  const current = new Array(right.length + 1).fill(0);
+  let best = 0;
+  for (let i = 1; i <= left.length; i += 1) {
+    for (let j = 1; j <= right.length; j += 1) {
+      current[j] = left[i - 1] === right[j - 1] ? previous[j - 1] + 1 : 0;
+      if (current[j] > best) {
+        best = current[j];
+      }
+    }
+    previous.splice(0, previous.length, ...current);
+    current.fill(0);
+  }
+  return best;
+}
+
+function bigrams(value: string) {
+  if (value.length <= 1) {
+    return Array.from(value);
+  }
+  const grams: string[] = [];
+  for (let index = 0; index < value.length - 1; index += 1) {
+    grams.push(value.slice(index, index + 2));
+  }
+  return grams;
+}
+
+function diceCoefficient(left: string[], right: string[]) {
+  if (left.length === 0 || right.length === 0) {
+    return 0;
+  }
+  const counts = new Map<string, number>();
+  for (const item of right) {
+    counts.set(item, (counts.get(item) ?? 0) + 1);
   }
   let hits = 0;
-  for (const char of needle) {
-    if (haystack.includes(char)) {
+  for (const item of left) {
+    const count = counts.get(item) ?? 0;
+    if (count > 0) {
       hits += 1;
+      counts.set(item, count - 1);
     }
   }
-  return hits / Math.max(needle.length, haystack.length);
+  return (2 * hits) / (left.length + right.length);
 }
 
 export function disconnectSession(input: { roomCode: string; deviceId: string; sessionId: string }): RoomState | null {

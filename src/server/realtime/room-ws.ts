@@ -1,5 +1,6 @@
 import { WebSocketServer, type WebSocket } from "ws";
 import type { IncomingMessage, Server } from "node:http";
+import type { Server as HttpsServer } from "node:https";
 import {
   disconnectSession,
   getRoomState,
@@ -295,7 +296,7 @@ function handleClientEvent(socket: WebSocket, roomCode: string, raw: Buffer) {
   nack(socket, event.eventId, `Unsupported event: ${event.type}`);
 }
 
-export function attachRoomWebSocketServer(server: Server) {
+export function attachRoomWebSocketServer(server: Server | HttpsServer) {
   const wss = new WebSocketServer({ noServer: true });
 
   server.on("upgrade", (request: IncomingMessage, socket, head) => {

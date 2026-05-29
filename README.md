@@ -1,49 +1,93 @@
 # 庄Sir 的提词器
 
-This is the formal code repository for the online shooting teleprompter room.
+Markdown-first teleprompter for recorded video production.
 
-Before changing product behavior, read the handoff package first:
+庄Sir 的提词器 lets one control computer manage a script while one or more player screens display the teleprompter on the same local network. It is designed for solo creators, small production teams, and script-heavy recording sessions.
 
-- `dev-handoff/README_developer_start_here.md`
-- `dev-handoff/09_milestone_task_breakdown.md`
-- `dev-handoff/10_cross_review_gate.md`
+## What It Does
 
-The original product documents are preserved in `docs/`.
+- Create a local room for each shooting project.
+- Edit a script in a friendly rendered Markdown editor.
+- Add simple `marker` and `notes` directives for jump points and production cues.
+- Open a player screen from a QR code or local network URL.
+- Control play, pause, speed, start/end, marker jumps, mirror mode, and player display.
+- Save local drafts and versions.
+- Use experimental voice-assisted scrolling that adjusts playback while you speak.
 
-## Current Milestone
+## Who It Is For
 
-P0 local foundation is implemented through M5:
+- Creators recording talking-head videos.
+- Teams that need one control screen and one teleprompter screen.
+- Local/offline-first workflows where the script should stay on the control computer.
 
-- M0 room, role, device identity, presence, HTTP join, and WebSocket welcome.
-- M1 Markdown RenderBundle parsing, speech/marker/anchor indexes, and control/player rendering.
-- M2 ScrollClock playback intent and player PlaybackState report loop.
-- M3 script draft save, version save/list, and restore.
-- M4 simulated voice transcript matching and voice-follow ScrollClock handoff.
-- M5 reconnect full-state recovery and configurable session stability smoke.
+## Download
 
-The remaining local acceptance gap is a longer human-operated shooting session plus device/browser passes.
+Use the latest GitHub Release:
 
-## Getting Started
+[Releases](https://github.com/billzhuang6569/zhuang-prompter/releases)
+
+The first release is unsigned. macOS and Windows may show standard security warnings the first time you open the app.
+
+## Desktop App Usage
+
+1. Open `庄Sir的提词器`.
+2. Create or open a room.
+3. Use the control window on the main computer.
+4. Open the player URL or scan the QR code on another screen in the same local network.
+5. Start playback from the control window.
+
+The desktop app starts a local web server inside the app. Player devices join through your local network; there is no cloud account or server required.
+
+## Local Network Notes
+
+- Keep the control computer and player device on the same Wi-Fi or hotspot.
+- The app prints and displays the player URL, usually like `http://192.168.x.x:3000/room/123456/player`.
+- If another app already uses port `3000`, the desktop app will try nearby ports automatically.
+- For browser-based development with microphone testing over LAN HTTPS, see [docs/local-network-usage.md](docs/local-network-usage.md).
+
+## Data Storage
+
+Room data, drafts, versions, and display settings are stored locally.
+
+- Development mode: `.local-data/rooms.json`
+- Desktop app: the operating system app-data folder
+
+No database or cloud service is required for the current local-first release.
+
+## Development
 
 ```bash
+pnpm install
 pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
-The dev server listens on the local network by default and prints LAN URLs in the terminal. For iPad or another device, create a room on the Mac, then use the room page's `同网设备加入` LAN links or scan the player QR code; use `放大二维码` when scanning from farther away. Follow [docs/local-network-usage.md](docs/local-network-usage.md) for the LAN connection model and [docs/local-browser-acceptance.md](docs/local-browser-acceptance.md) for the manual pass.
+For trusted local HTTPS during development:
 
-Rooms are persisted locally under `.local-data/rooms.json`. The room album on the home page lists persisted rooms, and each room keeps its project name, draft, versions, and playback display settings across service restarts.
+```bash
+brew install mkcert
+pnpm cert:trust
+pnpm dev:https
+```
 
-The player route opens in shooting-first mode: the teleprompter stage fills the first screen, while device and debug panels remain below the stage. The player also has local-only stage controls for font size, fullscreen, keeping the screen awake when the browser supports it, and hiding the status overlay.
+## Build Desktop Packages
 
-Control and player clients automatically retry the WebSocket connection after a transient disconnect, then rejoin with the latest known room revision.
+macOS:
 
-Script draft, version save, and version restore actions broadcast the updated RoomState to connected room clients so the player can refresh without a manual reload.
+```bash
+pnpm dist:mac
+```
 
-Control playback uses the current ScrollClock position for pause, speed changes, and 160px forward/back nudges, so live adjustments do not jump back to a stale local offset.
+Windows:
 
-The control route includes a field-check panel that summarizes same-network entry, control connection, player presence, fresh playback reports, reconnect observation status, and 10-minute session monitoring during real-device testing. It also includes local `测试断线重连` and `复制验收记录` buttons for exercising recovery and capturing a pasteable field report without opening developer tools.
+```bash
+pnpm dist:win
+```
+
+Build output is written to `release/`.
+
+More details: [docs/release-packaging.md](docs/release-packaging.md)
 
 ## Verification
 
@@ -58,8 +102,17 @@ pnpm smoke:m3
 pnpm smoke:m4
 pnpm smoke:m5:reconnect
 pnpm smoke:m5:session
-pnpm smoke:m5:session:10min
 pnpm acceptance:local
 ```
 
-Run smoke tests while `pnpm dev` is running.
+Run smoke tests while the local server is running.
+
+## Project Documents
+
+Development handoff documents live in `dev-handoff/`.
+
+Original product documents live in `docs/`.
+
+## License
+
+MIT

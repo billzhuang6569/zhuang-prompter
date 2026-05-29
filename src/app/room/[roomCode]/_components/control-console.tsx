@@ -4,10 +4,12 @@ import Link from "next/link";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type Dispatch,
   type MouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type RefObject,
   type SetStateAction,
 } from "react";
@@ -63,6 +65,7 @@ type ControlConsoleProps = {
   setProjectName: (value: string) => void;
   parseStatus?: string;
   hasSavedVersion: boolean;
+  saveStatus: string;
   markdown: string;
   setMarkdown: Dispatch<SetStateAction<string>>;
   versionMessage: string;
@@ -74,6 +77,8 @@ type ControlConsoleProps = {
   isPlaying: boolean;
   playerMirrorX: boolean;
   playerMirrorY: boolean;
+  voiceAssistWanted: boolean;
+  voiceAssistStatus: string;
   playerEntryLink?: PlayerLink;
   roomLinks: PlayerLink[];
   inviteStatus: "idle" | "copied" | "fallback";
@@ -85,11 +90,15 @@ type ControlConsoleProps = {
   onSaveVersion: () => void;
   onRestoreVersion: (versionId: string) => void;
   onTogglePlay: () => void;
+  onJumpToStart: () => void;
+  onJumpToEnd: () => void;
   onNudge: (deltaPx: number) => void;
   onJumpToMarker: (markerId: string) => void;
   onSpeedChange: (speed: number) => void;
   onPlayerMirrorXChange: (enabled: boolean) => void;
   onPlayerMirrorYChange: (enabled: boolean) => void;
+  onToggleVoiceAssist: () => void;
+  onGuideSeekRatio: (ratio: number) => void;
   onBeginMarkerEdit: (target?: EditorInsertionTarget) => void;
   onBeginCommentEdit: (target?: EditorInsertionTarget) => void;
   pendingEditorAction: PendingEditorAction | null;
@@ -108,6 +117,7 @@ export function ControlConsole({
   setProjectName,
   parseStatus,
   hasSavedVersion,
+  saveStatus,
   markdown,
   setMarkdown,
   versionMessage,
@@ -119,6 +129,8 @@ export function ControlConsole({
   isPlaying,
   playerMirrorX,
   playerMirrorY,
+  voiceAssistWanted,
+  voiceAssistStatus,
   playerEntryLink,
   roomLinks,
   inviteStatus,
@@ -130,11 +142,15 @@ export function ControlConsole({
   onSaveVersion,
   onRestoreVersion,
   onTogglePlay,
+  onJumpToStart,
+  onJumpToEnd,
   onNudge,
   onJumpToMarker,
   onSpeedChange,
   onPlayerMirrorXChange,
   onPlayerMirrorYChange,
+  onToggleVoiceAssist,
+  onGuideSeekRatio,
   onBeginMarkerEdit,
   onBeginCommentEdit,
   pendingEditorAction,
@@ -147,6 +163,11 @@ export function ControlConsole({
   const richEditorRef = useRef<MDXEditorMethods | null>(null);
   const scriptSurfaceRef = useRef<HTMLDivElement | null>(null);
   const richContentWrapRef = useRef<HTMLDivElement | null>(null);
+  const guideLineRef = useRef<HTMLDivElement | null>(null);
+  const guideHoverTimerRef = useRef<number | undefined>(undefined);
+  const guideDraggingRef = useRef(false);
+  const pendingGuideRatioRef = useRef<number | null>(null);
+  const lastGuideSeekAtRef = useRef(0);
   const previousMarkdownRef = useRef(markdown);
   const undoStackRef = useRef<string[]>([]);
   const restoringRef = useRef(false);
@@ -154,6 +175,8 @@ export function ControlConsole({
   const [richPendingEditorAction, setRichPendingEditorAction] = useState<PendingEditorAction | null>(null);
   const [canUndo, setCanUndo] = useState(false);
   const [guideMetrics, setGuideMetrics] = useState({ height: 0, offsetTop: 0 });
+  const [guideDragReady, setGuideDragReady] = useState(false);
+  const [guideDragging, setGuideDragging] = useState(false);
 
   const markers = bundle?.markerIndex ?? [];
   const safePlayerLink = playerEntryLink ?? roomLinks[0];
@@ -180,13 +203,17 @@ export function ControlConsole({
     }
 
     const updateGuideMetrics = () => {
-      const element = richContentWrapRef.current;
-      if (!element) {
+      const scrollElement = previewScrollRef.current;
+      const contentElement =
+        richContentWrapRef.current?.querySelector<HTMLElement>(".nike-rich-editor-content") ?? richContentWrapRef.current;
+      if (!scrollElement || !contentElement) {
         return;
       }
+      const scrollRect = scrollElement.getBoundingClientRect();
+      const contentRect = contentElement.getBoundingClientRect();
       setGuideMetrics({
-        height: element.scrollHeight,
-        offsetTop: element.offsetTop,
+        height: Math.max(1, contentElement.scrollHeight),
+        offsetTop: scrollElement.scrollTop + contentRect.top - scrollRect.top,
       });
     };
 
@@ -200,7 +227,167 @@ export function ControlConsole({
       observer.disconnect();
       window.removeEventListener("resize", updateGuideMetrics);
     };
-  }, [markdown, view]);
+  }, [markdown, previewScrollRef, view]);
+
+  useLayoutEffect(() => {
+    const guideLine = guideLineRef.current;
+    const scrollElement = previewScrollRef.current;
+    if (!guideLine || !scrollElement || view !== "render" || guideDraggingRef.current) {
+      return;
+    }
+    const ratio = Math.max(0, Math.min(1, playbackCenterRatio ?? 0));
+    const top = guideMetrics.offsetTop + ratio * guideMetrics.height;
+    guideLine.style.top = `${top}px`;
+    const diff = scrollElement.scrollTop + scrollElement.clientHeight / 2 - top;
+    if (Math.abs(diff) > 72) {
+      scrollElement.scrollTop = Math.max(0, top - scrollElement.clientHeight / 2);
+    }
+  }, [guideDragging, guideMetrics, playbackCenterRatio, previewScrollRef, view]);
+
+  useEffect(() => {
+    const releaseGuideDrag = () => {
+      if (!guideDraggingRef.current) {
+        return;
+      }
+      const pendingRatio = pendingGuideRatioRef.current;
+      guideDraggingRef.current = false;
+      pendingGuideRatioRef.current = null;
+      setGuideDragging(false);
+      setGuideDragReady(false);
+      if (typeof pendingRatio === "number") {
+        onGuideSeekRatio(pendingRatio);
+      }
+    };
+    window.addEventListener("pointerup", releaseGuideDrag);
+    window.addEventListener("pointercancel", releaseGuideDrag);
+    window.addEventListener("blur", releaseGuideDrag);
+    return () => {
+      window.removeEventListener("pointerup", releaseGuideDrag);
+      window.removeEventListener("pointercancel", releaseGuideDrag);
+      window.removeEventListener("blur", releaseGuideDrag);
+    };
+  }, [onGuideSeekRatio]);
+
+  useEffect(() => {
+    return () => {
+      if (guideHoverTimerRef.current) {
+        window.clearTimeout(guideHoverTimerRef.current);
+      }
+    };
+  }, []);
+
+  const seekFromGuidePointer = useCallback(
+    (clientY: number) => {
+      const scrollElement = previewScrollRef.current;
+      if (!scrollElement || guideMetrics.height <= 0) {
+        return null;
+      }
+      const scrollRect = scrollElement.getBoundingClientRect();
+      if (clientY > scrollRect.bottom - 48) {
+        scrollElement.scrollTop += 18;
+      } else if (clientY < scrollRect.top + 48) {
+        scrollElement.scrollTop = Math.max(0, scrollElement.scrollTop - 18);
+      }
+      const contentY = scrollElement.scrollTop + clientY - scrollRect.top;
+      const ratio = Math.max(0, Math.min(1, (contentY - guideMetrics.offsetTop) / guideMetrics.height));
+      const top = guideMetrics.offsetTop + ratio * guideMetrics.height;
+      if (guideLineRef.current) {
+        guideLineRef.current.style.top = `${top}px`;
+      }
+      pendingGuideRatioRef.current = ratio;
+      return ratio;
+    },
+    [guideMetrics, previewScrollRef],
+  );
+
+  function beginGuideHover() {
+    if (guideHoverTimerRef.current) {
+      window.clearTimeout(guideHoverTimerRef.current);
+    }
+    guideHoverTimerRef.current = window.setTimeout(() => setGuideDragReady(true), 500);
+  }
+
+  function endGuideHover() {
+    if (guideHoverTimerRef.current) {
+      window.clearTimeout(guideHoverTimerRef.current);
+      guideHoverTimerRef.current = undefined;
+    }
+    if (!guideDraggingRef.current) {
+      setGuideDragReady(false);
+    }
+  }
+
+  function beginGuideDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    guideDraggingRef.current = true;
+    pendingGuideRatioRef.current = null;
+    lastGuideSeekAtRef.current = performance.now();
+    setGuideDragReady(true);
+    setGuideDragging(true);
+    const ratio = seekFromGuidePointer(event.clientY);
+    if (typeof ratio === "number") {
+      onGuideSeekRatio(ratio);
+    }
+  }
+
+  function beginGuideRailDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    const guideLine = guideLineRef.current;
+    if (!guideLine || guideDraggingRef.current) {
+      return;
+    }
+    const guideRect = guideLine.getBoundingClientRect();
+    const guideCenterY = guideRect.top + guideRect.height / 2;
+    if (Math.abs(event.clientY - guideCenterY) > 16) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    guideDraggingRef.current = true;
+    pendingGuideRatioRef.current = null;
+    lastGuideSeekAtRef.current = performance.now();
+    setGuideDragReady(true);
+    setGuideDragging(true);
+    const ratio = seekFromGuidePointer(event.clientY);
+    if (typeof ratio === "number") {
+      onGuideSeekRatio(ratio);
+    }
+  }
+
+  function moveGuideDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!guideDraggingRef.current) {
+      return;
+    }
+    event.preventDefault();
+    const ratio = seekFromGuidePointer(event.clientY);
+    const now = performance.now();
+    if (typeof ratio === "number" && now - lastGuideSeekAtRef.current > 80) {
+      lastGuideSeekAtRef.current = now;
+      onGuideSeekRatio(ratio);
+    }
+  }
+
+  function endGuideDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!guideDraggingRef.current) {
+      return;
+    }
+    event.preventDefault();
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture may already be released by the browser.
+    }
+    const pendingRatio = pendingGuideRatioRef.current;
+    guideDraggingRef.current = false;
+    pendingGuideRatioRef.current = null;
+    setGuideDragging(false);
+    setGuideDragReady(false);
+    if (typeof pendingRatio === "number") {
+      onGuideSeekRatio(pendingRatio);
+    }
+  }
 
   useEffect(() => {
     if (previousMarkdownRef.current === markdown) {
@@ -520,6 +707,7 @@ export function ControlConsole({
             />
             <span className={`nike-bdg ${parseStatus === "valid" ? "nike-bdg-ok" : ""}`}>{parseStatus ?? "draft"}</span>
             <span className="nike-bdg nike-bdg-ink">{hasSavedVersion ? "已保存版本" : "未保存版本"}</span>
+            {saveStatus && <span className="nike-bdg nike-bdg-ink">{saveStatus}</span>}
             <div className="nike-vtabs">
               <button className={`nike-vtab ${view === "render" ? "on" : ""}`} type="button" onClick={() => setView("render")}>
                 预览
@@ -614,11 +802,31 @@ export function ControlConsole({
                 onMouseDown={placeCaretAfterDirective}
                 onClick={beginExistingDirectiveEdit}
                 onScroll={(event) => onPreviewScroll(event.currentTarget.scrollTop)}
+                onPointerDown={beginGuideRailDrag}
+                onPointerMove={moveGuideDrag}
+                onPointerUp={endGuideDrag}
+                onPointerCancel={endGuideDrag}
               >
                 <div
-                  className="nike-iline"
-                  style={{
-                    top: `${guideMetrics.offsetTop + Math.max(0, Math.min(1, playbackCenterRatio ?? 0.5)) * guideMetrics.height}px`,
+                  className={`nike-iline ${guideDragReady ? "is-guide-ready" : ""} ${guideDragging ? "is-guide-dragging" : ""}`}
+                  ref={guideLineRef}
+                  role="slider"
+                  aria-label="拖拽控制播放端位置"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={Math.round(Math.max(0, Math.min(1, playbackCenterRatio ?? 0)) * 100)}
+                  tabIndex={0}
+                  onPointerEnter={beginGuideHover}
+                  onPointerLeave={endGuideHover}
+                  onPointerDown={beginGuideDrag}
+                  onPointerMove={moveGuideDrag}
+                  onPointerUp={endGuideDrag}
+                  onPointerCancel={endGuideDrag}
+                  onMouseDown={(event) => {
+                    if (guideDragReady) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }
                   }}
                 />
                 <div className="nike-sc nike-rich-editor-wrap" ref={richContentWrapRef}>
@@ -670,6 +878,9 @@ export function ControlConsole({
           <section className="nike-psec" data-od-id="playback-controls">
             <div className="nike-ph">播放控制</div>
             <div className="nike-pb">
+              <button className="nike-stpb" type="button" title="回到开始" onClick={onJumpToStart}>
+                |&lt;
+              </button>
               <button className="nike-stpb" type="button" title="后退 160px" onClick={() => onNudge(-160)}>
                 ‹
               </button>
@@ -678,6 +889,9 @@ export function ControlConsole({
               </button>
               <button className="nike-stpb" type="button" title="前进 160px" onClick={() => onNudge(160)}>
                 ›
+              </button>
+              <button className="nike-stpb" type="button" title="回到结束" onClick={onJumpToEnd}>
+                &gt;|
               </button>
             </div>
             <div className="nike-spdr">
@@ -719,6 +933,15 @@ export function ControlConsole({
               >
                 垂直镜像
               </button>
+            </div>
+            <div className="nike-control-label">语音辅助</div>
+            <div className="nike-srow">
+              <button className="nike-srowb" type="button" aria-pressed={voiceAssistWanted} onClick={onToggleVoiceAssist}>
+                {voiceAssistWanted ? "识别中" : "自动识别"}
+              </button>
+            </div>
+            <div className="nike-voice-status" role="status" aria-live="polite">
+              {voiceAssistStatus}
             </div>
           </section>
 
@@ -770,17 +993,18 @@ export function ControlConsole({
                     <img alt="播放端二维码" src={`/api/qr?text=${encodeURIComponent(safePlayerLink.playerUrl)}`} />
                   </button>
                   <div className="nike-qrl">
-                    {roomLinks.map((link) => (
-                      <div className="nike-ql" key={`${link.kind}-${link.origin}`}>
-                        <div className="nike-ql-lbl">{link.label}</div>
-                        <button className="nike-ql-v" type="button" onClick={() => copyToClipboard(link.playerUrl)}>
-                          {link.kind === "lan" ? link.origin.replace(/^https?:\/\//, "") : link.playerUrl}
-                        </button>
-                      </div>
-                    ))}
+                    <div className="nike-ql">
+                      <div className="nike-ql-lbl">播放端网址</div>
+                      <button className="nike-ql-v" type="button" onClick={() => copyToClipboard(safePlayerLink.playerUrl)}>
+                        {safePlayerLink.playerUrl}
+                      </button>
+                    </div>
                   </div>
                 </div>
                 <div className="nike-qr-acts">
+                  <button className="nike-btn" type="button" onClick={() => copyToClipboard(safePlayerLink.playerUrl)}>
+                    复制播放端网址
+                  </button>
                   <button className="nike-btn" type="button" onClick={() => onOpenQr(safePlayerLink)}>
                     放大二维码
                   </button>

@@ -2,31 +2,42 @@
 
 ## 当前链路
 
-这台 Mac 是本地房间服务器。控制端、播放端都连接到同一个 HTTP/WebSocket 服务。
+这台 Mac 是本地房间服务器。控制端、播放端都连接到同一个 HTTP/WebSocket 服务；需要麦克风时，使用 HTTPS/WSS 开发模式。
 
 ```text
 控制端浏览器
-  -> http://本机IP:3000/room/{roomCode}/control
-  -> ws://本机IP:3000/ws/rooms/{roomCode}
+  -> https://本机IP:3000/room/{roomCode}/control
+  -> wss://本机IP:3000/ws/rooms/{roomCode}
   -> 这台 Mac 上的庄Sir的提词器服务
-  -> ws://本机IP:3000/ws/rooms/{roomCode}
+  -> wss://本机IP:3000/ws/rooms/{roomCode}
   -> 播放端浏览器
 ```
 
 ## 端口如何暴露到局域网
 
-服务默认监听 `0.0.0.0:3000`，不是只监听 `localhost`。这意味着同一个 Wi-Fi 或同一个热点里的其他设备，可以通过 `http://本机IP:3000` 访问。
+服务默认监听 `0.0.0.0:3000`，不是只监听 `localhost`。这意味着同一个 Wi-Fi 或同一个热点里的其他设备，可以通过 `https://本机IP:3000` 访问。
+
+首次使用 HTTPS 开发模式：
+
+```bash
+brew install mkcert
+pnpm cert:trust
+pnpm cert:local
+pnpm dev:https
+```
+
+`pnpm cert:trust` 需要在普通终端里输入一次 Mac 管理员密码，用来信任 mkcert 的本地 CA。`pnpm cert:local` 会把本机和当前局域网 IP 写入 `.cert/local-cert.pem`。如果更换 Wi-Fi、热点或 IP，重新运行一次。
 
 首页会显示检测到的局域网入口，例如：
 
 ```text
-http://192.168.10.12:3000
+https://192.168.10.12:3000
 ```
 
 其他电脑打开：
 
 ```text
-http://192.168.10.12:3000/room/{roomCode}/player
+https://192.168.10.12:3000/room/{roomCode}/player
 ```
 
 即可作为播放端进入。

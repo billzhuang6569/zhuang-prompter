@@ -100,7 +100,7 @@ ${results.map(summarize).join("\n")}
 - M1 Markdown RenderBundle contract.
 - M2 ScrollClock play, pause, nudge intent, and PlaybackState report loop.
 - M3 draft save, version save, list, restore, and room broadcast without deleting history.
-- M4 active voice source, transcript match, locked voiceFollow ScrollClock.
+- M4 active voice source, transcript match, and voice-assisted speed adjustment.
 - M5 reconnect full-state recovery and configurable stability session.
 
 ## Remaining Before Full Real-Session Acceptance

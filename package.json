@@ -1,11 +1,28 @@
 {
   "name": "zhuang-prompter",
   "version": "0.1.0",
-  "private": true,
+  "description": "Markdown-first local/LAN teleprompter for recorded production.",
+  "private": false,
+  "license": "MIT",
+  "author": "billzhuang6569",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/billzhuang6569/zhuang-prompter.git"
+  },
+  "homepage": "https://github.com/billzhuang6569/zhuang-prompter#readme",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "tsx server.ts",
+    "dev:https": "pnpm cert:local && HTTPS=1 SSL_KEY_FILE=.cert/local-key.pem SSL_CERT_FILE=.cert/local-cert.pem pnpm dev",
+    "cert:local": "node scripts/setup-local-https.mjs",
+    "cert:trust": "node scripts/setup-local-https.mjs --install-ca",
     "build": "next build --webpack",
     "start": "NODE_ENV=production tsx server.ts",
+    "desktop:prepare": "pnpm build && node scripts/build-desktop-server.mjs",
+    "desktop:dev": "pnpm desktop:prepare && electron .",
+    "dist:dir": "pnpm desktop:prepare && electron-builder --dir",
+    "dist:mac": "pnpm desktop:prepare && electron-builder --mac",
+    "dist:win": "pnpm desktop:prepare && electron-builder --win",
     "lint": "eslint",
     "typecheck": "pnpm build && tsc --noEmit",
     "test:contracts": "tsx --test src/modules/script-engine/parse.test.ts",
@@ -38,9 +55,55 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/ws": "^8.18.1",
+    "electron": "^42.3.0",
+    "electron-builder": "^26.8.1",
+    "esbuild": "^0.28.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tsx": "^4.22.3",
     "typescript": "^5"
+  },
+  "build": {
+    "appId": "com.zhuangsir.prompter",
+    "productName": "庄Sir的提词器",
+    "asar": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      ".desktop/server/**/*",
+      ".next/**/*",
+      "public/**/*",
+      "next.config.ts",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.cjs"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "billzhuang6569",
+        "repo": "zhuang-prompter"
+      }
+    ]
   }
 }

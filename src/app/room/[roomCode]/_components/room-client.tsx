@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import type { Anchor, DeviceRole, PlaybackState, RoomJoinResult, RoomState, ScrollClock } from "@/domain/room/types";
@@ -70,18 +70,79 @@ function scrollClockRuntimeKey(clock: ScrollClock | null) {
     : "";
 }
 
-function playerDisplayMetrics(positionPx: number) {
+function playerDisplayMetrics(positionPx: number, bundle?: RenderBundle) {
   const content = document.querySelector<HTMLElement>(".player-stage .teleprompter-content");
   const viewportHeightPx = window.innerHeight;
   const contentHeightPx = content?.scrollHeight;
   const centerPositionRatio =
-    contentHeightPx && contentHeightPx > 0 ? Math.max(0, Math.min(1, (positionPx + viewportHeightPx / 2) / contentHeightPx)) : undefined;
+    contentHeightPx && contentHeightPx > viewportHeightPx ? Math.max(0, Math.min(1, positionPx / (contentHeightPx - viewportHeightPx))) : 0;
+  const currentCenterAnchor = currentPlayerCenterAnchor(bundle);
 
   return {
     viewportHeightPx,
     contentHeightPx,
     centerPositionRatio,
+    currentAnchor: currentCenterAnchor?.anchor,
+    currentAnchorProgress: currentCenterAnchor?.progress,
   };
+}
+
+function currentPlayerCenterAnchor(bundle?: RenderBundle): { anchor: Anchor; progress: number } | undefined {
+  if (!bundle) {
+    return undefined;
+  }
+  const centerY = window.innerHeight / 2;
+  const nodes = Array.from(
+    document.querySelectorAll<HTMLElement>(
+      [
+        ".player-stage .teleprompter-content .script-heading[data-scroll-anchor-id]",
+        ".player-stage .teleprompter-content .script-paragraph[data-scroll-anchor-id]",
+        ".player-stage .teleprompter-content .script-list-item[data-scroll-anchor-id]",
+      ].join(", "),
+    ),
+  );
+  let best: { element: HTMLElement; distance: number; progress: number } | null = null;
+  for (const element of nodes) {
+    const rect = element.getBoundingClientRect();
+    if (rect.bottom < 0 || rect.top > window.innerHeight) {
+      continue;
+    }
+    const rawProgress = rect.height > 0 ? (centerY - rect.top) / rect.height : 0.5;
+    const progress = Math.max(0, Math.min(1, rawProgress));
+    const distance = rawProgress >= 0 && rawProgress <= 1 ? 0 : Math.abs(rect.top + rect.height / 2 - centerY);
+    if (!best || distance < best.distance) {
+      best = { element, distance, progress };
+    }
+  }
+  const anchorId = best?.element.dataset.scrollAnchorId;
+  const scrollAnchor = anchorId ? bundle.scrollAnchorIndex.find((item) => item.anchorId === anchorId) : undefined;
+  if (!scrollAnchor || scrollAnchor.kind === "marker") {
+    return undefined;
+  }
+  return {
+    anchor: {
+      type: scrollAnchor.kind === "heading" ? "heading" : "speechSegment",
+      anchorId: scrollAnchor.anchorId,
+      speechSegmentId: scrollAnchor.speechSegmentId,
+      paragraphIndex: scrollAnchor.paragraphIndex,
+      textHash: scrollAnchor.textHash,
+    },
+    progress: best?.progress ?? 0.5,
+  };
+}
+
+function playerOffsetForMarker(markerId: string) {
+  const content = document.querySelector<HTMLElement>(".player-stage .teleprompter-content");
+  if (!content) {
+    return undefined;
+  }
+  const markerElement = Array.from(content.querySelectorAll<HTMLElement>("[data-marker-id]")).find(
+    (element) => element.dataset.markerId === markerId,
+  );
+  if (!markerElement) {
+    return undefined;
+  }
+  return Math.max(0, markerElement.offsetTop + markerElement.offsetHeight / 2 - window.innerHeight / 2);
 }
 
 type VersionSummary = {
@@ -165,6 +226,46 @@ type WakeLockNavigator = Navigator & {
   };
 };
 
+type SpeechRecognitionAlternativeLike = {
+  transcript: string;
+  confidence?: number;
+};
+
+type SpeechRecognitionResultLike = {
+  isFinal: boolean;
+  0: SpeechRecognitionAlternativeLike;
+};
+
+type SpeechRecognitionEventLike = Event & {
+  resultIndex: number;
+  results: {
+    length: number;
+    [index: number]: SpeechRecognitionResultLike;
+  };
+};
+
+type SpeechRecognitionErrorEventLike = Event & {
+  error?: string;
+};
+
+type SpeechRecognitionLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  maxAlternatives: number;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+};
+
+type SpeechRecognitionWindow = Window & {
+  SpeechRecognition?: new () => SpeechRecognitionLike;
+  webkitSpeechRecognition?: new () => SpeechRecognitionLike;
+};
+
 type LocalScrollClockTiming = {
   key: string;
   receivedAt: number;
@@ -182,6 +283,11 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const wakeLockRef = useRef<WakeLockSentinelLike | null>(null);
   const wakeLockReleaseHandlerRef = useRef<(() => void) | null>(null);
   const wakeLockWantedRef = useRef(false);
+  const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const voiceAssistWantedRef = useRef(false);
+  const voiceRestartTimerRef = useRef<number | undefined>(undefined);
+  const voiceTranscriptFlushRef = useRef(0);
+  const lastVoiceAdjustmentRef = useRef({ segmentId: "", adjustedAt: 0 });
   const scrollClockRef = useRef<ScrollClock | null>(null);
   const scrollClockTimingRef = useRef<LocalScrollClockTiming | null>(null);
   const markdownEditorRef = useRef<HTMLTextAreaElement | null>(null);
@@ -194,6 +300,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [markdown, setMarkdown] = useState("");
   const [versionMessage, setVersionMessage] = useState("");
   const [versions, setVersions] = useState<VersionSummary[]>([]);
+  const [saveStatus, setSaveStatus] = useState("");
   const [currentOrigin, setCurrentOrigin] = useState("");
   const [networkOrigins, setNetworkOrigins] = useState<NetworkOrigin[]>([]);
   const [playerFontScale, setPlayerFontScale] = useState(1);
@@ -205,6 +312,8 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [wakeLockWanted, setWakeLockWanted] = useState(false);
   const [wakeLockActive, setWakeLockActive] = useState(false);
   const [wakeLockStatus, setWakeLockStatus] = useState("");
+  const [voiceAssistWanted, setVoiceAssistWanted] = useState(false);
+  const [voiceAssistStatus, setVoiceAssistStatus] = useState("未开启");
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [expandedQrLink, setExpandedQrLink] = useState<(NetworkOrigin & { playerUrl: string }) | null>(null);
   const [projectName, setProjectName] = useState("小庄Sir013");
@@ -239,19 +348,24 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const primaryPlaybackState =
     playerReports.find((device) => device.role === "player")?.playbackState ?? playerReports[0]?.playbackState;
   const primaryPlayerReportedPosition = primaryPlaybackState?.positionPx;
+  const hasPlayerSyncRatio = typeof primaryPlaybackState?.centerPositionRatio === "number";
   const playbackCenterRatio =
     typeof primaryPlaybackState?.centerPositionRatio === "number"
       ? Math.max(0, Math.min(1, primaryPlaybackState.centerPositionRatio))
       : typeof primaryPlaybackState?.positionPx === "number" &&
           typeof primaryPlaybackState.viewportHeightPx === "number" &&
           typeof primaryPlaybackState.contentHeightPx === "number" &&
-          primaryPlaybackState.contentHeightPx > 0
-        ? Math.max(
-            0,
-            Math.min(1, (primaryPlaybackState.positionPx + primaryPlaybackState.viewportHeightPx / 2) / primaryPlaybackState.contentHeightPx),
-          )
-        : undefined;
+          primaryPlaybackState.contentHeightPx > primaryPlaybackState.viewportHeightPx
+        ? Math.max(0, Math.min(1, primaryPlaybackState.positionPx / (primaryPlaybackState.contentHeightPx - primaryPlaybackState.viewportHeightPx)))
+        : 0;
   const playerEntryLink = roomLinks.find((link) => link.kind === "lan") ?? roomLinks[0];
+  const voiceMatch = roomState?.voiceState.match;
+  const voiceAssistSummary = voiceAssistWanted
+    ? voiceMatch
+      ? `${voiceAssistStatus || "识别中"} · ${voiceMatch.level} ${Math.round(voiceMatch.confidence * 100)}%`
+      : voiceAssistStatus || "正在听..."
+    : voiceAssistStatus || "未开启";
+  const playerStatusToast = wakeLockStatus || (mode === "player" && voiceAssistWanted ? voiceAssistSummary : "");
 
   const sendEvent = useCallback(
     <TPayload,>(type: ClientEnvelope<TPayload>["type"], payload: TPayload) => {
@@ -464,32 +578,54 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
   async function saveDraft() {
     if (!joinResult) {
-      return;
+      setSaveStatus("连接后再保存");
+      return false;
     }
-    const response = await fetch(`/api/rooms/${roomCode}/script/draft`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ deviceId: joinResult.deviceId, markdown }),
-    });
-    if (response.ok) {
+    setSaveStatus("正在保存");
+    try {
+      const response = await fetch(`/api/rooms/${roomCode}/script/draft`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deviceId: joinResult.deviceId, markdown }),
+      });
+      if (!response.ok) {
+        setSaveStatus("保存失败");
+        return false;
+      }
       const data = (await response.json()) as { roomState: RoomState };
       setRoomState(data.roomState);
+      setSaveStatus("草稿已保存");
+      return true;
+    } catch {
+      setSaveStatus("保存失败，请刷新重试");
+      return false;
     }
   }
 
   async function saveVersion() {
     if (!joinResult) {
+      setSaveStatus("连接后再保存");
       return;
     }
-    await saveDraft();
-    const response = await fetch(`/api/rooms/${roomCode}/script/versions`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ deviceId: joinResult.deviceId, message: versionMessage || "现场保存" }),
-    });
-    if (response.ok) {
+    const draftSaved = await saveDraft();
+    if (!draftSaved) {
+      return;
+    }
+    try {
+      const response = await fetch(`/api/rooms/${roomCode}/script/versions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deviceId: joinResult.deviceId, message: versionMessage || "现场保存" }),
+      });
+      if (!response.ok) {
+        setSaveStatus("版本保存失败");
+        return;
+      }
       setVersionMessage("");
       await loadDraftAndVersions();
+      setSaveStatus("版本已保存");
+    } catch {
+      setSaveStatus("版本保存失败，请刷新重试");
     }
   }
 
@@ -497,16 +633,23 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     if (!joinResult) {
       return;
     }
-    const response = await fetch(`/api/rooms/${roomCode}/script/restore`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ deviceId: joinResult.deviceId, versionId }),
-    });
-    if (response.ok) {
+    try {
+      const response = await fetch(`/api/rooms/${roomCode}/script/restore`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ deviceId: joinResult.deviceId, versionId }),
+      });
+      if (!response.ok) {
+        setSaveStatus("回退失败");
+        return;
+      }
       const data = (await response.json()) as { roomState: RoomState; draft: { markdown: string } };
       setRoomState(data.roomState);
       setMarkdown(normalizeEditableDirectives(data.draft.markdown));
       await loadDraftAndVersions();
+      setSaveStatus("已回退版本");
+    } catch {
+      setSaveStatus("回退失败，请刷新重试");
     }
   }
 
@@ -587,10 +730,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
   const devices = useMemo(() => Object.values(roomState?.devices ?? {}), [roomState]);
   const defaultAnchor = useMemo<Anchor>(() => {
-    const marker = bundle?.markerIndex[0];
-    if (marker) {
-      return { type: "marker", markerId: marker.markerId, textHash: marker.textHash };
-    }
     const speech = bundle?.speechIndex[0];
     if (speech) {
       return {
@@ -600,10 +739,20 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
         textHash: speech.textHash,
       };
     }
+    const marker = bundle?.markerIndex[0];
+    if (marker) {
+      return { type: "marker", markerId: marker.markerId, textHash: marker.textHash };
+    }
     return { type: "paragraph", paragraphIndex: 0 };
   }, [bundle]);
 
-  function sendScrollClock(state: ScrollClock["state"], offsetPx = playbackPositionPx, velocity = speed, anchor = defaultAnchor) {
+  function sendScrollClock(
+    state: ScrollClock["state"],
+    offsetPx = playbackPositionPx,
+    velocity = speed,
+    anchor = defaultAnchor,
+    controlMode: ScrollClock["controlMode"] = "fixedSpeed",
+  ) {
     if (!joinResult) {
       return;
     }
@@ -611,7 +760,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       scrollClockId: makeRandomId("clk"),
       scriptVersionId: SCRIPT_VERSION_ID,
       state,
-      controlMode: "fixedSpeed",
+      controlMode,
       anchor,
       offsetPx,
       velocityPxPerSecond: state === "playing" ? velocity : 0,
@@ -664,8 +813,190 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     sendScrollClock("playing", offset, nextSpeed);
   }
 
+  function stopSpeechRecognition() {
+    if (voiceRestartTimerRef.current) {
+      window.clearTimeout(voiceRestartTimerRef.current);
+      voiceRestartTimerRef.current = undefined;
+    }
+    const recognition = speechRecognitionRef.current;
+    speechRecognitionRef.current = null;
+    if (recognition) {
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+      try {
+        recognition.stop();
+      } catch {
+        recognition.abort();
+      }
+    }
+  }
+
+  function stopVoiceAssist(status = "自动识别已关闭") {
+    voiceAssistWantedRef.current = false;
+    setVoiceAssistWanted(false);
+    setVoiceAssistStatus(status);
+    stopSpeechRecognition();
+    if (joinResult && roomState?.voiceState.sourceDeviceId === joinResult.deviceId) {
+      sendEvent("voice.setSource", { sourceDeviceId: null });
+    }
+  }
+
+  async function startVoiceAssist() {
+    if (!joinResult) {
+      setVoiceAssistStatus("请先等待房间连接");
+      return;
+    }
+
+    const Recognition = (window as SpeechRecognitionWindow).SpeechRecognition ?? (window as SpeechRecognitionWindow).webkitSpeechRecognition;
+    if (!Recognition) {
+      setVoiceAssistWanted(false);
+      setVoiceAssistStatus("当前浏览器不支持语音识别，请用 Chrome 或 Edge 测试");
+      return;
+    }
+
+    stopSpeechRecognition();
+    voiceAssistWantedRef.current = true;
+    setVoiceAssistWanted(true);
+    if (mode === "control") {
+      setVoiceAssistStatus("正在保存稿件");
+      await saveDraft();
+    }
+    setVoiceAssistStatus("正在请求麦克风");
+    sendEvent("voice.setSource", { sourceDeviceId: joinResult.deviceId });
+    if (activeScrollClock?.state !== "playing") {
+      playFromCurrentOffset(speed);
+    }
+
+    const recognition = new Recognition();
+    recognition.lang = "zh-CN";
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => {
+      let text = "";
+      let isFinal = false;
+      let confidence = 0;
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        const alternative = result[0];
+        text += alternative?.transcript ?? "";
+        isFinal = isFinal || result.isFinal;
+        confidence = Math.max(confidence, alternative?.confidence ?? 0);
+      }
+
+      const transcriptText = text.trim();
+      if (!transcriptText) {
+        return;
+      }
+
+      const at = currentTime();
+      if (!isFinal && at - voiceTranscriptFlushRef.current < 550) {
+        return;
+      }
+      voiceTranscriptFlushRef.current = at;
+      setVoiceAssistStatus(isFinal ? "已识别，正在微调速度" : "正在听...");
+      sendEvent("voice.transcript", {
+        transcript: {
+          segmentId: makeRandomId("seg"),
+          sourceDeviceId: joinResult.deviceId,
+          scriptVersionId: roomState?.currentScriptVersionId ?? SCRIPT_VERSION_ID,
+          isFinal,
+          text: transcriptText,
+          asrConfidence: confidence || (isFinal ? 0.9 : 0.62),
+        },
+      });
+    };
+    recognition.onerror = (event) => {
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
+        stopVoiceAssist("麦克风权限被拒绝");
+        return;
+      }
+      setVoiceAssistStatus("语音识别暂时中断，正在重试");
+    };
+    recognition.onend = () => {
+      speechRecognitionRef.current = null;
+      if (!voiceAssistWantedRef.current) {
+        return;
+      }
+      voiceRestartTimerRef.current = window.setTimeout(() => {
+        if (voiceAssistWantedRef.current) {
+          startVoiceAssist();
+        }
+      }, 700);
+    };
+
+    speechRecognitionRef.current = recognition;
+    try {
+      recognition.start();
+      setVoiceAssistStatus("正在听...");
+    } catch {
+      stopVoiceAssist("语音识别启动失败，请刷新后重试");
+    }
+  }
+
+  function toggleVoiceAssist() {
+    if (voiceAssistWantedRef.current) {
+      stopVoiceAssist();
+      return;
+    }
+    void startVoiceAssist();
+  }
+
   function nudgePlayback(deltaPx: number) {
     const offset = Math.max(0, currentControlOffset() + deltaPx);
+    setPlaybackPositionPx(offset);
+    playbackPositionRef.current = offset;
+    sendScrollClock("paused", offset, 0);
+  }
+
+  function endPlaybackOffset() {
+    const reportedState = primaryPlaybackState;
+    if (
+      typeof reportedState?.contentHeightPx === "number" &&
+      typeof reportedState.viewportHeightPx === "number" &&
+      reportedState.contentHeightPx > 0
+    ) {
+      return Math.max(0, reportedState.contentHeightPx - reportedState.viewportHeightPx);
+    }
+
+    const controlPreview = controlPreviewScrollRef.current;
+    if (controlPreview) {
+      return Math.max(0, controlPreview.scrollHeight - controlPreview.clientHeight);
+    }
+
+    const playerContent = document.querySelector<HTMLElement>(".player-stage .teleprompter-content");
+    if (playerContent) {
+      return Math.max(0, playerContent.scrollHeight - window.innerHeight);
+    }
+
+    const estimatedSegments = Math.max(bundle?.speechIndex.length ?? 1, bundle?.markerIndex.length ?? 1);
+    return Math.max(0, estimatedSegments * 360);
+  }
+
+  function jumpToStart() {
+    setPlaybackPositionPx(0);
+    playbackPositionRef.current = 0;
+    sendScrollClock("paused", 0, 0, { type: "paragraph", paragraphIndex: 0 });
+  }
+
+  function jumpToEnd() {
+    const offset = endPlaybackOffset();
+    setPlaybackPositionPx(offset);
+    playbackPositionRef.current = offset;
+    sendScrollClock("paused", offset, 0);
+  }
+
+  function seekPlaybackByRatio(ratio: number) {
+    const boundedRatio = Math.max(0, Math.min(1, ratio));
+    const reportedState = primaryPlaybackState;
+    const maxOffset =
+      typeof reportedState?.contentHeightPx === "number" &&
+      typeof reportedState.viewportHeightPx === "number" &&
+      reportedState.contentHeightPx > reportedState.viewportHeightPx
+        ? reportedState.contentHeightPx - reportedState.viewportHeightPx
+        : endPlaybackOffset();
+    const offset = Math.max(0, Math.round(boundedRatio * maxOffset));
     setPlaybackPositionPx(offset);
     playbackPositionRef.current = offset;
     sendScrollClock("paused", offset, 0);
@@ -897,18 +1228,33 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     playbackPositionRef.current = playbackPositionPx;
   }, [playbackPositionPx]);
 
+  useLayoutEffect(() => {
+    if (mode !== "player") {
+      return;
+    }
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    window.scrollTo(0, 0);
+    return () => {
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+    };
+  }, [mode]);
+
   const reportPlayerState = useCallback(
     (clock: ScrollClock, positionPx: number) => {
       if (!joinResult) {
         return;
       }
-      const displayMetrics = playerDisplayMetrics(positionPx);
+      const { currentAnchor, ...metrics } = playerDisplayMetrics(positionPx, bundle);
       const playbackState: PlaybackState = {
         scriptVersionId: clock.scriptVersionId,
         state: clock.state,
         positionPx,
-        ...displayMetrics,
-        currentAnchor: clock.anchor,
+        ...metrics,
+        currentAnchor: currentAnchor ?? clock.anchor,
         velocityPxPerSecond: clock.velocityPxPerSecond,
         controlMode: clock.controlMode,
         sourceDeviceId: joinResult.deviceId,
@@ -918,7 +1264,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       const payload: PlaybackReportPayload = { playbackState };
       sendEvent("playback.reportState", payload);
     },
-    [joinResult, sendEvent],
+    [bundle, joinResult, sendEvent],
   );
 
   useEffect(() => {
@@ -928,12 +1274,13 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
     const animationFrame = window.requestAnimationFrame(() => {
       const positionPx = playbackPositionRef.current;
+      const { currentAnchor, ...metrics } = playerDisplayMetrics(positionPx, bundle);
       const playbackState: PlaybackState = {
         scriptVersionId: roomState?.currentScriptVersionId ?? SCRIPT_VERSION_ID,
         state: "paused",
         positionPx,
-        ...playerDisplayMetrics(positionPx),
-        currentAnchor: defaultAnchor,
+        ...metrics,
+        currentAnchor: currentAnchor ?? defaultAnchor,
         velocityPxPerSecond: 0,
         controlMode: "fixedSpeed",
         sourceDeviceId: joinResult.deviceId,
@@ -958,9 +1305,12 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
     if (clock.state === "paused") {
       window.setTimeout(() => {
-        setPlaybackPositionPx(clock.offsetPx);
-        playbackPositionRef.current = clock.offsetPx;
-        reportPlayerState(clock, clock.offsetPx);
+        const markerOffset =
+          clock.anchor.type === "marker" && clock.anchor.markerId ? playerOffsetForMarker(clock.anchor.markerId) : undefined;
+        const nextOffset = typeof markerOffset === "number" ? markerOffset : clock.offsetPx;
+        setPlaybackPositionPx(nextOffset);
+        playbackPositionRef.current = nextOffset;
+        reportPlayerState(clock, nextOffset);
       }, 0);
       return;
     }
@@ -988,7 +1338,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }, [activeScrollClockKey, joinResult, mode, reportPlayerState]);
 
   useEffect(() => {
-    if (mode !== "control" || !activeScrollClockKey) {
+    if (mode !== "control" || !activeScrollClockKey || hasPlayerSyncRatio) {
       return;
     }
 
@@ -1017,10 +1367,10 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
     animationFrame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [activeScrollClockKey, mode]);
+  }, [activeScrollClockKey, hasPlayerSyncRatio, mode]);
 
   useEffect(() => {
-    if (mode !== "control" || activeScrollClockKey || typeof primaryPlayerReportedPosition !== "number") {
+    if (mode !== "control" || activeScrollClockKey || hasPlayerSyncRatio || typeof primaryPlayerReportedPosition !== "number") {
       return;
     }
     const offset = Math.max(0, primaryPlayerReportedPosition);
@@ -1033,7 +1383,78 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       playbackPositionRef.current = offset;
     });
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [activeScrollClockKey, mode, primaryPlayerReportedPosition]);
+  }, [activeScrollClockKey, hasPlayerSyncRatio, mode, primaryPlayerReportedPosition]);
+
+  useEffect(() => {
+    if (!voiceAssistWanted || !joinResult || roomState?.voiceState.sourceDeviceId !== joinResult.deviceId) {
+      return;
+    }
+
+    const match = roomState.voiceState.match;
+    const clock = scrollClockRef.current;
+    if (!match?.shouldAdvance || match.level === "lost" || typeof match.targetOffsetPx !== "number" || !clock || clock.state !== "playing") {
+      return;
+    }
+
+    const now = monotonicTime();
+    const lastAdjustment = lastVoiceAdjustmentRef.current;
+    const adjustmentKey = match.matchedSpeechSegmentId ?? match.transcriptSegmentId;
+    if (lastAdjustment.segmentId === adjustmentKey && now - lastAdjustment.adjustedAt < 450) {
+      return;
+    }
+
+    const currentOffset = positionFromScrollClock(clock);
+    let targetOffsetPx = match.targetOffsetPx;
+    if (mode === "player" && match.matchedScrollAnchorId) {
+      const anchorSelector = match.matchedScrollAnchorId.replace(/"/g, '\\"');
+      const targetElement = document.querySelector<HTMLElement>(`.player-stage .teleprompter-content [data-scroll-anchor-id="${anchorSelector}"]`);
+      if (targetElement) {
+        targetOffsetPx = Math.max(0, targetElement.offsetTop + targetElement.offsetHeight / 2 - window.innerHeight / 2);
+      }
+    } else if (bundle && primaryPlaybackState?.contentHeightPx && primaryPlaybackState.viewportHeightPx) {
+      const matchedSpeech = match.matchedSpeechSegmentId
+        ? bundle.speechIndex.find((item) => item.speechSegmentId === match.matchedSpeechSegmentId)
+        : undefined;
+      if (matchedSpeech) {
+        const maxOffset = Math.max(0, primaryPlaybackState.contentHeightPx - primaryPlaybackState.viewportHeightPx);
+        const speechOrder = Math.max(0, bundle.speechIndex.findIndex((item) => item.speechSegmentId === matchedSpeech.speechSegmentId));
+        const ratio = speechOrder / Math.max(1, bundle.speechIndex.length - 1);
+        targetOffsetPx = Math.max(0, Math.min(maxOffset, ratio * maxOffset));
+      }
+    }
+    const distancePx = targetOffsetPx - currentOffset;
+    if (Math.abs(distancePx) < 56) {
+      setVoiceAssistStatus("语音与滚动已对齐");
+      lastVoiceAdjustmentRef.current = { segmentId: adjustmentKey, adjustedAt: now };
+      return;
+    }
+
+    const baseVelocity = clock.velocityPxPerSecond || speed || DEFAULT_SPEED;
+    const confidenceFactor = match.level === "locked" ? 1 : match.level === "probable" ? 0.72 : 0.45;
+    const correction = Math.max(-64, Math.min(84, distancePx * 0.22 * confidenceFactor));
+    const nextVelocity = Math.max(18, Math.min(150, Math.round(baseVelocity + correction)));
+    const shouldRecenter = Math.abs(distancePx) > 220;
+    const offsetCorrection = shouldRecenter ? Math.max(-260, Math.min(320, distancePx * 0.38 * confidenceFactor)) : 0;
+    const nextOffset = Math.max(0, currentOffset + offsetCorrection);
+    if (!shouldRecenter && Math.abs(nextVelocity - baseVelocity) < 2) {
+      return;
+    }
+
+    lastVoiceAdjustmentRef.current = { segmentId: adjustmentKey, adjustedAt: now };
+    setSpeed(nextVelocity);
+    setVoiceAssistStatus(distancePx > 0 ? `语音靠前，跟随到 ${nextVelocity}px/s` : `语音靠后，跟随到 ${nextVelocity}px/s`);
+    setPlaybackPositionPx(nextOffset);
+    playbackPositionRef.current = nextOffset;
+    sendScrollClock("playing", nextOffset, nextVelocity, clock.anchor, "voiceFollow");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [joinResult, roomState?.voiceState.match, roomState?.voiceState.sourceDeviceId, voiceAssistWanted]);
+
+  useEffect(() => {
+    return () => {
+      voiceAssistWantedRef.current = false;
+      stopSpeechRecognition();
+    };
+  }, []);
 
   useEffect(() => {
     if (mode !== "player") {
@@ -1228,6 +1649,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           setProjectName={setProjectName}
           parseStatus={scriptDraft?.parseStatus}
           hasSavedVersion={versions.length > 0}
+          saveStatus={saveStatus}
           markdown={markdown}
           setMarkdown={setMarkdown}
           versionMessage={versionMessage}
@@ -1239,6 +1661,8 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           isPlaying={isControlPlaying}
           playerMirrorX={playerMirrorX}
           playerMirrorY={playerMirrorY}
+          voiceAssistWanted={voiceAssistWanted}
+          voiceAssistStatus={voiceAssistSummary}
           playerEntryLink={playerEntryLink}
           roomLinks={roomLinks}
           inviteStatus={inviteStatus}
@@ -1256,11 +1680,15 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             }
             playFromCurrentOffset();
           }}
+          onJumpToStart={jumpToStart}
+          onJumpToEnd={jumpToEnd}
           onNudge={nudgePlayback}
           onJumpToMarker={jumpToMarker}
           onSpeedChange={setBoundedSpeed}
           onPlayerMirrorXChange={setPlayerMirrorX}
           onPlayerMirrorYChange={setPlayerMirrorY}
+          onToggleVoiceAssist={toggleVoiceAssist}
+          onGuideSeekRatio={seekPlaybackByRatio}
           onBeginMarkerEdit={beginMarkerEdit}
           onBeginCommentEdit={beginCommentEdit}
           pendingEditorAction={pendingEditorAction}
@@ -1619,6 +2047,15 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             >
               {isPlayerPlaying ? "暂停" : "播放"}
             </button>
+            <button className="player-tool-button" type="button" title="回到开始" onClick={jumpToStart}>
+              |&lt;
+            </button>
+            <button className="player-tool-button" type="button" title="回到结束" onClick={jumpToEnd}>
+              &gt;|
+            </button>
+            <button className="player-tool-button" type="button" aria-pressed={voiceAssistWanted} onClick={toggleVoiceAssist}>
+              {voiceAssistWanted ? "识别中" : "自动识别"}
+            </button>
             <button className="player-tool-button" type="button" onClick={() => void toggleFullscreen()}>
               {fullscreenActive ? "退出全屏" : "全屏"}
             </button>
@@ -1630,9 +2067,9 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             </button>
           </div>
         )}
-        {mode === "player" && wakeLockStatus && (
+        {mode === "player" && playerStatusToast && (
           <div className="player-toast" role="status" aria-live="polite">
-            {wakeLockStatus}
+            {playerStatusToast}
           </div>
         )}
         <div className="topbar-status-group">
@@ -1729,7 +2166,21 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 }
 
 function devicesWithPlayback(roomState: RoomState | null) {
-  return Object.values(roomState?.devices ?? {}).filter((device) => device.playbackState);
+  return Object.values(roomState?.devices ?? {})
+    .filter((device) => device.playbackState)
+    .sort((left, right) => {
+      const roleScore = Number(right.role === "player") - Number(left.role === "player");
+      if (roleScore !== 0) {
+        return roleScore;
+      }
+      const onlineScore = Number(right.online && right.connectionState !== "offline") - Number(left.online && left.connectionState !== "offline");
+      if (onlineScore !== 0) {
+        return onlineScore;
+      }
+      const rightAt = right.playbackState?.serverReceivedAt ?? right.playbackState?.reportedAt ?? right.lastSeenAt;
+      const leftAt = left.playbackState?.serverReceivedAt ?? left.playbackState?.reportedAt ?? left.lastSeenAt;
+      return rightAt - leftAt;
+    });
 }
 
 function escapeDirectiveAttr(value: string) {

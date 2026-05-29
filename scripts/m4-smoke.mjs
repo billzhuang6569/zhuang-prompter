@@ -79,8 +79,8 @@ async function main() {
   if (!match || match.level !== "locked" || !match.shouldAdvance) {
     throw new Error("High-confidence final transcript did not lock voice match.");
   }
-  if (!latest.scrollClock || latest.scrollClock.controlMode !== "voiceFollow") {
-    throw new Error("Locked voice match did not create voiceFollow ScrollClock.");
+  if (latest.scrollClock?.controlMode === "voiceFollow") {
+    throw new Error("Voice match should not force a voiceFollow ScrollClock or jump playback position.");
   }
 
   console.log(
@@ -91,7 +91,8 @@ async function main() {
         voiceSource: latest.voiceState.sourceDeviceId,
         level: match.level,
         confidence: match.confidence,
-        scrollClockMode: latest.scrollClock.controlMode,
+        voiceAdviceReady: match.shouldAdvance,
+        scrollClockMode: latest.scrollClock?.controlMode ?? null,
       },
       null,
       2,

@@ -17,7 +17,7 @@ async function main() {
     throw new Error("network-info did not include the localhost origin.");
   }
   for (const origin of origins) {
-    if (typeof origin.label !== "string" || typeof origin.origin !== "string" || !origin.origin.startsWith("http://")) {
+    if (typeof origin.label !== "string" || typeof origin.origin !== "string" || !/^https?:\/\//.test(origin.origin)) {
       throw new Error("network-info included an invalid origin.");
     }
   }

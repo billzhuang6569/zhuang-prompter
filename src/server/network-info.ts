@@ -20,11 +20,16 @@ export function getServerHost() {
   return process.env.HOST ?? "0.0.0.0";
 }
 
+export function isHttpsEnabled() {
+  return process.env.HTTPS === "1" || process.env.HTTPS === "true" || process.env.PROMPTER_HTTPS === "1";
+}
+
 export function getNetworkInfo(port = getServerPort(), host = getServerHost()): NetworkInfo {
+  const protocol = isHttpsEnabled() ? "https" : "http";
   const origins: NetworkOrigin[] = [
     {
       label: "本机",
-      origin: `http://localhost:${port}`,
+      origin: `${protocol}://localhost:${port}`,
       kind: "local",
     },
   ];
@@ -38,8 +43,8 @@ export function getNetworkInfo(port = getServerPort(), host = getServerHost()): 
         continue;
       }
       origins.push({
-        label: `局域网 ${name}`,
-        origin: `http://${address.address}:${port}`,
+        label: "播放端网址",
+        origin: `${protocol}://${address.address}:${port}`,
         kind: "lan",
       });
     }
