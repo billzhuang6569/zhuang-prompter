@@ -2043,6 +2043,7 @@ input {
   font-weight: 500;
 }
 
+.nike-rich-editor-content > div,
 .nike-rich-editor-content p,
 .nike-rich-editor-content li {
   max-width: 60ch;
@@ -2052,8 +2053,13 @@ input {
   line-height: 1.65;
 }
 
+.nike-rich-editor-content > div,
 .nike-rich-editor-content p {
   margin: 0 0 1.15em;
+}
+
+.nike-rich-editor-content > div:empty {
+  min-height: 1.65em;
 }
 
 .nike-rich-editor-content ul,
