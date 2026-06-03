@@ -2053,7 +2053,7 @@ input {
 }
 
 .nike-rich-editor-content p {
-  margin: 0 0 var(--nike-lg);
+  margin: 0 0 1.15em;
 }
 
 .nike-rich-editor-content ul,
@@ -3219,13 +3219,18 @@ input {
 }
 
 .script-heading {
-  margin: 24px 0 18px;
+  margin: 0 0 0.78em;
   line-height: 1.18;
 }
 
 .script-paragraph,
 .script-list-item {
-  margin: 18px 0;
+  margin: 0 0 0.92em;
+}
+
+.script-paragraph:last-child,
+.script-list-item:last-child {
+  margin-bottom: 0;
 }
 
 .script-list-item::before {
@@ -3249,7 +3254,7 @@ input {
 }
 
 .script-marker {
-  margin: 24px 0;
+  margin: 0.7em 0 0.86em;
   border-left: 4px solid var(--primary);
   padding: 10px 0 10px 16px;
   color: var(--primary-dark);

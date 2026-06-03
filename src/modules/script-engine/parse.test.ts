@@ -160,3 +160,31 @@ test("plain markdown export removes markers notes and legacy stage cues", () => 
 第三段。`,
   );
 });
+
+test("blank-line separated interview markdown stays as separate paragraphs", () => {
+  const markdown = `**采访：**
+
+作为国内领先的芯片 IP 设计与服务提供商，安谋科技锚定“AI Arm CHINA”战略发展方向。
+
+此次，安谋科技携手火山引擎，将云端弹性算力引入芯片IP研发的关键流程。
+
+此外，双方也在探索大模型调用和智能体等能力在办公运营场景中的应用。
+
+**采访：安谋科技 Principal Engineer Jared Wang**
+
+在芯片IP设计流程中，EDA 仿真和验证是非常关键的一环。`;
+
+  const bundle = parseMarkdown(markdown);
+
+  assert.deepEqual(
+    bundle.htmlTree.flatMap((node) => (node.type === "paragraph" ? [node.text] : [])),
+    [
+      "采访：",
+      "作为国内领先的芯片 IP 设计与服务提供商，安谋科技锚定“AI Arm CHINA”战略发展方向。",
+      "此次，安谋科技携手火山引擎，将云端弹性算力引入芯片IP研发的关键流程。",
+      "此外，双方也在探索大模型调用和智能体等能力在办公运营场景中的应用。",
+      "采访：安谋科技 Principal Engineer Jared Wang",
+      "在芯片IP设计流程中，EDA 仿真和验证是非常关键的一环。",
+    ],
+  );
+});
