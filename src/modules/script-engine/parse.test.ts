@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { extensionSpecFixture, longTokenFixture, parseMarkdown } from ".";
+import { extensionSpecFixture, longTokenFixture, parseMarkdown, stripScriptDirectives } from ".";
 
 test("extracts speech and indexes from the full extension fixture", () => {
   const bundle = parseMarkdown(extensionSpecFixture, { scriptVersionId: "ver_fixture" });
@@ -103,4 +103,60 @@ test("long tokens produce warning but remain speech", () => {
 
   assert.equal(bundle.speechIndex.length, 1);
   assert.ok(bundle.parseWarnings.some((warning) => warning.code === "LONG_UNBREAKABLE_TOKEN"));
+});
+
+test("pasted markdown with marker and notes imports as teleprompter script", () => {
+  const pastedMarkdown = `# 新房间导入测试
+
+::marker[01]{text="开场"}
+
+今天我们测试粘贴导入。
+
+::notes{text="这里看镜头"}
+
+第二段继续念。
+
+:marker[02]{text="结尾"}
+\u00a0
+
+最后一句。`;
+
+  const bundle = parseMarkdown(pastedMarkdown);
+
+  assert.deepEqual(
+    bundle.speechIndex.map((item) => item.rawText),
+    ["新房间导入测试", "今天我们测试粘贴导入。", "第二段继续念。", "最后一句。"],
+  );
+  assert.deepEqual(
+    bundle.markerIndex.map((marker) => marker.markerId),
+    ["01", "02"],
+  );
+  assert.equal(bundle.parseWarnings.length, 0);
+});
+
+test("plain markdown export removes markers notes and legacy stage cues", () => {
+  const markdown = `# 标题
+
+::marker[01]{text="开场"}
+
+第一段。:marker[02]{text="中间点"}继续。
+
+::notes{text="这里看镜头"}
+
+第二段。
+
+::stage[pause]{label="停顿" duration="1s"}
+
+第三段。`;
+
+  assert.equal(
+    stripScriptDirectives(markdown),
+    `# 标题
+
+第一段。继续。
+
+第二段。
+
+第三段。`,
+  );
 });

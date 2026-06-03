@@ -15,6 +15,7 @@ import {
 } from "react";
 import type { MDXEditorMethods } from "@mdxeditor/editor";
 import type { RoomJoinResult } from "@/domain/room/types";
+import { stripScriptDirectives } from "@/modules/script-engine";
 import type { RenderBundle } from "@/modules/script-engine/types";
 import { makeRandomId } from "@/shared/id";
 import { RichMarkdownEditor } from "./rich-markdown-editor";
@@ -177,6 +178,7 @@ export function ControlConsole({
   const [guideMetrics, setGuideMetrics] = useState({ height: 0, offsetTop: 0 });
   const [guideDragReady, setGuideDragReady] = useState(false);
   const [guideDragging, setGuideDragging] = useState(false);
+  const [exportStatus, setExportStatus] = useState("");
 
   const markers = bundle?.markerIndex ?? [];
   const safePlayerLink = playerEntryLink ?? roomLinks[0];
@@ -487,6 +489,15 @@ export function ControlConsole({
     runInRawEditor(() => onBeginCommentEdit());
   }
 
+  function exportMarkdown(includeDirectives: boolean) {
+    const exportedMarkdown = includeDirectives ? markdown.trimEnd() : stripScriptDirectives(markdown);
+    const suffix = includeDirectives ? "with-notes-markers" : "plain";
+    const fileName = `${safeFileName(projectName || `room-${roomCode}`)}-${suffix}.md`;
+    downloadMarkdownFile(fileName, `${exportedMarkdown}\n`);
+    setExportStatus(includeDirectives ? "已导出 MD" : "已导出纯文本 MD");
+    window.setTimeout(() => setExportStatus(""), 1800);
+  }
+
   function confirmFloatingEditorAction() {
     if (richPendingEditorAction) {
       const fallback = richPendingEditorAction.kind === "marker" ? "标记点" : "提示内容";
@@ -749,10 +760,19 @@ export function ControlConsole({
                   <CommentIcon />
                   增加注释
                 </button>
+                <button className="nike-tlb" type="button" onClick={() => exportMarkdown(true)}>
+                  <DownloadIcon />
+                  导出MD
+                </button>
+                <button className="nike-tlb" type="button" onClick={() => exportMarkdown(false)}>
+                  <DownloadIcon />
+                  导出纯文本MD
+                </button>
                 <button className="nike-t-save" type="button" onClick={onSaveVersion}>
                   <SaveIcon />
                   保存
                 </button>
+                {exportStatus && <span className="nike-export-status">{exportStatus}</span>}
               </div>
             </div>
           </div>
@@ -1156,6 +1176,30 @@ async function copyToClipboard(value: string) {
   await navigator.clipboard?.writeText(value).catch(() => undefined);
 }
 
+function safeFileName(value: string) {
+  return (
+    value
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, "-")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 80) || "zhuang-prompter-script"
+  );
+}
+
+function downloadMarkdownFile(fileName: string, markdown: string) {
+  const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 function MiniPrompterIcon() {
   return (
     <svg width="12" height="10" viewBox="0 0 12 10" fill="none">
@@ -1205,6 +1249,16 @@ function SaveIcon() {
         strokeLinejoin="round"
       />
       <rect x="3.5" y="1.5" width="4" height="2.5" rx=".3" stroke="currentColor" strokeWidth="1" />
+    </svg>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M6 1.2v5.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <path d="m3.8 4.7 2.2 2.2 2.2-2.2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M2.2 8.4v1.7h7.6V8.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

@@ -1798,6 +1798,12 @@ input {
   color: var(--nike-mute);
 }
 
+.nike-export-status {
+  color: rgba(64, 214, 163, 0.9);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .nike-t-sep {
   width: 1px;
   height: 16px;
