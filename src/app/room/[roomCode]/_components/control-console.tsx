@@ -56,6 +56,12 @@ type FloatingEditorPosition = {
   top: number;
 };
 
+type DesktopClipboardBridge = Window & {
+  zhuangPrompter?: {
+    writeClipboardText?: (value: string) => boolean | void | Promise<boolean | void>;
+  };
+};
+
 type ControlConsoleProps = {
   roomCode: string;
   connectionLabel: string;
@@ -166,6 +172,7 @@ export function ControlConsole({
   const richContentWrapRef = useRef<HTMLDivElement | null>(null);
   const guideLineRef = useRef<HTMLDivElement | null>(null);
   const guideHoverTimerRef = useRef<number | undefined>(undefined);
+  const copyStatusTimerRef = useRef<number | undefined>(undefined);
   const guideDraggingRef = useRef(false);
   const pendingGuideRatioRef = useRef<number | null>(null);
   const lastGuideSeekAtRef = useRef(0);
@@ -179,6 +186,7 @@ export function ControlConsole({
   const [guideDragReady, setGuideDragReady] = useState(false);
   const [guideDragging, setGuideDragging] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
+  const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
 
   const markers = bundle?.markerIndex ?? [];
   const safePlayerLink = playerEntryLink ?? roomLinks[0];
@@ -192,6 +200,14 @@ export function ControlConsole({
       });
     }
   }, [activePendingEditorAction]);
+
+  useEffect(() => {
+    return () => {
+      if (copyStatusTimerRef.current) {
+        window.clearTimeout(copyStatusTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (view === "raw") {
@@ -496,6 +512,15 @@ export function ControlConsole({
     downloadMarkdownFile(fileName, `${exportedMarkdown}\n`);
     setExportStatus(includeDirectives ? "已导出 MD" : "已导出纯文本 MD");
     window.setTimeout(() => setExportStatus(""), 1800);
+  }
+
+  async function copyPlayerLink(value: string) {
+    const copied = await copyToClipboard(value);
+    setCopyStatus(copied ? "copied" : "failed");
+    if (copyStatusTimerRef.current) {
+      window.clearTimeout(copyStatusTimerRef.current);
+    }
+    copyStatusTimerRef.current = window.setTimeout(() => setCopyStatus("idle"), copied ? 1800 : 2400);
   }
 
   function confirmFloatingEditorAction() {
@@ -1015,15 +1040,20 @@ export function ControlConsole({
                   <div className="nike-qrl">
                     <div className="nike-ql">
                       <div className="nike-ql-lbl">播放端网址</div>
-                      <button className="nike-ql-v" type="button" onClick={() => copyToClipboard(safePlayerLink.playerUrl)}>
+                      <button className="nike-ql-v" type="button" onClick={() => void copyPlayerLink(safePlayerLink.playerUrl)}>
                         {safePlayerLink.playerUrl}
                       </button>
+                      {copyStatus !== "idle" && (
+                        <span className={`nike-copy-status ${copyStatus}`}>
+                          {copyStatus === "copied" ? "已复制到剪贴板" : "复制失败，请手动选中网址复制"}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
                 <div className="nike-qr-acts">
-                  <button className="nike-btn" type="button" onClick={() => copyToClipboard(safePlayerLink.playerUrl)}>
-                    复制播放端网址
+                  <button className="nike-btn" type="button" onClick={() => void copyPlayerLink(safePlayerLink.playerUrl)}>
+                    {copyStatus === "copied" ? "已复制" : copyStatus === "failed" ? "复制失败" : "复制播放端网址"}
                   </button>
                   <button className="nike-btn" type="button" onClick={() => onOpenQr(safePlayerLink)}>
                     放大二维码
@@ -1173,7 +1203,53 @@ function formatTime(value: number) {
 }
 
 async function copyToClipboard(value: string) {
-  await navigator.clipboard?.writeText(value).catch(() => undefined);
+  if (!value) {
+    return false;
+  }
+
+  try {
+    const bridge = (window as DesktopClipboardBridge).zhuangPrompter;
+    if (bridge?.writeClipboardText) {
+      await bridge.writeClipboardText(value);
+      return true;
+    }
+  } catch {
+    // Fall back to browser clipboard APIs below.
+  }
+
+  try {
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
+      await navigator.clipboard.writeText(value);
+      return true;
+    }
+  } catch {
+    // Fall back to the selection-based copy path below.
+  }
+
+  return copyToClipboardWithSelection(value);
+}
+
+function copyToClipboardWithSelection(value: string) {
+  const textArea = document.createElement("textarea");
+  textArea.value = value;
+  textArea.readOnly = true;
+  textArea.style.position = "fixed";
+  textArea.style.top = "0";
+  textArea.style.left = "-9999px";
+  textArea.style.opacity = "0";
+  textArea.style.pointerEvents = "none";
+  document.body.appendChild(textArea);
+
+  try {
+    textArea.focus();
+    textArea.select();
+    textArea.setSelectionRange(0, value.length);
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    textArea.remove();
+  }
 }
 
 function safeFileName(value: string) {

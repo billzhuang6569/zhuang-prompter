@@ -2616,6 +2616,21 @@ input {
   color: var(--nike-ink);
 }
 
+.nike-copy-status {
+  display: block;
+  margin-top: 3px;
+  font-size: 9px;
+  line-height: 1.2;
+}
+
+.nike-copy-status.copied {
+  color: rgba(64, 214, 163, 0.9);
+}
+
+.nike-copy-status.failed {
+  color: rgba(255, 106, 61, 0.95);
+}
+
 .nike-btn {
   display: inline-flex;
   align-items: center;

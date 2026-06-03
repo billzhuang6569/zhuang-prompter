@@ -86,6 +86,8 @@ async function startLocalServer() {
 }
 
 function createWindow(origin) {
+  const preload = join(__dirname, "preload.cjs");
+
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 960,
@@ -96,6 +98,7 @@ function createWindow(origin) {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      preload,
       sandbox: true,
     },
   });
@@ -111,6 +114,7 @@ function createWindow(origin) {
           webPreferences: {
             contextIsolation: true,
             nodeIntegration: false,
+            preload,
             sandbox: true,
           },
         },
