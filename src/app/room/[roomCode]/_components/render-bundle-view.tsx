@@ -29,6 +29,7 @@ export function RenderBundleView({
       ? ({
           "--playback-offset": `${Math.max(0, playbackPositionPx)}px`,
           "--player-font-scale": fontScale,
+          "--player-font-size": `${Math.round(48 * fontScale)}px`,
         } as CSSProperties)
       : undefined;
 

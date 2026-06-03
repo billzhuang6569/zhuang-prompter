@@ -132,6 +132,7 @@ export type RoomSettings = {
   playerMirrorX: boolean;
   playerMirrorY: boolean;
   playerMarkersVisible: boolean;
+  primaryPlayerDeviceId: string | null;
 };
 
 export type RoomState = {

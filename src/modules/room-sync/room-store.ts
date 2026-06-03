@@ -45,6 +45,7 @@ const defaultRoomSettings: RoomSettings = {
   playerMirrorX: false,
   playerMirrorY: false,
   playerMarkersVisible: false,
+  primaryPlayerDeviceId: null,
 };
 
 function now() {
@@ -326,6 +327,9 @@ export function updateRoomSettings(input: {
   if (input.settings.playerMirrorX !== undefined) nextSettings.playerMirrorX = input.settings.playerMirrorX;
   if (input.settings.playerMirrorY !== undefined) nextSettings.playerMirrorY = input.settings.playerMirrorY;
   if (input.settings.playerMarkersVisible !== undefined) nextSettings.playerMarkersVisible = input.settings.playerMarkersVisible;
+  if (input.settings.primaryPlayerDeviceId !== undefined) {
+    nextSettings.primaryPlayerDeviceId = input.settings.primaryPlayerDeviceId;
+  }
   record.state.settings = withDefaultSettings(nextSettings);
   bumpRoomFact(record);
   persistRooms();
@@ -474,6 +478,12 @@ export function registerSession(input: {
   existing.lastClientSeq = Math.max(existing.lastClientSeq, input.clientSeq);
   if (input.role) {
     existing.role = input.role;
+    if (input.role === "player" && !record.state.settings.primaryPlayerDeviceId) {
+      record.state.settings = withDefaultSettings({
+        ...record.state.settings,
+        primaryPlayerDeviceId: input.deviceId,
+      });
+    }
   }
   record.state.devices[input.deviceId] = existing;
 
@@ -508,6 +518,12 @@ export function setDeviceRole(input: {
   const device = record.state.devices[input.deviceId] ?? createDevicePresence(input.deviceId, at);
   device.sessionId = input.sessionId;
   device.role = input.role;
+  if (input.role === "player" && !record.state.settings.primaryPlayerDeviceId) {
+    record.state.settings = withDefaultSettings({
+      ...record.state.settings,
+      primaryPlayerDeviceId: input.deviceId,
+    });
+  }
   device.online = true;
   device.connectionState = "online";
   device.lastSeenAt = at;

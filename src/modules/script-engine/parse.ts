@@ -130,7 +130,7 @@ export function parseMarkdown(markdown: string, options: ParseOptions = {}): Ren
     blockIndex += 1;
 
     if (node.type === "heading") {
-      const text = cleanText(toString(node));
+      const text = cleanDisplayText(toString(node));
       const speech = addSpeech(text, node, "heading");
       htmlTree.push({
         renderNodeId: `render_heading_${blockIndex}`,
@@ -197,7 +197,7 @@ export function parseMarkdown(markdown: string, options: ParseOptions = {}): Ren
     if (node.type === "list") {
       for (const item of node.children ?? []) {
         blockIndex += 1;
-        const text = cleanText(toString(item));
+        const text = cleanDisplayText(toString(item));
         const speech = addSpeech(text, item, "paragraph");
         htmlTree.push({
           renderNodeId: `render_list_item_${blockIndex}`,
@@ -233,7 +233,7 @@ export function parseMarkdown(markdown: string, options: ParseOptions = {}): Ren
       return;
     }
 
-    const text = cleanText(toString(node));
+    const text = cleanDisplayText(toString(node));
     if (text) {
       const speech = addSpeech(text, node, "paragraph");
       htmlTree.push({
@@ -279,7 +279,7 @@ function paragraphSegments(node: MarkdownNode) {
   let markers: MarkdownNode[] = [];
 
   function flush(cue?: StageCueData, forcedText?: string) {
-    const spokenText = cleanText(forcedText ?? parts.join(""));
+    const spokenText = cleanDisplayText(forcedText ?? parts.join(""));
     if (spokenText || markers.length > 0) {
       segments.push({ spokenText, cue, markers });
     }
@@ -375,6 +375,17 @@ function addRenderLineAnchor(node: MarkdownNode, scriptVersionId: string, scroll
 
 function cleanText(value?: string) {
   return (value ?? "").replace(/\u200B/g, "").replace(/\s+/g, " ").trim();
+}
+
+function cleanDisplayText(value?: string) {
+  return (value ?? "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/\u200B/g, "")
+    .split("\n")
+    .map((line) => line.replace(/[ \t\f\v]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function normalizeLineMarkerDirectives(markdown: string) {

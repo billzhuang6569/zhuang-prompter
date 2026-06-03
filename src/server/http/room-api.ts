@@ -122,6 +122,8 @@ export async function handleRoomApi(
         playerMirrorX: typeof body.playerMirrorX === "boolean" ? body.playerMirrorX : undefined,
         playerMirrorY: typeof body.playerMirrorY === "boolean" ? body.playerMirrorY : undefined,
         playerMarkersVisible: typeof body.playerMarkersVisible === "boolean" ? body.playerMarkersVisible : undefined,
+        primaryPlayerDeviceId:
+          typeof body.primaryPlayerDeviceId === "string" || body.primaryPlayerDeviceId === null ? body.primaryPlayerDeviceId : undefined,
       },
     });
 

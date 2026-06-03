@@ -82,6 +82,7 @@ type ControlConsoleProps = {
   playbackCenterRatio?: number;
   speed: number;
   isPlaying: boolean;
+  playerFontScale: number;
   playerMirrorX: boolean;
   playerMirrorY: boolean;
   voiceAssistWanted: boolean;
@@ -102,6 +103,7 @@ type ControlConsoleProps = {
   onNudge: (deltaPx: number) => void;
   onJumpToMarker: (markerId: string) => void;
   onSpeedChange: (speed: number) => void;
+  onPlayerFontScaleChange: (scale: number) => void;
   onPlayerMirrorXChange: (enabled: boolean) => void;
   onPlayerMirrorYChange: (enabled: boolean) => void;
   onToggleVoiceAssist: () => void;
@@ -134,6 +136,7 @@ export function ControlConsole({
   playbackCenterRatio,
   speed,
   isPlaying,
+  playerFontScale,
   playerMirrorX,
   playerMirrorY,
   voiceAssistWanted,
@@ -154,6 +157,7 @@ export function ControlConsole({
   onNudge,
   onJumpToMarker,
   onSpeedChange,
+  onPlayerFontScaleChange,
   onPlayerMirrorXChange,
   onPlayerMirrorYChange,
   onToggleVoiceAssist,
@@ -961,6 +965,25 @@ export function ControlConsole({
               </button>
             </div>
             <div className="nike-control-label">播放端显示</div>
+            <div className="nike-spdr">
+              <span className="nike-spd-l">字号</span>
+              <input
+                type="range"
+                min="75"
+                max="200"
+                value={Math.round(playerFontScale * 100)}
+                onChange={(event) => onPlayerFontScaleChange(Number(event.target.value) / 100)}
+              />
+              <span className="nike-spd-v">{Math.round(playerFontScale * 100)}%</span>
+            </div>
+            <div className="nike-sadj">
+              <button className="nike-sadjb" type="button" onClick={() => onPlayerFontScaleChange(playerFontScale - 0.1)}>
+                A-
+              </button>
+              <button className="nike-sadjb" type="button" onClick={() => onPlayerFontScaleChange(playerFontScale + 0.1)}>
+                A+
+              </button>
+            </div>
             <div className="nike-srow">
               <button
                 className="nike-srowb"

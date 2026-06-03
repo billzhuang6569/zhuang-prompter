@@ -188,3 +188,16 @@ test("blank-line separated interview markdown stays as separate paragraphs", () 
     ],
   );
 });
+
+test("single soft line breaks are preserved for rendering but normalized for speech", () => {
+  const bundle = parseMarkdown(`文字1
+文字2
+
+文字3`);
+
+  assert.deepEqual(
+    bundle.htmlTree.flatMap((node) => (node.type === "paragraph" ? [node.text] : [])),
+    ["文字1\n文字2", "文字3"],
+  );
+  assert.equal(bundle.speechIndex[0].normalizedText, "文字1 文字2");
+});

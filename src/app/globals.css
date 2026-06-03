@@ -2059,7 +2059,8 @@ input {
 .nike-rich-editor-content > div,
 .nike-rich-editor-content p,
 .nike-rich-paragraph {
-  margin: 0 0 1.55em !important;
+  margin: 0 0 0.9em !important;
+  white-space: pre-line;
 }
 
 .nike-rich-editor-content > div:empty,
@@ -3203,7 +3204,7 @@ input {
 
 .player-stage .teleprompter-content {
   min-height: 70vh;
-  font-size: clamp(32px, 5vw, 64px);
+  font-size: var(--player-font-size, 48px);
   line-height: 1.35;
   transform: translate3d(0, calc(-1 * var(--playback-offset, 0px)), 0);
   will-change: transform;
@@ -3236,7 +3237,8 @@ input {
 
 .script-paragraph,
 .script-list-item {
-  margin: 0 0 0.92em;
+  margin: 0 0 0.78em;
+  white-space: pre-line;
 }
 
 .script-paragraph:last-child,

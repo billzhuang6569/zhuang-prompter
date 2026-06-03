@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import Link from "next/link";
-import type { Anchor, DeviceRole, PlaybackState, RoomJoinResult, RoomState, ScrollClock } from "@/domain/room/types";
+import type { Anchor, DevicePresence, DeviceRole, PlaybackState, RoomJoinResult, RoomState, ScrollClock } from "@/domain/room/types";
 import type {
   ClientEnvelope,
   ClientHelloPayload,
@@ -47,6 +47,8 @@ function preferredRole(mode: RoomClientProps["mode"]): DeviceRole | null {
 }
 
 const DEFAULT_SPEED = 68;
+const MIN_PLAYER_FONT_SCALE = 0.75;
+const MAX_PLAYER_FONT_SCALE = 2;
 const SCRIPT_VERSION_ID = "fixture_m1";
 
 function currentTime() {
@@ -345,8 +347,13 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }, [markdown, roomState?.currentScriptVersionId]);
   const activeScrollClock = roomState?.scrollClock ?? null;
   const activeScrollClockKey = scrollClockRuntimeKey(activeScrollClock);
-  const primaryPlaybackState =
-    playerReports.find((device) => device.role === "player")?.playbackState ?? playerReports[0]?.playbackState;
+  const primaryPlayerDeviceId = roomState?.settings.primaryPlayerDeviceId ?? null;
+  const primaryPlayerDevice =
+    (primaryPlayerDeviceId ? playerReports.find((device) => device.deviceId === primaryPlayerDeviceId && isOnlineDevice(device)) : undefined) ??
+    playerReports.find((device) => device.role === "player" && isOnlineDevice(device)) ??
+    playerReports[0];
+  const primaryPlaybackState = primaryPlayerDevice?.playbackState;
+  const isPrimaryPlayer = mode === "player" && Boolean(joinResult?.deviceId && joinResult.deviceId === primaryPlayerDeviceId);
   const primaryPlayerReportedPosition = primaryPlaybackState?.positionPx;
   const hasPlayerSyncRatio = typeof primaryPlaybackState?.centerPositionRatio === "number";
   const playbackCenterRatio =
@@ -792,7 +799,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     if (clock) {
       return Math.max(0, clock.offsetPx);
     }
-    const reportedPosition = playerReports[0]?.playbackState?.positionPx;
+    const reportedPosition = primaryPlaybackState?.positionPx;
     if (typeof reportedPosition === "number") {
       return Math.max(0, reportedPosition);
     }
@@ -1291,7 +1298,17 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     });
 
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [activeScrollClockKey, bundle, defaultAnchor, joinResult, mode, roomState?.currentScriptVersionId, sendEvent]);
+  }, [
+    activeScrollClockKey,
+    bundle,
+    defaultAnchor,
+    joinResult,
+    mode,
+    playerFontScale,
+    playerMarkersVisible,
+    roomState?.currentScriptVersionId,
+    sendEvent,
+  ]);
 
   useEffect(() => {
     if (mode !== "player" || !activeScrollClockKey || !joinResult) {
@@ -1593,7 +1610,31 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }
 
   function changePlayerFontScale(delta: number) {
-    setPlayerFontScale((value) => Math.min(1.35, Math.max(0.75, Number((value + delta).toFixed(2)))));
+    setPlayerFontScale((value) => Math.min(MAX_PLAYER_FONT_SCALE, Math.max(MIN_PLAYER_FONT_SCALE, Number((value + delta).toFixed(2)))));
+  }
+
+  function setBoundedPlayerFontScale(nextScale: number) {
+    setPlayerFontScale(Math.min(MAX_PLAYER_FONT_SCALE, Math.max(MIN_PLAYER_FONT_SCALE, Number(nextScale.toFixed(2)))));
+  }
+
+  async function setPrimaryPlayer() {
+    if (!joinResult || mode !== "player") {
+      return;
+    }
+    try {
+      const response = await fetch(`/api/rooms/${roomCode}/settings`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ primaryPlayerDeviceId: joinResult.deviceId }),
+      });
+      if (!response.ok) {
+        return;
+      }
+      const data = (await response.json()) as { roomState: RoomState };
+      setRoomState(data.roomState);
+    } catch {
+      // The player can keep executing; the existing primary remains authoritative.
+    }
   }
 
   async function invitePlayer() {
@@ -1659,6 +1700,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           playbackCenterRatio={playbackCenterRatio}
           speed={speed}
           isPlaying={isControlPlaying}
+          playerFontScale={playerFontScale}
           playerMirrorX={playerMirrorX}
           playerMirrorY={playerMirrorY}
           voiceAssistWanted={voiceAssistWanted}
@@ -1685,6 +1727,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           onNudge={nudgePlayback}
           onJumpToMarker={jumpToMarker}
           onSpeedChange={setBoundedSpeed}
+          onPlayerFontScaleChange={setBoundedPlayerFontScale}
           onPlayerMirrorXChange={setPlayerMirrorX}
           onPlayerMirrorYChange={setPlayerMirrorY}
           onToggleVoiceAssist={toggleVoiceAssist}
@@ -2025,6 +2068,9 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             <button className="player-tool-button" type="button" onClick={() => changePlayerFontScale(0.1)}>
               A+
             </button>
+            <button className="player-tool-button" type="button" aria-pressed={isPrimaryPlayer} onClick={() => void setPrimaryPlayer()}>
+              {isPrimaryPlayer ? "主播放端" : "设为主播放端"}
+            </button>
             <button className="player-tool-button" type="button" aria-pressed={playerMirrorX} onClick={() => setPlayerMirrorX((value) => !value)}>
               {playerMirrorX ? "取消水平镜像" : "水平镜像"}
             </button>
@@ -2181,6 +2227,10 @@ function devicesWithPlayback(roomState: RoomState | null) {
       const leftAt = left.playbackState?.serverReceivedAt ?? left.playbackState?.reportedAt ?? left.lastSeenAt;
       return rightAt - leftAt;
     });
+}
+
+function isOnlineDevice(device: DevicePresence) {
+  return device.online && device.connectionState !== "offline";
 }
 
 function escapeDirectiveAttr(value: string) {
