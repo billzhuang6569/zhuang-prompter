@@ -11,6 +11,7 @@ import {
   quotePlugin,
   tablePlugin,
   thematicBreakPlugin,
+  lexicalTheme,
   type DirectiveDescriptor,
   type DirectiveEditorProps,
   type MDXEditorMethods,
@@ -29,6 +30,16 @@ type DirectiveNodeLike = {
 type InitializedRichMarkdownEditorProps = {
   editorRef: ForwardedRef<MDXEditorMethods>;
 } & MDXEditorProps;
+
+const zhuangLexicalTheme = {
+  ...lexicalTheme,
+  paragraph: "nike-rich-paragraph",
+  heading: {
+    ...lexicalTheme.heading,
+    h1: "nike-rich-heading nike-rich-heading-1",
+    h2: "nike-rich-heading nike-rich-heading-2",
+  },
+};
 
 const markerDirectiveDescriptor: DirectiveDescriptor = {
   name: "marker",
@@ -53,6 +64,7 @@ export default function InitializedRichMarkdownEditor({ editorRef, ...props }: I
     <MDXEditor
       {...props}
       ref={editorRef}
+      lexicalTheme={zhuangLexicalTheme}
       plugins={[
         headingsPlugin(),
         listsPlugin(),

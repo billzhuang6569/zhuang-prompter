@@ -2028,7 +2028,8 @@ input {
   caret-color: var(--nike-info);
 }
 
-.nike-rich-editor-content h1 {
+.nike-rich-editor-content h1,
+.nike-rich-heading-1 {
   margin: 0 0 var(--nike-md);
   color: var(--nike-ink);
   font-size: 28px;
@@ -2036,7 +2037,8 @@ input {
   line-height: 1.2;
 }
 
-.nike-rich-editor-content h2 {
+.nike-rich-editor-content h2,
+.nike-rich-heading-2 {
   margin: var(--nike-xxl) 0 var(--nike-sm);
   color: var(--nike-ink);
   font-size: 18px;
@@ -2045,6 +2047,7 @@ input {
 
 .nike-rich-editor-content > div,
 .nike-rich-editor-content p,
+.nike-rich-paragraph,
 .nike-rich-editor-content li {
   max-width: 60ch;
   color: var(--nike-ink);
@@ -2054,11 +2057,13 @@ input {
 }
 
 .nike-rich-editor-content > div,
-.nike-rich-editor-content p {
-  margin: 0 0 1.15em;
+.nike-rich-editor-content p,
+.nike-rich-paragraph {
+  margin: 0 0 1.55em !important;
 }
 
-.nike-rich-editor-content > div:empty {
+.nike-rich-editor-content > div:empty,
+.nike-rich-paragraph:empty {
   min-height: 1.65em;
 }
 
