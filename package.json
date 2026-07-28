@@ -1,6 +1,6 @@
 {
   "name": "zhuang-prompter",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Markdown-first local/LAN teleprompter for recorded production.",
   "private": false,
   "license": "MIT",
@@ -40,7 +40,7 @@
     "dist:win": "pnpm desktop:prepare && electron-builder --win",
     "lint": "eslint",
     "typecheck": "pnpm build && tsc --noEmit",
-    "test:contracts": "tsx --test src/modules/script-engine/parse.test.ts",
+    "test:contracts": "tsx --test src/modules/script-engine/parse.test.ts src/modules/script-engine/render-bundle-view.test.tsx",
     "smoke:network": "node scripts/network-info-smoke.mjs",
     "smoke:m0": "node scripts/m0-smoke.mjs",
     "smoke:m2": "node scripts/m2-smoke.mjs",

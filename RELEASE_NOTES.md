@@ -1,5 +1,21 @@
 # Release Notes
 
+## v0.1.2
+
+Player-display cleanup for parser diagnostics.
+
+### Fixed
+
+- Parser warnings are now limited to the control preview and no longer cover the player display.
+- Long Chinese, Japanese, and Korean paragraphs are no longer misclassified as unbreakable tokens.
+- Genuine long URLs or Latin tokens still produce an actionable warning in the control preview.
+- Vertical mirroring now preserves the current playback position instead of jumping to another part of the script.
+
+### Compatibility
+
+- Room data, playback behavior, and the WebSocket synchronization protocol are unchanged.
+- Safari and iOS Safari 15 compatibility from v0.1.1 remains enforced in the release workflow.
+
 ## v0.1.1
 
 Compatibility update for older iPads without changing the room or synchronization protocol.

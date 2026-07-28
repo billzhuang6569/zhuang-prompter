@@ -53,7 +53,7 @@ export function RenderBundleView({
         </div>
       </div>
 
-      {bundle.parseWarnings.length > 0 && (
+      {variant === "control" && bundle.parseWarnings.length > 0 && (
         <div className="warning-list">
           {bundle.parseWarnings.map((warning, index) => (
             <p key={`${warning.code}-${index}`}>
@@ -64,10 +64,12 @@ export function RenderBundleView({
       )}
 
       <div className="render-bundle-layout">
-        <div className="teleprompter-content" style={contentStyle}>
-          {bundle.htmlTree.map((node) => (
-            <RenderNodeView key={node.renderNodeId} node={node} />
-          ))}
+        <div className="teleprompter-viewport">
+          <div className="teleprompter-content" style={contentStyle}>
+            {bundle.htmlTree.map((node) => (
+              <RenderNodeView key={node.renderNodeId} node={node} />
+            ))}
+          </div>
         </div>
 
         <aside className="marker-index-panel">

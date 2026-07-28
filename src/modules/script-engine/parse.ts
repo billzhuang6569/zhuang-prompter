@@ -406,7 +406,9 @@ function hashText(value: string) {
 }
 
 function warnLongTokens(text: string, sourceRange: SourceRange, warnings: ParseWarning[]) {
-  const token = text.split(/\s+/).find((part) => part.length > 80);
+  const token = text
+    .split(/[\s\u2e80-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7af]+/)
+    .find((part) => part.length > 80);
   if (token) {
     warnings.push({
       code: "LONG_UNBREAKABLE_TOKEN",

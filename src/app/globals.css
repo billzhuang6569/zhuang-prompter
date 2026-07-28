@@ -3163,6 +3163,10 @@ input {
   align-items: start;
 }
 
+.teleprompter-viewport {
+  min-width: 0;
+}
+
 .script-surface.has-center-guide .render-bundle-layout::before {
   content: "";
   position: absolute;
@@ -3210,16 +3214,22 @@ input {
   will-change: transform;
 }
 
-.player-stage.is-mirrored-x .teleprompter-content {
-  transform: translate3d(0, calc(-1 * var(--playback-offset, 0px)), 0) scaleX(-1);
+.player-stage .teleprompter-viewport {
+  height: 100vh;
+  transform-origin: center;
+  will-change: transform;
 }
 
-.player-stage.is-mirrored-y .teleprompter-content {
-  transform: translate3d(0, calc(-1 * var(--playback-offset, 0px)), 0) scaleY(-1);
+.player-stage.is-mirrored-x .teleprompter-viewport {
+  transform: scaleX(-1);
 }
 
-.player-stage.is-mirrored-x.is-mirrored-y .teleprompter-content {
-  transform: translate3d(0, calc(-1 * var(--playback-offset, 0px)), 0) scale(-1, -1);
+.player-stage.is-mirrored-y .teleprompter-viewport {
+  transform: scaleY(-1);
+}
+
+.player-stage.is-mirrored-x.is-mirrored-y .teleprompter-viewport {
+  transform: scale(-1, -1);
 }
 
 .control-preview .teleprompter-content {

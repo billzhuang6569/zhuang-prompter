@@ -105,6 +105,13 @@ test("long tokens produce warning but remain speech", () => {
   assert.ok(bundle.parseWarnings.some((warning) => warning.code === "LONG_UNBREAKABLE_TOKEN"));
 });
 
+test("long CJK paragraphs wrap normally without an unbreakable token warning", () => {
+  const bundle = parseMarkdown(`这是一段没有空格但可以正常换行的中文文稿。`.repeat(12));
+
+  assert.equal(bundle.speechIndex.length, 1);
+  assert.ok(bundle.parseWarnings.every((warning) => warning.code !== "LONG_UNBREAKABLE_TOKEN"));
+});
+
 test("pasted markdown with marker and notes imports as teleprompter script", () => {
   const pastedMarkdown = `# 新房间导入测试
 
