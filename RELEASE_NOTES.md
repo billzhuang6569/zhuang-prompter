@@ -1,5 +1,20 @@
 # Release Notes
 
+## v0.1.1
+
+Compatibility update for older iPads without changing the room or synchronization protocol.
+
+### Fixed
+
+- Player pages now compile for Safari and iOS Safari 15, including iPadOS 15.8.
+- Removed a client-side `Array.prototype.at` dependency from script export handling.
+- Added a build regression check that rejects unsupported class static blocks in client bundles.
+
+### Compatibility
+
+- Existing macOS, Windows, and modern desktop-browser workflows remain unchanged.
+- Room data and local drafts stay in the existing application-data directory during upgrades.
+
 ## v0.1.0
 
 First public release of 庄Sir的提词器.

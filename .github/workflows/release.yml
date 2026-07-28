@@ -24,6 +24,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm desktop:prepare
+      - run: pnpm smoke:safari15
       - run: pnpm exec electron-builder --mac --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
@@ -48,6 +49,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm desktop:prepare
+      - run: pnpm smoke:safari15
       - run: pnpm exec electron-builder --win --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"

@@ -77,7 +77,7 @@ function expandDirectiveRemovalRange(markdown: string, start: number, end: numbe
 function mergeRanges(ranges: Array<{ start: number; end: number }>) {
   const merged: Array<{ start: number; end: number }> = [];
   for (const range of [...ranges].sort((a, b) => a.start - b.start)) {
-    const last = merged.at(-1);
+    const last = merged[merged.length - 1];
     if (!last || range.start > last.end) {
       merged.push({ ...range });
       continue;

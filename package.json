@@ -1,6 +1,6 @@
 {
   "name": "zhuang-prompter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Markdown-first local/LAN teleprompter for recorded production.",
   "private": false,
   "license": "MIT",
@@ -11,6 +11,21 @@
   },
   "homepage": "https://github.com/billzhuang6569/zhuang-prompter#readme",
   "main": "electron/main.cjs",
+  "browserslist": {
+    "production": [
+      "chrome >= 111",
+      "edge >= 111",
+      "firefox >= 111",
+      "safari >= 15",
+      "ios_saf >= 15"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 edge version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
   "scripts": {
     "dev": "tsx server.ts",
     "dev:https": "pnpm cert:local && HTTPS=1 SSL_KEY_FILE=.cert/local-key.pem SSL_CERT_FILE=.cert/local-cert.pem pnpm dev",
@@ -34,6 +49,7 @@
     "smoke:m5:reconnect": "node scripts/m5-reconnect-smoke.mjs",
     "smoke:m5:session": "node scripts/m5-session-smoke.mjs",
     "smoke:m5:session:10min": "M5_SESSION_MS=600000 node scripts/m5-session-smoke.mjs",
+    "smoke:safari15": "node scripts/safari15-compat-smoke.mjs",
     "acceptance:local": "node scripts/acceptance-report.mjs"
   },
   "dependencies": {
