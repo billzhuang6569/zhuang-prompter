@@ -10,9 +10,10 @@ import type {
   ScriptDraft,
   ScriptVersion,
   ScrollClock,
-  VoiceMatchLevel,
   VoiceTranscript,
 } from "../../domain/room/types";
+import { effectivePrimary } from "../playback-engine/reading-position";
+import { matchVoice } from "../voice-follow/match";
 import { extensionSpecFixture, parseMarkdown } from "../script-engine";
 
 const OFFLINE_AFTER_MS = 30_000;
@@ -653,7 +654,7 @@ export function processVoiceTranscript(input: {
   }
 
   const at = now();
-  const normalizedText = normalizeForVoice(input.transcript.text);
+  const normalizedText = input.transcript.text.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
   const transcript: VoiceTranscript = {
     ...input.transcript,
     normalizedText,
@@ -662,9 +663,19 @@ export function processVoiceTranscript(input: {
   const bundle = parseMarkdown(record.state.scriptDraft.markdown, {
     scriptVersionId: record.state.currentScriptVersionId ?? "draft",
   });
-  const match = findBestVoiceMatch(normalizedText, bundle.speechIndex, input.transcript.asrConfidence);
-  const shouldAdvance =
-    Boolean(match.matchedScrollAnchorId) && (input.transcript.isFinal ? match.confidence >= 0.48 : match.confidence >= 0.56);
+  const primary = effectivePrimary(record.state.devices, record.state.settings.primaryPlayerDeviceId);
+  const currentOffset = primary?.playbackState?.currentAnchor.textOffset ?? record.state.voiceState.match?.targetTextOffset ?? 0;
+  const candidate = matchVoice(normalizedText, bundle, currentOffset, input.transcript.asrConfidence);
+  const confidence = candidate?.confidence ?? 0;
+  const match = {
+    confidence,
+    level: confidence >= 0.78 ? "locked" as const : confidence >= 0.56 ? "probable" as const : "lost" as const,
+    matchedScrollAnchorId: candidate?.block.anchorId,
+    matchedSpeechSegmentId: bundle.speechIndex.find(item => item.scrollAnchorId === candidate?.block.anchorId)?.speechSegmentId,
+    targetTextOffset: candidate?.targetTextOffset,
+    reason: candidate ? "nearby_text_match" : "no_reliable_nearby_match",
+  };
+  const shouldAdvance = Boolean(candidate) && confidence >= 0.56;
   record.state.voiceState = {
     ...record.state.voiceState,
     transcript,
@@ -679,107 +690,6 @@ export function processVoiceTranscript(input: {
   record.state.serverSeq += 1;
   touchRoom(record, at);
   return cloneState(record.state);
-}
-
-function normalizeForVoice(value: string) {
-  return value
-    .normalize("NFKC")
-    .toLocaleLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, "")
-    .trim();
-}
-
-function findBestVoiceMatch(
-  normalizedText: string,
-  speechIndex: ReturnType<typeof parseMarkdown>["speechIndex"],
-  asrConfidence: number,
-) {
-  let best = {
-    confidence: 0,
-    level: "lost" as VoiceMatchLevel,
-    reason: "no_match",
-    matchedScrollAnchorId: undefined as string | undefined,
-    matchedSpeechSegmentId: undefined as string | undefined,
-    targetOffsetPx: undefined as number | undefined,
-  };
-  for (const item of speechIndex) {
-    const candidate = normalizeForVoice(item.rawText);
-    const overlap = normalizedOverlap(normalizedText, candidate);
-    const confidence = Math.min(0.99, overlap * asrConfidence);
-    if (confidence > best.confidence) {
-      best = {
-        confidence,
-        level: confidence >= 0.78 ? "locked" : confidence >= 0.48 ? "probable" : confidence >= 0.28 ? "uncertain" : "lost",
-        reason: confidence >= 0.78 ? "nearby_final_match" : "low_confidence_hold",
-        matchedScrollAnchorId: item.scrollAnchorId,
-        matchedSpeechSegmentId: item.speechSegmentId,
-        targetOffsetPx: Math.max(0, (item.paragraphIndex - 1) * 360),
-      };
-    }
-  }
-  return best;
-}
-
-function normalizedOverlap(needle: string, haystack: string) {
-  if (!needle || !haystack) {
-    return 0;
-  }
-  if (haystack.includes(needle) || needle.includes(haystack)) {
-    return 1;
-  }
-
-  const lcs = longestCommonSubstringLength(needle, haystack);
-  const contiguousScore = lcs / Math.max(1, Math.min(needle.length, haystack.length));
-  const bigramScore = diceCoefficient(bigrams(needle), bigrams(haystack));
-  const charScore = diceCoefficient(Array.from(needle), Array.from(haystack));
-  return Math.max(contiguousScore, bigramScore, charScore * 0.72);
-}
-
-function longestCommonSubstringLength(left: string, right: string) {
-  const previous = new Array(right.length + 1).fill(0);
-  const current = new Array(right.length + 1).fill(0);
-  let best = 0;
-  for (let i = 1; i <= left.length; i += 1) {
-    for (let j = 1; j <= right.length; j += 1) {
-      current[j] = left[i - 1] === right[j - 1] ? previous[j - 1] + 1 : 0;
-      if (current[j] > best) {
-        best = current[j];
-      }
-    }
-    previous.splice(0, previous.length, ...current);
-    current.fill(0);
-  }
-  return best;
-}
-
-function bigrams(value: string) {
-  if (value.length <= 1) {
-    return Array.from(value);
-  }
-  const grams: string[] = [];
-  for (let index = 0; index < value.length - 1; index += 1) {
-    grams.push(value.slice(index, index + 2));
-  }
-  return grams;
-}
-
-function diceCoefficient(left: string[], right: string[]) {
-  if (left.length === 0 || right.length === 0) {
-    return 0;
-  }
-  const counts = new Map<string, number>();
-  for (const item of right) {
-    counts.set(item, (counts.get(item) ?? 0) + 1);
-  }
-  let hits = 0;
-  for (const item of left) {
-    const count = counts.get(item) ?? 0;
-    if (count > 0) {
-      hits += 1;
-      counts.set(item, count - 1);
-    }
-  }
-  return (2 * hits) / (left.length + right.length);
 }
 
 export function disconnectSession(input: { roomCode: string; deviceId: string; sessionId: string }): RoomState | null {

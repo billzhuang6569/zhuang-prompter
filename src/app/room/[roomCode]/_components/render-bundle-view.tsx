@@ -99,7 +99,7 @@ function RenderNodeView({ node }: { node: RenderNode }) {
     const HeadingTag = `h${Math.min(Math.max(node.depth, 1), 3)}` as "h1" | "h2" | "h3";
     return (
       <HeadingTag className="script-heading" data-scroll-anchor-id={node.scrollAnchorId}>
-        {node.text}
+        <span data-reading-text>{node.text}</span>
       </HeadingTag>
     );
   }
@@ -133,7 +133,7 @@ function RenderNodeView({ node }: { node: RenderNode }) {
           {marker.label ? ` · ${marker.label}` : ""}
         </span>
       ))}
-      {node.text}
+      <span data-reading-text>{node.text}</span>
       {node.cue && <span className="bound-stage-cue">↳ {cueText(node.cue)}</span>}
     </p>
   );

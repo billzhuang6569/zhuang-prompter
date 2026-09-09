@@ -5,6 +5,8 @@ export type ControlMode = "fixedSpeed" | "manual" | "voiceFollow";
 export type PlaybackStatus = "playing" | "paused" | "frozen";
 
 export type Anchor = {
+  textOffset?: number;
+  lineFraction?: number;
   anchorId?: string;
   type: "marker" | "heading" | "paragraph" | "speechSegment" | "textHash" | "renderLine";
   markerId?: string;
@@ -92,6 +94,7 @@ export type VoiceMatchResult = {
   matchedScrollAnchorId?: string;
   matchedSpeechSegmentId?: string;
   targetOffsetPx?: number;
+  targetTextOffset?: number;
   confidence: number;
   level: VoiceMatchLevel;
   shouldAdvance: boolean;

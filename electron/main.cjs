@@ -1,13 +1,23 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 
-const { app, BrowserWindow, dialog, session, shell } = require("electron");
-const { spawn } = require("node:child_process");
+const { app, BrowserWindow, dialog, ipcMain, session, shell } = require("electron");
+const { spawn, execFile } = require("node:child_process");
 const { createServer } = require("node:net");
 const { get } = require("node:http");
 const { join } = require("node:path");
 
+// One server and one installed application should own the local rooms.
+const ownsInstance = app.requestSingleInstanceLock();
+if (!ownsInstance) { app.quit(); }
+app.on("second-instance", () => showMainWindow());
+
 let mainWindow = null;
 let serverProcess = null;
+let serverOrigin = null;
+function showMainWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
+  else if (serverOrigin) createWindow(serverOrigin);
+}
 
 async function findAvailablePort(preferredPort) {
   for (let port = preferredPort; port < preferredPort + 20; port += 1) {
@@ -56,7 +66,7 @@ async function startLocalServer() {
   const port = await findAvailablePort(Number(process.env.PORT ?? 3000));
   const appPath = app.getAppPath();
   const serverEntry = join(appPath, ".desktop", "server", "server.cjs");
-  const dataFile = join(app.getPath("userData"), "rooms.json");
+  const dataFile = process.env.ZHUANG_PROMPTER_STORE_FILE ?? join(app.getPath("userData"), "rooms.json");
 
   serverProcess = spawn(process.execPath, [serverEntry], {
     cwd: appPath,
@@ -124,10 +134,19 @@ function createWindow(origin) {
     return { action: "deny" };
   });
 
+  mainWindow.on("closed", () => { mainWindow = null; });
   void mainWindow.loadURL(origin);
 }
 
+ipcMain.handle("open-voice-browser", async (event) => {
+  const url = new URL(event.sender.getURL());
+  if (url.origin !== serverOrigin || url.protocol !== "http:" || !["localhost", "127.0.0.1"].includes(url.hostname) || !/^\/room\/\d{6}\/control$/.test(url.pathname)) return false;
+  if (process.platform !== "darwin") { await shell.openExternal(url.href); return true; }
+  return new Promise(resolve => execFile("/usr/bin/open", ["-a", "Google Chrome", url.href], error => resolve(!error)));
+});
+
 app.whenReady().then(async () => {
+  if (!ownsInstance) return;
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
     const url = webContents.getURL();
     const isLocal = url.startsWith("http://localhost:") || url.startsWith("http://127.0.0.1:");
@@ -136,6 +155,7 @@ app.whenReady().then(async () => {
 
   try {
     const origin = await startLocalServer();
+    serverOrigin = origin;
     createWindow(origin);
   } catch (error) {
     dialog.showErrorBox("庄Sir的提词器启动失败", error instanceof Error ? error.message : String(error));
@@ -143,9 +163,7 @@ app.whenReady().then(async () => {
   }
 
   app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0 && mainWindow) {
-      mainWindow.show();
-    }
+    showMainWindow();
   });
 });
 

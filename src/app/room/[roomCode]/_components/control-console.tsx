@@ -14,10 +14,12 @@ import {
   type SetStateAction,
 } from "react";
 import type { MDXEditorMethods } from "@mdxeditor/editor";
-import type { RoomJoinResult } from "@/domain/room/types";
+import type { Anchor, RoomJoinResult } from "@/domain/room/types";
 import { stripScriptDirectives } from "@/modules/script-engine";
+import { pendingEditorActionKey, renumberMarkerDirectives } from "@/modules/script-engine/editing";
 import type { RenderBundle } from "@/modules/script-engine/types";
 import { makeRandomId } from "@/shared/id";
+import { readingAtY, readingY } from "@/modules/playback-engine/reading-position";
 import { RichMarkdownEditor } from "./rich-markdown-editor";
 
 type VersionSummary = {
@@ -58,6 +60,7 @@ type FloatingEditorPosition = {
 
 type DesktopClipboardBridge = Window & {
   zhuangPrompter?: {
+    openVoiceBrowser?: () => Promise<boolean>;
     writeClipboardText?: (value: string) => boolean | void | Promise<boolean | void>;
   };
 };
@@ -80,6 +83,7 @@ type ControlConsoleProps = {
   bundle?: RenderBundle;
   versions: VersionSummary[];
   playbackCenterRatio?: number;
+  readingAnchor?: Anchor;
   speed: number;
   isPlaying: boolean;
   playerFontScale: number;
@@ -107,7 +111,7 @@ type ControlConsoleProps = {
   onPlayerMirrorXChange: (enabled: boolean) => void;
   onPlayerMirrorYChange: (enabled: boolean) => void;
   onToggleVoiceAssist: () => void;
-  onGuideSeekRatio: (ratio: number) => void;
+  onGuideSeekRatio: (ratio: number, anchor?: Anchor) => void;
   onBeginMarkerEdit: (target?: EditorInsertionTarget) => void;
   onBeginCommentEdit: (target?: EditorInsertionTarget) => void;
   pendingEditorAction: PendingEditorAction | null;
@@ -134,6 +138,7 @@ export function ControlConsole({
   bundle,
   versions,
   playbackCenterRatio,
+  readingAnchor,
   speed,
   isPlaying,
   playerFontScale,
@@ -174,6 +179,7 @@ export function ControlConsole({
   const richEditorRef = useRef<MDXEditorMethods | null>(null);
   const scriptSurfaceRef = useRef<HTMLDivElement | null>(null);
   const richContentWrapRef = useRef<HTMLDivElement | null>(null);
+  const pendingReadingAnchorRef = useRef<Anchor | undefined>(undefined);
   const guideLineRef = useRef<HTMLDivElement | null>(null);
   const guideHoverTimerRef = useRef<number | undefined>(undefined);
   const copyStatusTimerRef = useRef<number | undefined>(undefined);
@@ -195,15 +201,14 @@ export function ControlConsole({
   const markers = bundle?.markerIndex ?? [];
   const safePlayerLink = playerEntryLink ?? roomLinks[0];
   const activePendingEditorAction = richPendingEditorAction ?? pendingEditorAction;
+  const activePendingEditorKey = pendingEditorActionKey(activePendingEditorAction);
 
-  useEffect(() => {
-    if (activePendingEditorAction) {
-      window.requestAnimationFrame(() => {
-        quickInputRef.current?.focus();
-        quickInputRef.current?.select();
-      });
+  useLayoutEffect(() => {
+    if (activePendingEditorKey) {
+      quickInputRef.current?.focus();
+      quickInputRef.current?.select();
     }
-  }, [activePendingEditorAction]);
+  }, [activePendingEditorKey]);
 
   useEffect(() => {
     return () => {
@@ -214,10 +219,12 @@ export function ControlConsole({
   }, []);
 
   useEffect(() => {
-    if (view === "raw") {
-      window.requestAnimationFrame(() => markdownEditorRef.current?.focus());
+    if (view !== "raw" || activePendingEditorKey) {
+      return;
     }
-  }, [markdownEditorRef, view]);
+    const animationFrame = window.requestAnimationFrame(() => markdownEditorRef.current?.focus());
+    return () => window.cancelAnimationFrame(animationFrame);
+  }, [activePendingEditorKey, markdownEditorRef, view]);
 
   useEffect(() => {
     if (view !== "render") {
@@ -258,13 +265,17 @@ export function ControlConsole({
       return;
     }
     const ratio = Math.max(0, Math.min(1, playbackCenterRatio ?? 0));
-    const top = guideMetrics.offsetTop + ratio * guideMetrics.height;
+    const content = richContentWrapRef.current?.querySelector<HTMLElement>(".nike-rich-editor-content");
+    const y = content && bundle && typeof readingAnchor?.textOffset === "number"
+      ? readingY(content, bundle, { textOffset: readingAnchor.textOffset, lineFraction: readingAnchor.lineFraction }) : undefined;
+    const top = y === undefined ? guideMetrics.offsetTop + ratio * guideMetrics.height
+      : scrollElement.scrollTop + y - scrollElement.getBoundingClientRect().top;
     guideLine.style.top = `${top}px`;
     const diff = scrollElement.scrollTop + scrollElement.clientHeight / 2 - top;
     if (Math.abs(diff) > 72) {
       scrollElement.scrollTop = Math.max(0, top - scrollElement.clientHeight / 2);
     }
-  }, [guideDragging, guideMetrics, playbackCenterRatio, previewScrollRef, view]);
+  }, [bundle, readingAnchor, guideDragging, guideMetrics, playbackCenterRatio, previewScrollRef, view]);
 
   useEffect(() => {
     const releaseGuideDrag = () => {
@@ -277,7 +288,7 @@ export function ControlConsole({
       setGuideDragging(false);
       setGuideDragReady(false);
       if (typeof pendingRatio === "number") {
-        onGuideSeekRatio(pendingRatio);
+        onGuideSeekRatio(pendingRatio, pendingReadingAnchorRef.current);
       }
     };
     window.addEventListener("pointerup", releaseGuideDrag);
@@ -316,10 +327,13 @@ export function ControlConsole({
       if (guideLineRef.current) {
         guideLineRef.current.style.top = `${top}px`;
       }
+      const content = richContentWrapRef.current?.querySelector<HTMLElement>(".nike-rich-editor-content");
+      const position = content && bundle ? readingAtY(content, bundle, clientY) : undefined;
+      pendingReadingAnchorRef.current = position ? { type: "renderLine", ...position } : undefined;
       pendingGuideRatioRef.current = ratio;
       return ratio;
     },
-    [guideMetrics, previewScrollRef],
+    [bundle, guideMetrics, previewScrollRef],
   );
 
   function beginGuideHover() {
@@ -350,7 +364,7 @@ export function ControlConsole({
     setGuideDragging(true);
     const ratio = seekFromGuidePointer(event.clientY);
     if (typeof ratio === "number") {
-      onGuideSeekRatio(ratio);
+      onGuideSeekRatio(ratio, pendingReadingAnchorRef.current);
     }
   }
 
@@ -374,7 +388,7 @@ export function ControlConsole({
     setGuideDragging(true);
     const ratio = seekFromGuidePointer(event.clientY);
     if (typeof ratio === "number") {
-      onGuideSeekRatio(ratio);
+      onGuideSeekRatio(ratio, pendingReadingAnchorRef.current);
     }
   }
 
@@ -387,7 +401,7 @@ export function ControlConsole({
     const now = performance.now();
     if (typeof ratio === "number" && now - lastGuideSeekAtRef.current > 80) {
       lastGuideSeekAtRef.current = now;
-      onGuideSeekRatio(ratio);
+      onGuideSeekRatio(ratio, pendingReadingAnchorRef.current);
     }
   }
 
@@ -407,7 +421,7 @@ export function ControlConsole({
     setGuideDragging(false);
     setGuideDragReady(false);
     if (typeof pendingRatio === "number") {
-      onGuideSeekRatio(pendingRatio);
+      onGuideSeekRatio(pendingRatio, pendingReadingAnchorRef.current);
     }
   }
 
@@ -485,7 +499,14 @@ export function ControlConsole({
     }
 
     setFloatingEditorPosition(fallbackFloatingEditorPosition());
-    runInRawEditor(() => onBeginMarkerEdit());
+    runInRawEditor(() => {
+      const editor = markdownEditorRef.current;
+      const target = {
+        start: editor?.selectionStart ?? markdown.length,
+        end: editor?.selectionEnd ?? markdown.length,
+      };
+      onBeginMarkerEdit(target);
+    });
   }
 
   function beginInlineCommentEdit() {
@@ -506,7 +527,14 @@ export function ControlConsole({
     }
 
     setFloatingEditorPosition(fallbackFloatingEditorPosition());
-    runInRawEditor(() => onBeginCommentEdit());
+    runInRawEditor(() => {
+      const editor = markdownEditorRef.current;
+      const target = {
+        start: editor?.selectionStart ?? markdown.length,
+        end: editor?.selectionEnd ?? markdown.length,
+      };
+      onBeginCommentEdit(target);
+    });
   }
 
   function exportMarkdown(includeDirectives: boolean) {
@@ -1011,6 +1039,13 @@ export function ControlConsole({
             <div className="nike-voice-status" role="status" aria-live="polite">
               {voiceAssistStatus}
             </div>
+            <button className="nike-srowb" type="button" onClick={async () => {
+              const openBrowser = (window as DesktopClipboardBridge).zhuangPrompter?.openVoiceBrowser;
+              if (openBrowser) {
+                if (!await openBrowser()) window.alert("未能打开 Chrome，请先安装 Chrome，再打开当前控制端网址。");
+              } else window.alert("请在这台主控电脑的 Chrome 中使用自动识别，并允许麦克风权限。");
+            }}>在 Chrome 中使用语音跟随</button>
+            {safePlayerLink && <a href={`${safePlayerLink.origin}/join`} target="_blank" rel="noreferrer">通用展示入口（输入房间号）</a>}
           </section>
 
           <section className="nike-psec" data-od-id="marker-jump">
@@ -1115,14 +1150,6 @@ function nextMarkerId(markers: Array<{ markerId: string }>) {
     markerId = nextIndex.toString().padStart(2, "0");
   }
   return markerId;
-}
-
-function renumberMarkerDirectives(source: string) {
-  let markerIndex = 0;
-  return source.replace(/(:{1,2}marker\[)(?:M)?\d{2,3}(\]\{)/g, (_match, before: string, after: string) => {
-    markerIndex += 1;
-    return `${before}${markerIndex.toString().padStart(2, "0")}${after}`;
-  });
 }
 
 function normalizeMarkerId(markerId: string) {

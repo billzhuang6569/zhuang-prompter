@@ -1,5 +1,23 @@
 # Release Notes
 
+## v0.1.3
+
+### Fixed
+
+- Controller guide and player center now share a character position instead of document-height percentages, including font changes, line breaks and mirrors.
+- Voice matching identifies the next text near the reading head. The primary display uses actual layout to adjust speed, stops on silence or lost matches, and respects manual pause.
+- Recognition restarts no longer save the draft, reselect the voice source or resume playback.
+
+### Added
+
+- `/join`: a reusable player entry page with a six-digit room code.
+- Open the local control page in Chrome when desktop speech recognition is unavailable.
+- `npm run install:mac`: install in Applications, keep a verified archive of the previous installed app, and remove verified old executable build copies.
+
+### Compatibility
+
+- Existing room data and editor changes are preserved. Recognition still depends on the browser's speech service and microphone permission; live speech should be checked before a shoot.
+
 ## v0.1.2
 
 Player-display cleanup for parser diagnostics.

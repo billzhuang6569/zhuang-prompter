@@ -3678,3 +3678,11 @@ input {
     padding: 16vh 24px 30vh;
   }
 }
+
+/* Mirror around the visible viewport, including mobile browser chrome changes. */
+.player-workspace .script-surface.player-stage,
+.player-stage .teleprompter-viewport { height: 100dvh; min-height: 100dvh; }
+.player-stage .teleprompter-content { padding-block: 50dvh; }
+.player-stage.has-center-guide .render-bundle-layout::before { position: fixed; top: 50%; right: 0; }
+.player-stage.has-center-guide .render-bundle-layout::after { position: fixed; top: calc(50% - 13px); right: 12px; }
+.player-stage [data-reading-text] { white-space: pre-wrap; }

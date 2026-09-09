@@ -1,6 +1,6 @@
 {
   "name": "zhuang-prompter",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Markdown-first local/LAN teleprompter for recorded production.",
   "private": false,
   "license": "MIT",
@@ -40,7 +40,7 @@
     "dist:win": "pnpm desktop:prepare && electron-builder --win",
     "lint": "eslint",
     "typecheck": "pnpm build && tsc --noEmit",
-    "test:contracts": "tsx --test src/modules/script-engine/parse.test.ts src/modules/script-engine/render-bundle-view.test.tsx",
+    "test:contracts": "tsx --test src/modules/script-engine/editing.test.ts src/modules/script-engine/parse.test.ts src/modules/script-engine/render-bundle-view.test.tsx src/modules/playback-engine/reading-position.test.ts",
     "smoke:network": "node scripts/network-info-smoke.mjs",
     "smoke:m0": "node scripts/m0-smoke.mjs",
     "smoke:m2": "node scripts/m2-smoke.mjs",
@@ -50,7 +50,9 @@
     "smoke:m5:session": "node scripts/m5-session-smoke.mjs",
     "smoke:m5:session:10min": "M5_SESSION_MS=600000 node scripts/m5-session-smoke.mjs",
     "smoke:safari15": "node scripts/safari15-compat-smoke.mjs",
-    "acceptance:local": "node scripts/acceptance-report.mjs"
+    "acceptance:local": "node scripts/acceptance-report.mjs",
+    "install:mac": "node scripts/install-mac.mjs",
+    "smoke:reading": "node scripts/reading-browser-smoke.mjs"
   },
   "dependencies": {
     "@mdxeditor/editor": "^4.0.1",

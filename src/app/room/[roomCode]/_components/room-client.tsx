@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { ReactNode, SetStateAction } from "react";
 import Link from "next/link";
-import type { Anchor, DevicePresence, DeviceRole, PlaybackState, RoomJoinResult, RoomState, ScrollClock } from "@/domain/room/types";
+import type { Anchor, DeviceRole, PlaybackState, RoomJoinResult, RoomState, ScrollClock } from "@/domain/room/types";
 import type {
   ClientEnvelope,
   ClientHelloPayload,
@@ -13,7 +13,10 @@ import type {
 } from "@/shared/protocol";
 import type { RenderBundle } from "@/modules/script-engine";
 import { parseMarkdown } from "@/modules/script-engine";
+import { renumberMarkerDirectives } from "@/modules/script-engine/editing";
 import { makeRandomId } from "@/shared/id";
+import { effectivePrimary, readingAtY, readingY, offsetForReadingY } from "@/modules/playback-engine/reading-position";
+import { followVelocity } from "@/modules/voice-follow/match";
 import { ControlConsole } from "./control-console";
 import { RenderBundleView } from "./render-bundle-view";
 
@@ -93,44 +96,11 @@ function currentPlayerCenterAnchor(bundle?: RenderBundle): { anchor: Anchor; pro
   if (!bundle) {
     return undefined;
   }
-  const centerY = window.innerHeight / 2;
-  const nodes = Array.from(
-    document.querySelectorAll<HTMLElement>(
-      [
-        ".player-stage .teleprompter-content .script-heading[data-scroll-anchor-id]",
-        ".player-stage .teleprompter-content .script-paragraph[data-scroll-anchor-id]",
-        ".player-stage .teleprompter-content .script-list-item[data-scroll-anchor-id]",
-      ].join(", "),
-    ),
-  );
-  let best: { element: HTMLElement; distance: number; progress: number } | null = null;
-  for (const element of nodes) {
-    const rect = element.getBoundingClientRect();
-    if (rect.bottom < 0 || rect.top > window.innerHeight) {
-      continue;
-    }
-    const rawProgress = rect.height > 0 ? (centerY - rect.top) / rect.height : 0.5;
-    const progress = Math.max(0, Math.min(1, rawProgress));
-    const distance = rawProgress >= 0 && rawProgress <= 1 ? 0 : Math.abs(rect.top + rect.height / 2 - centerY);
-    if (!best || distance < best.distance) {
-      best = { element, distance, progress };
-    }
-  }
-  const anchorId = best?.element.dataset.scrollAnchorId;
-  const scrollAnchor = anchorId ? bundle.scrollAnchorIndex.find((item) => item.anchorId === anchorId) : undefined;
-  if (!scrollAnchor || scrollAnchor.kind === "marker") {
-    return undefined;
-  }
-  return {
-    anchor: {
-      type: scrollAnchor.kind === "heading" ? "heading" : "speechSegment",
-      anchorId: scrollAnchor.anchorId,
-      speechSegmentId: scrollAnchor.speechSegmentId,
-      paragraphIndex: scrollAnchor.paragraphIndex,
-      textHash: scrollAnchor.textHash,
-    },
-    progress: best?.progress ?? 0.5,
-  };
+  const content = document.querySelector<HTMLElement>(".player-stage .teleprompter-content");
+  if (!content) return undefined;
+  const mirrored = Boolean(content.closest(".is-mirrored-y"));
+  const position = readingAtY(content, bundle, window.innerHeight / 2, mirrored);
+  return position ? { anchor: { type: "renderLine", ...position }, progress: 0.5 } : undefined;
 }
 
 function playerOffsetForMarker(markerId: string) {
@@ -289,7 +259,8 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const voiceAssistWantedRef = useRef(false);
   const voiceRestartTimerRef = useRef<number | undefined>(undefined);
   const voiceTranscriptFlushRef = useRef(0);
-  const lastVoiceAdjustmentRef = useRef({ segmentId: "", adjustedAt: 0 });
+  const lastReadingAnchorRef = useRef<Anchor | undefined>(undefined);
+  const voiceFailuresRef = useRef(0);
   const scrollClockRef = useRef<ScrollClock | null>(null);
   const scrollClockTimingRef = useRef<LocalScrollClockTiming | null>(null);
   const markdownEditorRef = useRef<HTMLTextAreaElement | null>(null);
@@ -299,7 +270,13 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [roomState, setRoomState] = useState<RoomState | null>(null);
   const [playbackPositionPx, setPlaybackPositionPx] = useState(0);
   const [speed, setSpeed] = useState(DEFAULT_SPEED);
-  const [markdown, setMarkdown] = useState("");
+  const [markdown, setMarkdownState] = useState("");
+  const setMarkdown = useCallback((update: SetStateAction<string>) => {
+    setMarkdownState((current) => {
+      const next = typeof update === "function" ? update(current) : update;
+      return renumberMarkerDirectives(next);
+    });
+  }, []);
   const [versionMessage, setVersionMessage] = useState("");
   const [versions, setVersions] = useState<VersionSummary[]>([]);
   const [saveStatus, setSaveStatus] = useState("");
@@ -324,7 +301,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
   const selectedRole = preferredRole(mode);
   const scriptDraft = roomState?.scriptDraft;
-  const playerReports = devicesWithPlayback(roomState);
   const roomLinks = useMemo(() => {
     const origins = new Map<string, NetworkOrigin>();
     if (currentOrigin) {
@@ -348,12 +324,11 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const activeScrollClock = roomState?.scrollClock ?? null;
   const activeScrollClockKey = scrollClockRuntimeKey(activeScrollClock);
   const primaryPlayerDeviceId = roomState?.settings.primaryPlayerDeviceId ?? null;
-  const primaryPlayerDevice =
-    (primaryPlayerDeviceId ? playerReports.find((device) => device.deviceId === primaryPlayerDeviceId && isOnlineDevice(device)) : undefined) ??
-    playerReports.find((device) => device.role === "player" && isOnlineDevice(device)) ??
-    playerReports[0];
+  const primaryPlayerDevice = effectivePrimary(roomState?.devices ?? {}, primaryPlayerDeviceId);
   const primaryPlaybackState = primaryPlayerDevice?.playbackState;
-  const isPrimaryPlayer = mode === "player" && Boolean(joinResult?.deviceId && joinResult.deviceId === primaryPlayerDeviceId);
+  const latestRoomRef = useRef({ roomState, primaryPlaybackState });
+  useLayoutEffect(() => { latestRoomRef.current = { roomState, primaryPlaybackState }; }, [roomState, primaryPlaybackState]);
+  const isPrimaryPlayer = mode === "player" && Boolean(joinResult?.deviceId && joinResult.deviceId === primaryPlayerDevice?.deviceId);
   const primaryPlayerReportedPosition = primaryPlaybackState?.positionPx;
   const hasPlayerSyncRatio = typeof primaryPlaybackState?.centerPositionRatio === "number";
   const playbackCenterRatio =
@@ -561,7 +536,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       const data = (await versionsResponse.json()) as { versions: VersionSummary[] };
       setVersions(data.versions);
     }
-  }, [roomCode]);
+  }, [roomCode, setMarkdown]);
 
   useEffect(() => {
     if (!joinResult) {
@@ -581,7 +556,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       setMarkdown(normalizeEditableDirectives(scriptDraft.markdown));
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [mode, scriptDraft]);
+  }, [mode, scriptDraft, setMarkdown]);
 
   async function saveDraft() {
     if (!joinResult) {
@@ -792,18 +767,10 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }
 
   function currentControlOffset() {
-    const clock = roomState?.scrollClock;
-    if (clock?.state === "playing") {
-      return positionFromScrollClock(clock);
-    }
-    if (clock) {
-      return Math.max(0, clock.offsetPx);
-    }
-    const reportedPosition = primaryPlaybackState?.positionPx;
-    if (typeof reportedPosition === "number") {
-      return Math.max(0, reportedPosition);
-    }
-    return Math.max(0, playbackPositionPx);
+    const { primaryPlaybackState: report, roomState: latest } = latestRoomRef.current;
+    if (report && report.scrollClockId === latest?.scrollClock?.scrollClockId) return report.positionPx;
+    const clock = scrollClockRef.current;
+    return clock ? positionFromScrollClock(clock) : report?.positionPx ?? playbackPositionRef.current;
   }
 
   function pauseAtCurrentOffset() {
@@ -844,12 +811,15 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     setVoiceAssistWanted(false);
     setVoiceAssistStatus(status);
     stopSpeechRecognition();
-    if (joinResult && roomState?.voiceState.sourceDeviceId === joinResult.deviceId) {
+    if (scrollClockRef.current?.controlMode === "voiceFollow") {
+      sendScrollClock("paused", currentControlOffset(), 0);
+    }
+    if (joinResult && latestRoomRef.current.roomState?.voiceState.sourceDeviceId === joinResult.deviceId) {
       sendEvent("voice.setSource", { sourceDeviceId: null });
     }
   }
 
-  async function startVoiceAssist() {
+  async function startVoiceAssist(restarting = false) {
     if (!joinResult) {
       setVoiceAssistStatus("请先等待房间连接");
       return;
@@ -858,21 +828,23 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     const Recognition = (window as SpeechRecognitionWindow).SpeechRecognition ?? (window as SpeechRecognitionWindow).webkitSpeechRecognition;
     if (!Recognition) {
       setVoiceAssistWanted(false);
-      setVoiceAssistStatus("当前浏览器不支持语音识别，请用 Chrome 或 Edge 测试");
+      setVoiceAssistStatus("此应用环境不支持语音识别。请在 Chrome 中打开本机控制端网址，使用自动识别。");
       return;
     }
 
     stopSpeechRecognition();
     voiceAssistWantedRef.current = true;
     setVoiceAssistWanted(true);
-    if (mode === "control") {
+    if (!restarting && mode === "control") {
       setVoiceAssistStatus("正在保存稿件");
       await saveDraft();
     }
+    if (!voiceAssistWantedRef.current) return;
     setVoiceAssistStatus("正在请求麦克风");
-    sendEvent("voice.setSource", { sourceDeviceId: joinResult.deviceId });
-    if (activeScrollClock?.state !== "playing") {
-      playFromCurrentOffset(speed);
+    if (!restarting) {
+      voiceFailuresRef.current = 0;
+      sendEvent("voice.setSource", { sourceDeviceId: joinResult.deviceId });
+      sendScrollClock("playing", currentControlOffset(), 0, defaultAnchor, "voiceFollow");
     }
 
     const recognition = new Recognition();
@@ -881,6 +853,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
     recognition.onresult = (event) => {
+      voiceFailuresRef.current = 0;
       let text = "";
       let isFinal = false;
       let confidence = 0;
@@ -919,6 +892,10 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
         stopVoiceAssist("麦克风权限被拒绝");
         return;
       }
+      if (event.error !== "no-speech" && ++voiceFailuresRef.current >= 3) {
+        stopVoiceAssist("语音服务不可用。请在 Chrome 中打开本机控制端，检查网络后重试。");
+        return;
+      }
       setVoiceAssistStatus("语音识别暂时中断，正在重试");
     };
     recognition.onend = () => {
@@ -928,7 +905,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       }
       voiceRestartTimerRef.current = window.setTimeout(() => {
         if (voiceAssistWantedRef.current) {
-          startVoiceAssist();
+          void startVoiceAssist(true);
         }
       }, 700);
     };
@@ -994,7 +971,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     sendScrollClock("paused", offset, 0);
   }
 
-  function seekPlaybackByRatio(ratio: number) {
+  function seekPlaybackByRatio(ratio: number, anchor?: Anchor) {
     const boundedRatio = Math.max(0, Math.min(1, ratio));
     const reportedState = primaryPlaybackState;
     const maxOffset =
@@ -1006,7 +983,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     const offset = Math.max(0, Math.round(boundedRatio * maxOffset));
     setPlaybackPositionPx(offset);
     playbackPositionRef.current = offset;
-    sendScrollClock("paused", offset, 0);
+    sendScrollClock("paused", offset, 0, anchor);
   }
 
   function manuallyAdjustPlayer(deltaPx: number) {
@@ -1037,14 +1014,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       markerId = nextIndex.toString().padStart(2, "0");
     }
     return markerId;
-  }
-
-  function renumberMarkerDirectives(source: string) {
-    let markerIndex = 0;
-    return source.replace(/(:{1,2}marker\[)(?:M)?\d{2,3}(\]\{)/g, (_match, before: string, after: string) => {
-      markerIndex += 1;
-      return `${before}${markerIndex.toString().padStart(2, "0")}${after}`;
-    });
   }
 
   function sourceWithBlockInsertion(source: string, start: number, end: number, replacement: string) {
@@ -1255,7 +1224,9 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       if (!joinResult) {
         return;
       }
+      document.querySelector<HTMLElement>(".player-stage .teleprompter-content")?.style.setProperty("--playback-offset", `${positionPx}px`);
       const { currentAnchor, ...metrics } = playerDisplayMetrics(positionPx, bundle);
+      lastReadingAnchorRef.current = currentAnchor;
       const playbackState: PlaybackState = {
         scriptVersionId: clock.scriptVersionId,
         state: clock.state,
@@ -1281,6 +1252,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
     const animationFrame = window.requestAnimationFrame(() => {
       const positionPx = playbackPositionRef.current;
+      document.querySelector<HTMLElement>(".player-stage .teleprompter-content")?.style.setProperty("--playback-offset", `${positionPx}px`);
       const { currentAnchor, ...metrics } = playerDisplayMetrics(positionPx, bundle);
       const playbackState: PlaybackState = {
         scriptVersionId: roomState?.currentScriptVersionId ?? SCRIPT_VERSION_ID,
@@ -1321,15 +1293,19 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     }
 
     if (clock.state === "paused") {
-      window.setTimeout(() => {
+      const frame = window.requestAnimationFrame(() => {
         const markerOffset =
           clock.anchor.type === "marker" && clock.anchor.markerId ? playerOffsetForMarker(clock.anchor.markerId) : undefined;
-        const nextOffset = typeof markerOffset === "number" ? markerOffset : clock.offsetPx;
+        const content = document.querySelector<HTMLElement>(".player-stage .teleprompter-content");
+        const y = content && bundle && typeof clock.anchor.textOffset === "number"
+          ? readingY(content, bundle, { textOffset: clock.anchor.textOffset, lineFraction: (clock.anchor.lineFraction ?? 0) * (playerMirrorY ? -1 : 1) }) : undefined;
+        const nextOffset = y !== undefined ? offsetForReadingY(playbackPositionRef.current, y, window.innerHeight, playerMirrorY)
+          : typeof markerOffset === "number" ? markerOffset : clock.offsetPx;
         setPlaybackPositionPx(nextOffset);
         playbackPositionRef.current = nextOffset;
         reportPlayerState(clock, nextOffset);
-      }, 0);
-      return;
+      });
+      return () => window.cancelAnimationFrame(frame);
     }
 
     if (clock.state !== "playing") {
@@ -1342,7 +1318,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       const position = positionFromScrollClock(clock);
       setPlaybackPositionPx(position);
       playbackPositionRef.current = position;
-      if (Date.now() - lastReportedAt >= 350) {
+      if (Date.now() - lastReportedAt >= 100) {
         lastReportedAt = Date.now();
         reportPlayerState(clock, position);
       }
@@ -1352,7 +1328,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     animationFrame = window.requestAnimationFrame(tick);
 
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [activeScrollClockKey, joinResult, mode, reportPlayerState]);
+  }, [activeScrollClockKey, bundle, joinResult, mode, playerMirrorY, reportPlayerState]);
 
   useEffect(() => {
     if (mode !== "control" || !activeScrollClockKey || hasPlayerSyncRatio) {
@@ -1403,68 +1379,67 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }, [activeScrollClockKey, hasPlayerSyncRatio, mode, primaryPlayerReportedPosition]);
 
   useEffect(() => {
-    if (!voiceAssistWanted || !joinResult || roomState?.voiceState.sourceDeviceId !== joinResult.deviceId) {
-      return;
-    }
-
+    // Only the primary display knows the actual layout and drives the feedback loop.
+    if (!isPrimaryPlayer || !roomState?.voiceState.active || !bundle) return;
     const match = roomState.voiceState.match;
-    const clock = scrollClockRef.current;
-    if (!match?.shouldAdvance || match.level === "lost" || typeof match.targetOffsetPx !== "number" || !clock || clock.state !== "playing") {
-      return;
-    }
-
-    const now = monotonicTime();
-    const lastAdjustment = lastVoiceAdjustmentRef.current;
-    const adjustmentKey = match.matchedSpeechSegmentId ?? match.transcriptSegmentId;
-    if (lastAdjustment.segmentId === adjustmentKey && now - lastAdjustment.adjustedAt < 450) {
-      return;
-    }
-
-    const currentOffset = positionFromScrollClock(clock);
-    let targetOffsetPx = match.targetOffsetPx;
-    if (mode === "player" && match.matchedScrollAnchorId) {
-      const anchorSelector = match.matchedScrollAnchorId.replace(/"/g, '\\"');
-      const targetElement = document.querySelector<HTMLElement>(`.player-stage .teleprompter-content [data-scroll-anchor-id="${anchorSelector}"]`);
-      if (targetElement) {
-        targetOffsetPx = Math.max(0, targetElement.offsetTop + targetElement.offsetHeight / 2 - window.innerHeight / 2);
-      }
-    } else if (bundle && primaryPlaybackState?.contentHeightPx && primaryPlaybackState.viewportHeightPx) {
-      const matchedSpeech = match.matchedSpeechSegmentId
-        ? bundle.speechIndex.find((item) => item.speechSegmentId === match.matchedSpeechSegmentId)
-        : undefined;
-      if (matchedSpeech) {
-        const maxOffset = Math.max(0, primaryPlaybackState.contentHeightPx - primaryPlaybackState.viewportHeightPx);
-        const speechOrder = Math.max(0, bundle.speechIndex.findIndex((item) => item.speechSegmentId === matchedSpeech.speechSegmentId));
-        const ratio = speechOrder / Math.max(1, bundle.speechIndex.length - 1);
-        targetOffsetPx = Math.max(0, Math.min(maxOffset, ratio * maxOffset));
-      }
-    }
-    const distancePx = targetOffsetPx - currentOffset;
-    if (Math.abs(distancePx) < 56) {
-      setVoiceAssistStatus("语音与滚动已对齐");
-      lastVoiceAdjustmentRef.current = { segmentId: adjustmentKey, adjustedAt: now };
-      return;
-    }
-
-    const baseVelocity = clock.velocityPxPerSecond || speed || DEFAULT_SPEED;
-    const confidenceFactor = match.level === "locked" ? 1 : match.level === "probable" ? 0.72 : 0.45;
-    const correction = Math.max(-64, Math.min(84, distancePx * 0.22 * confidenceFactor));
-    const nextVelocity = Math.max(18, Math.min(150, Math.round(baseVelocity + correction)));
-    const shouldRecenter = Math.abs(distancePx) > 220;
-    const offsetCorrection = shouldRecenter ? Math.max(-260, Math.min(320, distancePx * 0.38 * confidenceFactor)) : 0;
-    const nextOffset = Math.max(0, currentOffset + offsetCorrection);
-    if (!shouldRecenter && Math.abs(nextVelocity - baseVelocity) < 2) {
-      return;
-    }
-
-    lastVoiceAdjustmentRef.current = { segmentId: adjustmentKey, adjustedAt: now };
-    setSpeed(nextVelocity);
-    setVoiceAssistStatus(distancePx > 0 ? `语音靠前，跟随到 ${nextVelocity}px/s` : `语音靠后，跟随到 ${nextVelocity}px/s`);
-    setPlaybackPositionPx(nextOffset);
-    playbackPositionRef.current = nextOffset;
-    sendScrollClock("playing", nextOffset, nextVelocity, clock.anchor, "voiceFollow");
+    const adjust = () => {
+      const clock = scrollClockRef.current;
+      if (!clock || clock.state !== "playing") return; // Manual pause always wins.
+      const content = document.querySelector<HTMLElement>(".player-stage .teleprompter-content");
+      const targetY = content && typeof match?.targetTextOffset === "number"
+        ? readingY(content, bundle, { textOffset: match.targetTextOffset }) : undefined;
+      const distance = targetY === undefined ? 0 : (targetY - window.innerHeight / 2) * (playerMirrorY ? -1 : 1);
+      const velocity = followVelocity(distance, Date.now() - (match?.updatedAt ?? 0), match?.shouldAdvance ? match.confidence : 0);
+      if (clock.controlMode === "voiceFollow" && Math.abs(velocity - clock.velocityPxPerSecond) < 3) return;
+      sendScrollClock("playing", playbackPositionRef.current, velocity, defaultAnchor, "voiceFollow");
+    };
+    adjust();
+    const timer = window.setInterval(adjust, 200);
+    return () => window.clearInterval(timer);
+    // The timer reads the latest clock without resetting on every report.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [joinResult, roomState?.voiceState.match, roomState?.voiceState.sourceDeviceId, voiceAssistWanted]);
+  }, [isPrimaryPlayer, roomState?.voiceState.active, roomState?.voiceState.match, bundle, playerMirrorY]);
+
+  useLayoutEffect(() => {
+    if (mode !== "player" || isPrimaryPlayer || !bundle || typeof primaryPlaybackState?.currentAnchor.textOffset !== "number") return;
+    const content = document.querySelector<HTMLElement>(".player-stage .teleprompter-content");
+    if (!content) return;
+    const anchor = primaryPlaybackState.currentAnchor;
+    const y = readingY(content, bundle, { textOffset: anchor.textOffset!, lineFraction: (anchor.lineFraction ?? 0) * (playerMirrorY ? -1 : 1) });
+    if (y === undefined) return;
+    const position = offsetForReadingY(playbackPositionRef.current, y, window.innerHeight, playerMirrorY);
+    playbackPositionRef.current = position;
+    content.style.setProperty("--playback-offset", `${position}px`);
+    setPlaybackPositionPx(position);
+    const timing = scrollClockTimingRef.current;
+    if (timing) { timing.offsetPx = position; timing.receivedAt = monotonicTime(); }
+    // Only new primary samples rebase a secondary display, never its own reports.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPrimaryPlayer, mode, primaryPlaybackState?.reportedAt, primaryPlaybackState?.sourceDeviceId, activeScrollClockKey, bundle, playerMirrorY]);
+
+  useLayoutEffect(() => {
+    if (mode !== "player" || !bundle) return;
+    const content = document.querySelector<HTMLElement>(".player-stage .teleprompter-content");
+    if (!content) return;
+    const preserveReadingPosition = () => {
+      const anchor = lastReadingAnchorRef.current;
+      if (typeof anchor?.textOffset !== "number") return;
+      const y = readingY(content, bundle, { textOffset: anchor.textOffset, lineFraction: (anchor.lineFraction ?? 0) * (playerMirrorY ? -1 : 1) });
+      if (y === undefined) return;
+      const position = offsetForReadingY(playbackPositionRef.current, y, window.innerHeight, playerMirrorY);
+      playbackPositionRef.current = position;
+      content.style.setProperty("--playback-offset", `${position}px`);
+      setPlaybackPositionPx(position);
+      const timing = scrollClockTimingRef.current;
+      if (timing) { timing.offsetPx = position; timing.receivedAt = monotonicTime(); }
+      const clock = scrollClockRef.current;
+      if (clock) reportPlayerState(clock, position);
+    };
+    const observer = new ResizeObserver(preserveReadingPosition);
+    observer.observe(content);
+    window.addEventListener("resize", preserveReadingPosition);
+    return () => { observer.disconnect(); window.removeEventListener("resize", preserveReadingPosition); };
+  }, [bundle, mode, playerMirrorY, reportPlayerState]);
 
   useEffect(() => {
     return () => {
@@ -1698,6 +1673,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           bundle={bundle}
           versions={versions}
           playbackCenterRatio={playbackCenterRatio}
+          readingAnchor={primaryPlaybackState?.currentAnchor}
           speed={speed}
           isPlaying={isControlPlaying}
           playerFontScale={playerFontScale}
@@ -2209,28 +2185,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       ) : null}
     </main>
   );
-}
-
-function devicesWithPlayback(roomState: RoomState | null) {
-  return Object.values(roomState?.devices ?? {})
-    .filter((device) => device.playbackState)
-    .sort((left, right) => {
-      const roleScore = Number(right.role === "player") - Number(left.role === "player");
-      if (roleScore !== 0) {
-        return roleScore;
-      }
-      const onlineScore = Number(right.online && right.connectionState !== "offline") - Number(left.online && left.connectionState !== "offline");
-      if (onlineScore !== 0) {
-        return onlineScore;
-      }
-      const rightAt = right.playbackState?.serverReceivedAt ?? right.playbackState?.reportedAt ?? right.lastSeenAt;
-      const leftAt = left.playbackState?.serverReceivedAt ?? left.playbackState?.reportedAt ?? left.lastSeenAt;
-      return rightAt - leftAt;
-    });
-}
-
-function isOnlineDevice(device: DevicePresence) {
-  return device.online && device.connectionState !== "offline";
 }
 
 function escapeDirectiveAttr(value: string) {
