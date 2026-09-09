@@ -3686,3 +3686,7 @@ input {
 .player-stage.has-center-guide .render-bundle-layout::before { position: fixed; top: 50%; right: 0; }
 .player-stage.has-center-guide .render-bundle-layout::after { position: fixed; top: calc(50% - 13px); right: 12px; }
 .player-stage [data-reading-text] { white-space: pre-wrap; }
+
+.app-update-root{position:fixed;right:18px;bottom:14px;z-index:10000;font-size:13px}.app-update-trigger{border:1px solid #444;background:#17191f;color:#bbb;border-radius:20px;padding:7px 12px}.app-update-panel{position:absolute;bottom:42px;right:0;width:360px;max-height:75vh;overflow:auto;background:#17191f;color:#eee;border:1px solid #555;border-radius:14px;padding:24px;box-shadow:0 16px 80px #0008}.app-update-panel h2{font-size:22px}.app-update-panel p{margin:12px 0;color:#c8cbd3;line-height:1.65}.app-update-panel button:not(.app-update-close){background:#337bdd;border:0;color:white;border-radius:7px;padding:10px;margin:8px 8px 8px 0}.app-update-panel label{display:block;font-size:12px;margin-top:18px;line-height:1.6}.app-update-close{position:absolute;right:12px;top:10px;background:none;border:0;color:white;font-size:24px}.app-update-panel progress{width:100%}
+
+.app-brand-logo { width: 40px; height: 40px; flex-shrink: 0; border-radius: 9px; object-fit: contain; }

@@ -32,6 +32,19 @@ type ClientRecord = {
 };
 
 const clients = new Map<WebSocket, ClientRecord>();
+let updateLockUntil = 0;
+export function isUpdateLocked() { return Date.now() < updateLockUntil; }
+export function releaseUpdateLock() { updateLockUntil = 0; }
+export function acquireUpdateLock() {
+  // Require every controller to leave, including reconnecting/unknown sockets.
+  for (const client of clients.values()) {
+    const state = getRoomState(client.roomCode);
+    if (state?.devices[client.deviceId]?.role !== "player") return false;
+    if (state?.scrollClock?.state === "playing") return false;
+  }
+  updateLockUntil = Date.now() + 30_000;
+  return true;
+}
 
 function send(socket: WebSocket, event: ServerEnvelope) {
   if (socket.readyState === socket.OPEN) {
@@ -76,6 +89,8 @@ function handleClientEvent(socket: WebSocket, roomCode: string, raw: Buffer) {
     nack(socket, makeEventId("bad_json"), "Message is not valid JSON.");
     return;
   }
+
+  if (isUpdateLocked()) { nack(socket, event.eventId, "应用正在准备更新"); return; }
 
   if (!event.type || !event.eventId || !event.deviceId || !event.sessionId) {
     nack(socket, event.eventId ?? makeEventId("bad_event"), "Event envelope is incomplete.");
@@ -306,6 +321,7 @@ export function attachRoomWebSocketServer(server: Server | HttpsServer) {
       return;
     }
 
+    if (isUpdateLocked()) { socket.destroy(); return; }
     const roomCode = match[1];
     if (!getRoomState(roomCode)) {
       socket.write("HTTP/1.1 404 Not Found\r\n\r\n");

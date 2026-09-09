@@ -43,3 +43,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Website design and its Vercel project stay local and are deployed independently.
+/landing-page/
+/docs/landing-page/
+
+/.npm-cache/

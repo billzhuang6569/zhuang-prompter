@@ -69,7 +69,7 @@ export default function Home() {
     <main className="home-workspace">
       <header className="home-appbar">
         <div className="control-brand">
-          <span className="brand-badge">PROMPTER</span>
+          <img className="app-brand-logo" src="/brand/logo.png" alt="" width={40} height={40} />
           <div>
             <strong>庄Sir的提词器</strong>
             <span>房间入口</span>
@@ -85,7 +85,7 @@ export default function Home() {
         <div className="home-hero-copy">
           <div className="home-hero-tag">CONTROL ROOM</div>
           <h1>创建一个拍摄提词房间</h1>
-          <p>这台 Mac 会作为本地房间服务器。创建后自动进入控制端，其他设备通过同一局域网链接进入播放端。</p>
+          <p>这台电脑 会作为本地房间服务器。创建后自动进入控制端，其他设备通过同一局域网链接进入播放端。</p>
           <div className="home-flow">
             <div>
               <Icon name="create" />
@@ -152,7 +152,7 @@ export default function Home() {
             <strong>同局域网使用</strong>
             <p><a href="/join">打开通用展示端入口</a></p>
             <p>
-              本机服务已监听局域网。其他电脑与这台 Mac 在同一 Wi-Fi 或热点下，打开{" "}
+              本机服务已监听局域网。其他电脑与这台电脑 在同一 Wi-Fi 或热点下，打开{" "}
               {lanOrigin?.origin ?? "http://本机IP:3000"} 即可进入。
             </p>
           </div>

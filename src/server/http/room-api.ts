@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import QRCode from "qrcode";
+import { acquireUpdateLock, isUpdateLocked, releaseUpdateLock } from "../realtime/room-ws";
 import { getNetworkInfo } from "../network-info";
 import {
   createRoom,
@@ -54,6 +55,19 @@ export async function handleRoomApi(
 ) {
   const url = new URL(request.url ?? "/", "http://localhost");
 
+  if (url.pathname === "/api/desktop/update-lock") {
+    if (!process.env.PROMPTER_UPDATE_TOKEN || request.headers["x-update-token"] !== process.env.PROMPTER_UPDATE_TOKEN) {
+      writeJson(response, 403, { message: "Forbidden" }); return true;
+    }
+    if (request.method === "DELETE") { releaseUpdateLock(); writeJson(response, 200, { ok: true }); return true; }
+    if (request.method !== "POST") { writeJson(response, 405, {}); return true; }
+    const playing = listRooms().some(room => getRoomState(room.roomCode)?.scrollClock?.state === "playing");
+    const ok = !playing && acquireUpdateLock();
+    writeJson(response, ok ? 200 : 409, { ok, message: "请停止播放，保存稿件并离开所有控制页后再安装。" }); return true;
+  }
+  if (request.method !== "GET" && request.method !== "HEAD" && isUpdateLocked()) {
+    writeJson(response, 503, { message: "应用正在准备更新，请稍后重试" }); return true;
+  }
   if (request.method === "GET" && url.pathname === "/api/network-info") {
     writeJson(response, 200, getNetworkInfo());
     return true;

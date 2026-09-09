@@ -584,6 +584,19 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     }
   }
 
+  useEffect(() => {
+    if (mode !== "control") return;
+    const dirty = markdown !== normalizeEditableDirectives(scriptDraft?.markdown ?? "");
+    const beforeUnload = (event: BeforeUnloadEvent) => { if (dirty) { event.preventDefault(); event.returnValue = ""; } };
+    const saveAndHome = async () => {
+      if (scrollClockRef.current?.state === "playing") { setSaveStatus("请先暂停播放再返回首页安装更新"); return; }
+      if (await saveDraft()) window.location.href = "/";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    window.addEventListener("prompter-save-and-home", saveAndHome);
+    return () => { window.removeEventListener("beforeunload", beforeUnload); window.removeEventListener("prompter-save-and-home", saveAndHome); };
+  });
+
   async function saveVersion() {
     if (!joinResult) {
       setSaveStatus("连接后再保存");
@@ -1739,7 +1752,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       <main className="control-workspace">
         <header className="control-appbar">
           <div className="control-brand">
-            <span className="brand-badge">PROMPTER</span>
+            <img className="app-brand-logo" src="/brand/logo.png" alt="" width={40} height={40} />
             <div>
               <strong>庄Sir的提词器</strong>
               <span>控制端</span>

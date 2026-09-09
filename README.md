@@ -2,6 +2,10 @@
 
 为真实拍摄现场准备的本地提词器。
 
+[访问官网](https://zhuang-prompter-web.vercel.app) · [下载 Mac（Apple Silicon）](https://bill-api.whatonearth.work/prompter/download/macos-arm64) · [下载 Windows x64](https://bill-api.whatonearth.work/prompter/download/windows-x64) · [下载 Windows ARM64](https://bill-api.whatonearth.work/prompter/download/windows-arm64)
+
+当前发行版 **v0.1.6**。新版统一 App 与官网 Logo，官网支持主控、热点与多屏同步交互演示。新增 App 内检查更新与下载安装入口；Mac 当前需打开下载的 DMG 手动替换安装。网站部署在 Vercel，安装包与更新源独立存放在下载服务器。
+
 它不是一个简单的“滚动文字网页”，而是一套可以直接上现场的提词工作台：一台电脑负责写稿、改稿和控制播放，另一块屏幕、另一台电脑、iPad 或手机负责给出镜者显示清爽的大字提词画面。
 
 <p align="center">

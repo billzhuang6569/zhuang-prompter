@@ -5,6 +5,9 @@ const { spawn, execFile } = require("node:child_process");
 const { createServer } = require("node:net");
 const { get } = require("node:http");
 const { join } = require("node:path");
+const { randomUUID } = require("node:crypto");
+const updateToken = randomUUID();
+const { setupUpdater } = require("./updater.cjs");
 
 // One server and one installed application should own the local rooms.
 const ownsInstance = app.requestSingleInstanceLock();
@@ -39,11 +42,11 @@ function canListen(port) {
   });
 }
 
-function waitForServer(origin, timeoutMs = 30_000) {
+function waitForServer(origin, timeoutMs = process.platform === "win32" ? 120_000 : 30_000) {
   const startedAt = Date.now();
   return new Promise((resolve, reject) => {
     const check = () => {
-      const request = get(origin, (response) => {
+      const request = get(origin.replace("localhost", "127.0.0.1"), (response) => {
         response.resume();
         resolve();
       });
@@ -73,6 +76,7 @@ async function startLocalServer() {
     env: {
       ...process.env,
       ELECTRON_RUN_AS_NODE: "1",
+      PROMPTER_UPDATE_TOKEN: updateToken,
       NODE_ENV: "production",
       HOST: "0.0.0.0",
       PORT: String(port),
@@ -105,6 +109,7 @@ function createWindow(origin) {
     minHeight: 720,
     backgroundColor: "#0b0b0b",
     title: "庄Sir的提词器",
+    icon: join(app.getAppPath(), "public", "brand", "logo.png"),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -157,6 +162,7 @@ app.whenReady().then(async () => {
     const origin = await startLocalServer();
     serverOrigin = origin;
     createWindow(origin);
+    setupUpdater({ getOrigin: () => serverOrigin, token: updateToken, getDataFile: () => process.env.ZHUANG_PROMPTER_STORE_FILE ?? join(app.getPath("userData"), "rooms.json") });
   } catch (error) {
     dialog.showErrorBox("庄Sir的提词器启动失败", error instanceof Error ? error.message : String(error));
     app.quit();

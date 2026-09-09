@@ -35,11 +35,11 @@ export function getNetworkInfo(port = getServerPort(), host = getServerHost()): 
   ];
 
   for (const [name, addresses] of Object.entries(networkInterfaces())) {
-    if (!/^en\d+$/.test(name)) {
+    if (process.platform === "darwin" && !/^en\d+$/.test(name)) {
       continue;
     }
     for (const address of addresses ?? []) {
-      if (address.family !== "IPv4" || address.internal) {
+      if (address.family !== "IPv4" || address.internal || address.address.startsWith("169.254.")) {
         continue;
       }
       origins.push({
