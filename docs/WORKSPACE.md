@@ -13,7 +13,7 @@
 1. **不要替换 `/Applications` 里的已安装版本**——那是用户现场使用/回退用的稳定版。本地构建产物只放在 `release/`（已 gitignore）。
 2. **保护 `rooms.json`**（用户数据）。不要删除、覆盖或提交它。App 更新前会自动备份为 `rooms.json.before-update.bak`。
 3. **机密永不进仓库**。服务器 SSH 凭据只存在 `deploy/secrets/`（已 gitignore）。见 §4。
-4. **不直接 push/merge 到 `main`**。发布通过打 `v*.*.*` tag 触发 CI（见 `docs/RELEASE.md`）。
+4. **`main` 与线上版本保持一致**。日常改动在 `feat/*` 分支；发布通过打 `v*.*.*` tag 触发 CI（见 `docs/RELEASE.md`）。**一旦 App 被正式发布到 SERVER（`channels/stable` 已切到新版并线上验证通过），就把该版本对应的最新代码同步到 `main`**（干净时快进，否则合并），使 **SERVER 更新源 / 下载地址 / GitHub Releases / GitHub 源码四者版本一致**。发布完成前不要把未发布代码推到 `main`。
 5. **不提交 `docs/plans/`**（本地工作计划，已按约定不纳入版本库）。
 6. **验收不等于编译通过**。合入前跑完整闸门：`npx tsc --noEmit`、`pnpm lint`、`pnpm test:contracts`（见 §3）。
 
@@ -59,5 +59,6 @@ pnpm test:contracts       # 全绿
 2. 在 `feat/*` 分支上改动；小步提交。
 3. 跑 §3 闸门。
 4. 需发布时：按 `docs/RELEASE.md` 打 tag→CI→下载→打包→部署→验证→App 内更新测试。
-5. 若发布链路本身有变化：**同步更新 `docs/RELEASE.md`**，并在 `docs/CHANGELOG.md` 记录版本。
-6. 机密只从 `deploy/secrets/` 读，绝不写入代码/文档/日志/提交。
+5. **发布并线上验证通过后**：把该版本的最新代码同步到 `main`（见 §1.4），保证四端版本一致。
+6. 若发布链路本身有变化：**同步更新 `docs/RELEASE.md`**，并在 `docs/CHANGELOG.md` 记录版本。
+7. 机密只从 `deploy/secrets/` 读，绝不写入代码/文档/日志/提交。

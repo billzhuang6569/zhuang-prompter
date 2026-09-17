@@ -103,7 +103,16 @@ curl -s  https://bill-api.whatonearth.work/prompter/updates/stable/windows-arm64
 - **macOS**：装旧版 → App 检查到新版 → 下载 DMG（sha256 校验）→ 打开 → 拖入 Applications → 重启 → 确认稿件保留。
 - 更新前 `rooms.json` 会自动备份为 `rooms.json.before-update.bak`。
 
-### 8. 收尾
+### 8. 同步 main（版本一致）
+线上验证通过后，把本次发布对应的最新代码同步到 `main`，使 **SERVER 更新源 / 下载地址 / GitHub Releases / GitHub 源码四者一致**（规则见 WORKSPACE.md §1.4）：
+```bash
+git checkout main && git merge --ff-only <feat 分支>   # 干净时快进；否则改用普通 merge
+git push origin main
+git push origin <feat 分支>                             # 顺带把工作分支推上去备份
+```
+（`v*.*.*` tag 已在步骤 2 推送。）
+
+### 9. 收尾
 - 在 `docs/CHANGELOG.md` 记录本次发布。
 - 若链路本身有变化，更新本文件。
 - 清理 `/tmp/ci-X.Y.Z`、`/tmp/zhuang-prompter-X.Y.Z.tar.gz`。
