@@ -16,7 +16,7 @@ import {
 import type { MDXEditorMethods } from "@mdxeditor/editor";
 import type { Anchor, RoomJoinResult } from "@/domain/room/types";
 import { stripScriptDirectives } from "@/modules/script-engine";
-import { pendingEditorActionKey, renumberMarkerDirectives } from "@/modules/script-engine/editing";
+import { escapeDirectiveAttr, pendingEditorActionKey, renumberMarkerDirectives } from "@/modules/script-engine/editing";
 import type { RenderBundle } from "@/modules/script-engine/types";
 import { makeRandomId } from "@/shared/id";
 import { readingAtY, readingY } from "@/modules/playback-engine/reading-position";
@@ -197,6 +197,18 @@ export function ControlConsole({
   const [guideDragging, setGuideDragging] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
+  // §3.3：原文视图存在非空选区时，"增加"改为"改为"，反映即将发生的真正转换。
+  const [rawSelectionActive, setRawSelectionActive] = useState(false);
+  const canConvertSelection = view === "raw" && rawSelectionActive;
+
+  function syncRawSelection() {
+    const editor = markdownEditorRef.current;
+    if (!editor) {
+      setRawSelectionActive(false);
+      return;
+    }
+    setRawSelectionActive(editor.selectionStart !== editor.selectionEnd);
+  }
 
   const markers = bundle?.markerIndex ?? [];
   const safePlayerLink = playerEntryLink ?? roomLinks[0];
@@ -777,7 +789,14 @@ export function ControlConsole({
             <span className="nike-bdg nike-bdg-ink">{hasSavedVersion ? "已保存版本" : "未保存版本"}</span>
             {saveStatus && <span className="nike-bdg nike-bdg-ink">{saveStatus}</span>}
             <div className="nike-vtabs">
-              <button className={`nike-vtab ${view === "render" ? "on" : ""}`} type="button" onClick={() => setView("render")}>
+              <button
+                className={`nike-vtab ${view === "render" ? "on" : ""}`}
+                type="button"
+                onClick={() => {
+                  setRawSelectionActive(false);
+                  setView("render");
+                }}
+              >
                 预览
               </button>
               <button className={`nike-vtab ${view === "raw" ? "on" : ""}`} type="button" onClick={() => setView("raw")}>
@@ -806,7 +825,7 @@ export function ControlConsole({
                   onClick={beginInlineMarkerEdit}
                 >
                   <StarIcon />
-                  增加标记
+                  {canConvertSelection ? "改为标记" : "增加标记"}
                 </button>
                 <button
                   className="nike-tlb"
@@ -815,7 +834,7 @@ export function ControlConsole({
                   onClick={beginInlineCommentEdit}
                 >
                   <CommentIcon />
-                  增加注释
+                  {canConvertSelection ? "改为注释" : "增加注释"}
                 </button>
                 <button className="nike-tlb" type="button" onClick={() => exportMarkdown(true)}>
                   <DownloadIcon />
@@ -926,7 +945,14 @@ export function ControlConsole({
                   aria-label="Markdown 原文编辑"
                   spellCheck={false}
                   value={markdown}
-                  onChange={(event) => setMarkdown(event.target.value)}
+                  onChange={(event) => {
+                    setMarkdown(event.target.value);
+                    syncRawSelection();
+                  }}
+                  onSelect={syncRawSelection}
+                  onKeyUp={syncRawSelection}
+                  onMouseUp={syncRawSelection}
+                  onBlur={() => setRawSelectionActive(false)}
                   placeholder="在这里直接编辑 Markdown 原文..."
                 />
               </div>
@@ -1155,10 +1181,6 @@ function nextMarkerId(markers: Array<{ markerId: string }>) {
 function normalizeMarkerId(markerId: string) {
   const numeric = markerId.match(/\d+/)?.[0];
   return numeric ? Number(numeric).toString().padStart(2, "0") : markerId;
-}
-
-function escapeDirectiveAttr(value: string) {
-  return value.replace(/["\\\n\r]/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function escapeRegExp(value: string) {

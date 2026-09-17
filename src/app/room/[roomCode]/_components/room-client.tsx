@@ -13,7 +13,7 @@ import type {
 } from "@/shared/protocol";
 import type { RenderBundle } from "@/modules/script-engine";
 import { parseMarkdown } from "@/modules/script-engine";
-import { renumberMarkerDirectives } from "@/modules/script-engine/editing";
+import { buildConvertedDirective, escapeDirectiveAttr, renumberMarkerDirectives } from "@/modules/script-engine/editing";
 import { makeRandomId } from "@/shared/id";
 import { effectivePrimary, readingAtY, readingY, offsetForReadingY } from "@/modules/playback-engine/reading-position";
 import { followVelocity } from "@/modules/voice-follow/match";
@@ -1057,9 +1057,15 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     const start = target?.start ?? editor?.selectionStart ?? source.length;
     const end = target?.end ?? editor?.selectionEnd ?? source.length;
     const pendingId = makeRandomId("pending");
-    const label = "标记点";
-    const marker = `:marker[${nextMarkerId()}]{text="${label}" pending="${pendingId}"}\u00A0`;
-    const nextValue = renumberMarkerDirectives(sourceWithBlockInsertion(source, start, end, marker));
+    // §3.3：非空选区"真正转换"——选区文本成为标记说明并随替换移出朗读正文；
+    // 空选区退回占位插入。renumber 之后 markerId 会被统一重编号。
+    const { directive, label } = buildConvertedDirective({
+      kind: "marker",
+      selectedText: source.slice(start, end),
+      markerId: nextMarkerId(),
+      pendingId,
+    });
+    const nextValue = renumberMarkerDirectives(sourceWithBlockInsertion(source, start, end, directive));
 
     setMarkdown(nextValue);
     setPendingEditorAction({ kind: "marker", pendingId, value: label });
@@ -1074,14 +1080,18 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     const start = target?.start ?? editor?.selectionStart ?? source.length;
     const end = target?.end ?? editor?.selectionEnd ?? source.length;
     const pendingId = makeRandomId("pending");
-    const note = "提示内容";
-    const stage = `:notes{text="${note}" pending="${pendingId}"}\u00A0`;
-    const nextValue = sourceWithBlockInsertion(source, start, end, stage);
+    // §3.3：非空选区"真正转换"为注释正文，移出朗读文本与语音索引；空选区退回占位插入。
+    const { directive, label } = buildConvertedDirective({
+      kind: "notes",
+      selectedText: source.slice(start, end),
+      pendingId,
+    });
+    const nextValue = sourceWithBlockInsertion(source, start, end, directive);
 
     setMarkdown(nextValue);
-    setPendingEditorAction({ kind: "notes", pendingId, value: note });
+    setPendingEditorAction({ kind: "notes", pendingId, value: label });
     if (!target) {
-      focusPendingDirective(pendingId, note);
+      focusPendingDirective(pendingId, label);
     }
   }
 
@@ -2198,10 +2208,6 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       ) : null}
     </main>
   );
-}
-
-function escapeDirectiveAttr(value: string) {
-  return value.replace(/["\\\n\r]/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function normalizeMarkerId(markerId: string) {
