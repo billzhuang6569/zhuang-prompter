@@ -978,7 +978,11 @@ input {
 }
 
 .home-workspace {
-  min-height: 100vh;
+  /* 固定视口高度 + 内部滚动：全局不产生第二条滚动条，滚动折叠交给左列（§12.5）。 */
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   color: #f5f5f1;
   background:
     radial-gradient(circle at 12% 4%, rgb(230 74 0 / 18%), transparent 24rem),
@@ -994,6 +998,7 @@ input {
 }
 
 .home-appbar {
+  flex: 0 0 auto;
   min-height: 92px;
   display: flex;
   align-items: center;
@@ -1024,13 +1029,43 @@ input {
 }
 
 .home-entry-shell {
-  min-height: calc(100vh - 92px);
+  flex: 1 1 auto;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
-  /* 顶对齐：房间增多时左栏（含项目画册）向下生长，右侧功能区不再被垂直居中下推（§12.4）。 */
-  align-items: start;
+  /* 两列拉伸到剩余高度，各自内部滚动，互不打架（§12.5）。 */
+  align-items: stretch;
   gap: clamp(28px, 6vw, 86px);
   padding: clamp(26px, 6vw, 84px);
+}
+
+/* 左列滚动容器：hero 随内容滚走，PROJECTS 标题吸顶，画册在其下继续滚动（§12.5）。 */
+.home-left-col {
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 18%) transparent;
+}
+
+.home-left-col::-webkit-scrollbar {
+  width: 8px;
+}
+
+.home-left-col::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgb(255 255 255 / 16%);
+}
+
+/* 右列：始终留在视口内。内容超高时自身滚动，不影响左列（§12.4）。 */
+.home-right-col {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .home-hero-copy {
@@ -1066,40 +1101,115 @@ input {
   line-height: 1.75;
 }
 
+/* 步骤条：图形 + 文案的行为指示（非按钮），三步之间用箭头连接（§12.5）。 */
 .home-flow {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 38px;
+  align-items: stretch;
+  gap: 10px;
+  margin: 38px 0 0;
+  padding: 0;
+  list-style: none;
 }
 
-.home-flow div {
-  min-height: 52px;
+.home-step {
+  flex: 1 1 190px;
+  min-width: 190px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid rgb(255 255 255 / 11%);
+  border-radius: 14px;
+  background: rgb(255 255 255 / 4%);
+  padding: 14px 16px;
+}
+
+.home-step-icon {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
-  border: 1px solid rgb(255 255 255 / 11%);
-  border-radius: 12px;
-  background: rgb(255 255 255 / 4%);
-  color: #edece6;
-  padding: 0 16px;
-  font-weight: 850;
-}
-
-.home-flow svg {
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: rgb(240 75 8 / 12%);
   color: #f04b08;
 }
 
+.home-step-body {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.home-step-tag {
+  color: #f04b08;
+  font-family: var(--font-geist-mono), "SFMono-Regular", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.home-step-body strong {
+  color: #edece6;
+  font-size: 15px;
+  font-weight: 850;
+  line-height: 1.4;
+}
+
+.home-step-body small {
+  margin-top: 2px;
+  color: #9f9d95;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+/* STEP 3 内的可点击短链，视觉上是文字链接而非按钮。 */
+.home-step-link {
+  border: 0;
+  border-bottom: 1px dashed rgb(240 75 8 / 60%);
+  border-radius: 0;
+  background: transparent;
+  color: #ff6a2b;
+  cursor: pointer;
+  padding: 0 1px;
+  font: inherit;
+  font-weight: 900;
+}
+
+.home-step-link:hover {
+  color: #ff8a55;
+  border-bottom-color: #ff8a55;
+}
+
+.home-step-arrow {
+  display: inline-flex;
+  align-items: center;
+  align-self: center;
+  color: rgb(255 255 255 / 32%);
+}
+
+.home-step-arrow svg {
+  width: 18px;
+  height: 18px;
+}
+
 .home-projects {
-  max-width: 860px;
   margin-top: 46px;
 }
 
+/* 吸顶：滚动到顶后冻结，画册网格在其下方继续滚动（§12.5）。 */
 .home-section-title {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   align-items: baseline;
   gap: 12px;
   margin-bottom: 14px;
+  padding: 10px 0 12px;
+  background: linear-gradient(180deg, #0a0b0a 78%, rgb(10 11 10 / 0%));
+  backdrop-filter: blur(6px);
 }
 
 .home-section-title span {
@@ -1273,22 +1383,63 @@ input {
   font-weight: 900;
 }
 
-.home-note-card {
-  border: 1px solid rgb(255 255 255 / 9%);
-  border-radius: 14px;
-  background: rgb(0 0 0 / 20%);
-  padding: 16px;
+/* 中间说明文案里高亮的固定短链。 */
+.home-shortlink-inline {
+  color: #ff8a55;
+  font-weight: 900;
+  white-space: nowrap;
 }
 
-.home-note-card strong {
+/* 居中短链框：大字展示短链，点击复制到剪贴板并给出反馈（§12.5）。 */
+.home-shortlink-box {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: 100%;
+  border: 1px solid rgb(240 75 8 / 32%);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgb(240 75 8 / 10%), rgb(255 255 255 / 2%));
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%);
+  color: inherit;
+  cursor: pointer;
+  padding: 20px 18px;
+  text-align: center;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease,
+    transform 150ms ease;
+}
+
+.home-shortlink-box:hover {
+  border-color: rgb(240 75 8 / 55%);
+  background: linear-gradient(180deg, rgb(240 75 8 / 16%), rgb(255 255 255 / 3%));
+  transform: translateY(-1px);
+}
+
+.home-shortlink-label {
+  color: #b8b5ad;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.home-shortlink-value {
   color: #f4f3ef;
+  font-family: var(--font-geist-mono), "SFMono-Regular", Consolas, monospace;
+  font-size: clamp(24px, 3vw, 34px);
+  font-weight: 900;
+  letter-spacing: 0.01em;
+  word-break: break-all;
 }
 
-.home-note-card p {
-  margin-top: 7px;
+.home-shortlink-hint {
   color: #9f9d95;
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.home-shortlink-hint.is-copied {
+  color: #1eaa52;
 }
 
 .nike-back-btn {
@@ -1374,13 +1525,33 @@ input {
     padding: 14px 0 0;
   }
 
+  /* 窄屏回归整页滚动：取消固定视口高度与内部滚动，避免单列被裁切（§12.5）。 */
+  .home-workspace {
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
+  }
+
   .home-entry-shell {
     grid-template-columns: 1fr;
     align-items: start;
     padding: 24px 12px;
   }
 
-  /* 单列布局下面板回归正常文档流，不再吸顶（§12.4）。 */
+  .home-left-col,
+  .home-right-col {
+    min-height: 0;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  /* 单列布局下标题与面板回归正常文档流，不再吸顶（§12.4/§12.5）。 */
+  .home-section-title {
+    position: static;
+    backdrop-filter: none;
+    background: transparent;
+  }
+
   .home-action-panel {
     position: static;
     top: auto;
@@ -1577,6 +1748,13 @@ input {
   flex: 0 0 auto;
 }
 
+/* §item14：控制端左上角改用真实 App logo。用双类选择器提升特异性以覆盖 .app-brand-logo 的 40px 尺寸。 */
+.nike-brand .nike-brand-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+}
+
 .nike-u-div {
   width: 1px;
   height: 13px;
@@ -1670,7 +1848,6 @@ input {
   border-right: 1px solid var(--nike-hl);
 }
 
-.nike-shdr,
 .nike-tb {
   height: 48px;
   display: flex;
@@ -1682,29 +1859,72 @@ input {
   padding: 0 var(--nike-xl);
 }
 
-.nike-editor-tools {
-  min-height: 42px;
+/* §item8：行 1（脚本头）——项目标题 + 动作按钮组 + 预览/原文切换在同一行，
+   固定在左栏顶部（.nike-lp 的 flex 布局使其不随正文滚动）。允许换行，避免窄屏溢出。 */
+.nike-shdr {
+  min-height: 48px;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  flex-wrap: wrap;
   gap: var(--nike-sm);
-}
-
-.nike-editor-toolbar-shell {
   flex: 0 0 auto;
   border-bottom: 1px solid var(--nike-hl);
   background: var(--nike-canvas);
-  padding: var(--nike-sm) var(--nike-sec);
+  padding: var(--nike-sm) var(--nike-xl);
 }
 
-.nike-editor-toolbar-inner {
-  width: 100%;
-  max-width: 640px;
-  margin: 0 auto;
+.nike-shdr .nike-title-input {
+  flex: 1 1 140px;
 }
 
-.nike-editor-tools + .nike-quick-editor {
-  margin-top: var(--nike-sm);
+.nike-shdr .nike-vswitch {
+  margin-left: auto;
+}
+
+/* 保存按钮在头行内不再自动右推（右侧由切换控件占据）。 */
+.nike-shdr .nike-t-save {
+  margin-left: 0;
+}
+
+.nike-editor-tools {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: var(--nike-sm);
+}
+
+/* §item9：预览/原文分段开关（segmented control），驱动 view 状态。 */
+.nike-vswitch {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--nike-hl);
+  border-radius: var(--nike-pill);
+  background: var(--nike-s1);
+}
+
+.nike-vswitch-seg {
+  border: 0;
+  border-radius: var(--nike-pill);
+  background: transparent;
+  color: var(--nike-mute);
+  padding: 4px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--nike-t);
+}
+
+.nike-vswitch-seg:hover:not(.on) {
+  color: var(--nike-ink);
+}
+
+.nike-vswitch-seg.on {
+  background: var(--nike-ink);
+  color: var(--nike-canvas);
 }
 
 .nike-title-input {
@@ -2026,6 +2246,9 @@ input {
   --baseBorder: var(--nike-hl);
   --baseText: var(--nike-ink);
   --baseTextContrast: var(--nike-ink);
+  /* §item11：MDXEditor 的 select 触发器/下拉/对话框默认用 --basePageBg=white 作底，
+     叠加继承的近白文字导致不可读。改成深色底以贴合 nike 深色主题。 */
+  --basePageBg: var(--nike-s1);
 }
 
 .nike-rich-editor .mdxeditor {
@@ -2056,6 +2279,50 @@ input {
 
 .nike-rich-editor .mdxeditor-toolbar.nike-format-toolbar::-webkit-scrollbar {
   height: 0;
+}
+
+/* §item11：块类型下拉（"正文"）触发器文字对比修复。触发器位于工具栏内（非 portal），
+   底色由 --basePageBg（已改深色）提供，此处确保文字/占位符明确可读。 */
+.nike-format-toolbar [class*="_selectTrigger_"] {
+  color: var(--nike-ink);
+  border-color: var(--nike-hl);
+}
+
+.nike-format-toolbar [class*="_selectTrigger_"][data-placeholder] > span:first-child {
+  color: var(--nike-mute);
+}
+
+/* §item11：块类型下拉菜单（Radix Select）经 portal 渲染到 .nike-control 之外，
+   nike-* 变量无法命中，故用与主题一致的字面色值保证可读。仅 MDXEditor 使用这些类名。 */
+[class*="_selectContainer_"] {
+  background-color: #1a1a1a;
+  color: #f5f5f5;
+  border: 1px solid #2c2c2c;
+}
+
+[class*="_selectItem_"] {
+  color: #f5f5f5;
+}
+
+[class*="_selectItem_"][data-highlighted],
+[class*="_selectItem_"][data-state="checked"] {
+  background-color: #2c2c2c;
+  color: #f5f5f5;
+}
+
+/* §item11：工具栏按钮的 Radix tooltip 同样 portal 到 body 之外，默认变量失效导致近乎不可见。
+   显式给出深底浅字，保证悬停提示可读。 */
+[class*="_tooltipContent_"] {
+  background-color: #1a1a1a;
+  color: #f5f5f5;
+  border: 1px solid #2c2c2c;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+[class*="_tooltipContent_"] svg {
+  fill: #1a1a1a;
 }
 
 .nike-rich-editor-content {
@@ -2541,9 +2808,21 @@ input {
   white-space: nowrap;
 }
 
+/* §item12：历史版本列表设内部滚动框，避免版本过多时撑高右栏。 */
 .nike-vl {
   display: flex;
   flex-direction: column;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.nike-vl::-webkit-scrollbar {
+  width: 3px;
+}
+
+.nike-vl::-webkit-scrollbar-thumb {
+  background: var(--nike-hl);
+  border-radius: 1px;
 }
 
 .nike-vi {
@@ -2674,6 +2953,33 @@ input {
   display: flex;
   flex-direction: column;
   gap: 3px;
+}
+
+/* §item13：播放端入口——短链（点击复制并在浏览器打开）+ 二维码（点击放大）同一行。 */
+.nike-entrance {
+  display: flex;
+  align-items: stretch;
+  gap: var(--nike-md);
+}
+
+.nike-entrance-main {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: var(--nike-sm) var(--nike-md);
+  border: 1px solid var(--nike-info);
+  border-radius: 8px;
+  background: rgba(68, 147, 248, 0.08);
+}
+
+.nike-hint {
+  margin-top: var(--nike-sm);
+  color: var(--nike-mute);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .nike-short-link-v {

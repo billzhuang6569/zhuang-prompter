@@ -4,6 +4,7 @@ import {
   MARKER_PLACEHOLDER,
   NOTES_PLACEHOLDER,
   buildConvertedDirective,
+  convertDirectiveToBody,
   escapeDirectiveAttr,
   pendingEditorActionKey,
   renumberMarkerDirectives,
@@ -129,6 +130,47 @@ test("选区转标记：标签文字不进入朗读索引，仅保留跳转锚�
   assert.ok(!normalizedSpeech.includes(normalizeReadingText(label)));
   // 但标记锚点必须保留，供跳转使用。
   assert.equal(bundle.markerIndex.length, 1);
+});
+
+test("convertDirectiveToBody 把注释改回正文——文字重新进入朗读/语音索引", () => {
+  const source = ['开场白。', '', ':notes{text="提醒观众看镜头"} ', '', '正片开始。'].join("\n");
+  const next = convertDirectiveToBody(source, { kind: "notes", occurrence: 0 });
+
+  // 指令消失、尾随不换行空格被一并消费。
+  assert.ok(!next.includes(":notes{"));
+  assert.ok(!next.includes(" "));
+
+  const bundle = parseMarkdown(next);
+  const speechText = bundle.speechIndex.map((item) => item.rawText).join("");
+  assert.ok(speechText.includes("提醒观众看镜头"));
+});
+
+test("convertDirectiveToBody 把标记改回正文并重新编号剩余标记", () => {
+  const source = [
+    ':marker[01]{text="开场"} ',
+    "正文一。",
+    ':marker[02]{text="重点句"} ',
+    "正文二。",
+  ].join("\n");
+  // 按 markerId 定位第二个标记，改回正文。
+  const next = convertDirectiveToBody(source, { kind: "marker", markerId: "02", occurrence: 1 });
+
+  const bundle = parseMarkdown(next);
+  // 只剩一个标记锚点，且已重新编号为 01。
+  assert.equal(bundle.markerIndex.length, 1);
+  assert.ok(next.includes(":marker[01]"));
+  assert.ok(!next.includes(":marker[02]"));
+  // 被改回的标记文字重新出现在朗读索引里。
+  const normalizedSpeech = bundle.speechIndex.map((item) => item.normalizedText).join("");
+  assert.ok(normalizedSpeech.includes(normalizeReadingText("重点句")));
+});
+
+test("convertDirectiveToBody 支持按 pending 锚点把待定指令改回正文", () => {
+  const source = '正文。\n\n:notes{text="临时说明" pending="pending_z"} \n\n结尾。';
+  const next = convertDirectiveToBody(source, { kind: "notes", pendingId: "pending_z" });
+  assert.ok(!next.includes(":notes{"));
+  assert.ok(!next.includes("pending="));
+  assert.ok(next.includes("临时说明"));
 });
 
 test("pendingEditorActionKey stays stable while the same input value changes", () => {

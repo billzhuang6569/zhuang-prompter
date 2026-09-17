@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 type RoomSummary = {
@@ -25,6 +24,7 @@ type NetworkOrigin = {
 export default function Home() {
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [networkOrigins, setNetworkOrigins] = useState<NetworkOrigin[]>([]);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -49,6 +49,25 @@ export default function Home() {
   }, []);
 
   const lanOrigin = useMemo(() => networkOrigins.find((origin) => origin.kind === "lan"), [networkOrigins]);
+  // 固定统一短链（mDNS）：所有机器统一广播的好记地址，作为播放端进入入口（§12.5）。
+  const mdnsOrigin = useMemo(() => networkOrigins.find((origin) => origin.kind === "mdns"), [networkOrigins]);
+  // 展示串去掉协议前缀（如 ptan.local:3000）；拿不到时用占位串，不崩。
+  const shortLink = mdnsOrigin?.origin.replace(/^https?:\/\//, "") ?? "ptan.local:3000";
+  const shortLinkHref = mdnsOrigin?.origin ?? `http://${shortLink}`;
+
+  function openShortLink() {
+    window.open(shortLinkHref, "_blank", "noopener,noreferrer");
+  }
+
+  async function copyShortLink() {
+    try {
+      await navigator.clipboard.writeText(shortLink);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // 剪贴板不可用时静默失败，避免崩溃。
+    }
+  }
 
   async function createRoom() {
     const response = await fetch("/api/rooms", { method: "POST" });
@@ -84,23 +103,58 @@ export default function Home() {
       </header>
 
       <section className="home-entry-shell">
-        <div className="home-hero-copy">
-          <div className="home-hero-tag">CONTROL ROOM</div>
-          <h1>创建一个拍摄提词房间</h1>
-          <p>这台电脑 会作为本地房间服务器。创建后自动进入控制端，其他设备通过同一局域网链接进入播放端。</p>
-          <div className="home-flow">
-            <div>
-              <Icon name="create" />
-              <span>创建房间</span>
-            </div>
-            <div>
-              <Icon name="control" />
-              <span>控制播放</span>
-            </div>
-            <div>
-              <Icon name="player" />
-              <span>扫码播放端</span>
-            </div>
+        {/* 左列：单一滚动容器。向上滚动时 hero（标题+说明+步骤）被推走，PROJECTS 标题吸顶后画册在其下方继续滚动（§12.5）。 */}
+        <div className="home-left-col">
+          <div className="home-hero-copy">
+            <div className="home-hero-tag">CONTROL ROOM</div>
+            <h1>创建一个拍摄提词房间</h1>
+            <p>
+              这台电脑作为控制者，创建房间后，其他提词器电脑，通过{" "}
+              <strong className="home-shortlink-inline">{shortLink}</strong> 输入房间号进入房间。
+            </p>
+
+            <ol className="home-flow" aria-label="使用步骤">
+              <li className="home-step">
+                <span className="home-step-icon">
+                  <Icon name="wifi" />
+                </span>
+                <div className="home-step-body">
+                  <span className="home-step-tag">STEP 1</span>
+                  <strong>连接同一 Wi-Fi</strong>
+                </div>
+              </li>
+              <li className="home-step-arrow" aria-hidden="true">
+                <Icon name="arrow" />
+              </li>
+              <li className="home-step">
+                <span className="home-step-icon">
+                  <Icon name="create" />
+                </span>
+                <div className="home-step-body">
+                  <span className="home-step-tag">STEP 2</span>
+                  <strong>APP 建立房间</strong>
+                </div>
+              </li>
+              <li className="home-step-arrow" aria-hidden="true">
+                <Icon name="arrow" />
+              </li>
+              <li className="home-step">
+                <span className="home-step-icon">
+                  <Icon name="player" />
+                </span>
+                <div className="home-step-body">
+                  <span className="home-step-tag">STEP 3</span>
+                  <strong>
+                    提词器电脑使用{" "}
+                    <button type="button" className="home-step-link" onClick={openShortLink}>
+                      {shortLink}
+                    </button>{" "}
+                    加入房间
+                  </strong>
+                  <small>（点击 {shortLink} 可打开浏览器）</small>
+                </div>
+              </li>
+            </ol>
           </div>
 
           <section className="home-projects" aria-label="项目画册">
@@ -129,35 +183,37 @@ export default function Home() {
           </section>
         </div>
 
-        <div className="home-action-panel">
-          <div className="home-action-head">
-            <span>NEW</span>
-            <Icon name="bolt" />
-          </div>
-          <button className="home-create-button" onClick={createRoom}>
-            <Icon name="create" />
-            创建新房间
-          </button>
-
-          <form onSubmit={joinRoom} className="home-join-form">
-            <label htmlFor="roomCode">加入已有房间</label>
-            <div className="home-join-row">
-              <input id="roomCode" name="roomCode" inputMode="numeric" placeholder="输入 6 位房间号" />
-              <button type="submit">
-                <Icon name="arrow" />
-                加入
-              </button>
+        {/* 右列：始终冻结在视口内（§12.4）。 */}
+        <div className="home-right-col">
+          <div className="home-action-panel">
+            <div className="home-action-head">
+              <span>NEW</span>
+              <Icon name="bolt" />
             </div>
-          </form>
+            <button className="home-create-button" onClick={createRoom}>
+              <Icon name="create" />
+              创建新房间
+            </button>
 
-          <div className="home-note-card">
-            <strong>同局域网使用</strong>
-            <p><Link href="/join">打开通用展示端入口</Link></p>
-            <p>
-              本机服务已监听局域网。其他电脑与这台电脑 在同一 Wi-Fi 或热点下，打开{" "}
-              {lanOrigin?.origin ?? "http://本机IP:3000"} 即可进入。
-            </p>
+            <form onSubmit={joinRoom} className="home-join-form">
+              <label htmlFor="roomCode">加入已有房间</label>
+              <div className="home-join-row">
+                <input id="roomCode" name="roomCode" inputMode="numeric" placeholder="输入 6 位房间号" />
+                <button type="submit">
+                  <Icon name="arrow" />
+                  加入
+                </button>
+              </div>
+            </form>
           </div>
+
+          <button type="button" className="home-shortlink-box" onClick={copyShortLink} aria-label={`复制短链地址 ${shortLink}`}>
+            <span className="home-shortlink-label">短链地址（局域网内直接输入）</span>
+            <strong className="home-shortlink-value">{shortLink}</strong>
+            <span className={`home-shortlink-hint${copied ? " is-copied" : ""}`}>
+              {copied ? "已复制到剪贴板" : "点击复制"}
+            </span>
+          </button>
         </div>
       </section>
     </main>
@@ -173,13 +229,14 @@ function formatTime(value: number) {
   }).format(value);
 }
 
-function Icon({ name }: { name: "arrow" | "bolt" | "control" | "create" | "player" }) {
+function Icon({ name }: { name: "arrow" | "bolt" | "control" | "create" | "player" | "wifi" }) {
   const paths = {
     arrow: <path d="M5 12h13m-5-5 5 5-5 5" />,
     bolt: <path d="M13 2 4 14h7l-1 8 10-13h-7l1-7Z" />,
     control: <path d="M4 6h16v12H4V6Zm4 16h8M12 18v4" />,
     create: <path d="M4 12a8 8 0 1 0 16 0 8 8 0 0 0-16 0Zm8-4v8M8 12h8" />,
     player: <path d="M7 4h10v16H7V4Zm3 13h4M10 7h4" />,
+    wifi: <path d="M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8 15.5a5 5 0 0 1 8 0M12 19h.01" />,
   };
 
   return (

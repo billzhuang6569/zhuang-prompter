@@ -50,6 +50,74 @@ export function buildConvertedDirective(options: {
   return { directive, label, converted };
 }
 
+// §item7：把已存在或待定的注释/标记指令"改为正文"。
+// 与选区转换（buildConvertedDirective）互为逆操作：指令的 text= 文本被取出，
+// 原地替换整段指令（含尾随  /​ 强制行内标记），从而重新作为朗读正文，
+// 回到语音/阅读索引。标记被移除后统一重新编号，保持文档序号连续。
+export type DirectiveToBodyTarget = {
+  kind: ConvertibleDirectiveKind;
+  /** 待定指令：按 pending 锚点定位。 */
+  pendingId?: string;
+  /** 已存在指令：标记按 markerId 优先、否则按出现序号定位；注释按出现序号定位。 */
+  markerId?: string;
+  occurrence?: number;
+};
+
+function escapeRegExpLiteral(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeMarkerNumber(markerId: string) {
+  const numeric = markerId.match(/\d+/)?.[0];
+  return numeric ? Number(numeric).toString().padStart(2, "0") : markerId;
+}
+
+function recoveredBodyText(directive: string) {
+  return directive.match(/text="([^"]*)"/)?.[1] ?? "";
+}
+
+export function convertDirectiveToBody(source: string, target: DirectiveToBodyTarget): string {
+  const { kind } = target;
+  // 尾随 ​/ （强制行内渲染的零宽/不换行空格）随指令一并消费。
+  const trailing = "[\\u200B\\u00A0]?";
+  let next = source;
+
+  if (target.pendingId) {
+    const pending = escapeRegExpLiteral(target.pendingId);
+    const pattern =
+      kind === "marker"
+        ? new RegExp(`:{1,2}marker\\[[^\\]\\r\\n]*\\]\\{[^}]*pending="${pending}"[^}]*\\}${trailing}`)
+        : new RegExp(`:{1,3}(?:notes|stage|stageCue)(?:\\[[^\\]]*\\])?\\{[^}]*pending="${pending}"[^}]*\\}${trailing}`);
+    next = next.replace(pattern, (directive) => recoveredBodyText(directive));
+  } else if (kind === "marker") {
+    const occurrence = target.occurrence ?? 0;
+    let markerOccurrence = -1;
+    next = next.replace(
+      new RegExp(`:{1,2}marker\\[([^\\]]+)\\]\\{[^}]*\\}${trailing}`, "g"),
+      (directive, currentMarkerId: string) => {
+        markerOccurrence += 1;
+        const isTarget = target.markerId
+          ? currentMarkerId === target.markerId ||
+            normalizeMarkerNumber(currentMarkerId) === normalizeMarkerNumber(target.markerId)
+          : markerOccurrence === occurrence;
+        return isTarget ? recoveredBodyText(directive) : directive;
+      },
+    );
+  } else {
+    const occurrence = target.occurrence ?? 0;
+    let notesOccurrence = -1;
+    next = next.replace(
+      new RegExp(`:{1,3}(?:notes|stage|stageCue)(?:\\[[^\\]]*\\])?\\{[^}]*\\}${trailing}`, "g"),
+      (directive) => {
+        notesOccurrence += 1;
+        return notesOccurrence === occurrence ? recoveredBodyText(directive) : directive;
+      },
+    );
+  }
+
+  return kind === "marker" ? renumberMarkerDirectives(next) : next;
+}
+
 export function pendingEditorActionKey(action: PendingEditorActionIdentity | null | undefined) {
   if (!action) {
     return null;

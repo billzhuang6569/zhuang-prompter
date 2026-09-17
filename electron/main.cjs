@@ -8,6 +8,7 @@ const { join } = require("node:path");
 const { randomUUID } = require("node:crypto");
 const updateToken = randomUUID();
 const { setupUpdater } = require("./updater.cjs");
+const { startMdnsResponder } = require("./mdns-responder.cjs");
 
 // One server and one installed application should own the local rooms.
 const ownsInstance = app.requestSingleInstanceLock();
@@ -17,6 +18,7 @@ app.on("second-instance", () => showMainWindow());
 let mainWindow = null;
 let serverProcess = null;
 let serverOrigin = null;
+let mdnsResponder = null;
 function showMainWindow() {
   if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
   else if (serverOrigin) createWindow(serverOrigin);
@@ -96,6 +98,18 @@ async function startLocalServer() {
 
   const origin = `http://localhost:${port}`;
   await waitForServer(origin);
+
+  // 本机服务已成功监听后，启动固定短链 ptan.local 的 mDNS responder，
+  // 让同一局域网内的用户都能通过 http://ptan.local:<port> 进入。
+  try {
+    mdnsResponder?.destroy();
+    mdnsResponder = startMdnsResponder();
+  } catch (error) {
+    // responder 启动失败不应阻断应用；裸 IP / localhost 仍可用。
+    console.error("mDNS responder failed to start:", error);
+    mdnsResponder = null;
+  }
+
   return origin;
 }
 
@@ -175,7 +189,14 @@ app.whenReady().then(async () => {
 
 app.on("before-quit", () => {
   app.isQuitting = true;
+  mdnsResponder?.destroy();
+  mdnsResponder = null;
   serverProcess?.kill();
+});
+
+app.on("will-quit", () => {
+  mdnsResponder?.destroy();
+  mdnsResponder = null;
 });
 
 app.on("window-all-closed", () => {

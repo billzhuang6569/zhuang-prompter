@@ -16,7 +16,13 @@ import {
 import type { MDXEditorMethods } from "@mdxeditor/editor";
 import type { Anchor, RoomJoinResult } from "@/domain/room/types";
 import { stripScriptDirectives } from "@/modules/script-engine";
-import { escapeDirectiveAttr, pendingEditorActionKey, renumberMarkerDirectives } from "@/modules/script-engine/editing";
+import {
+  buildConvertedDirective,
+  convertDirectiveToBody,
+  escapeDirectiveAttr,
+  pendingEditorActionKey,
+  renumberMarkerDirectives,
+} from "@/modules/script-engine/editing";
 import type { RenderBundle } from "@/modules/script-engine/types";
 import { makeRandomId } from "@/shared/id";
 import { readingAtY, readingY } from "@/modules/playback-engine/reading-position";
@@ -191,10 +197,12 @@ export function ControlConsole({
   const lastGuideSeekAtRef = useRef(0);
   const previousMarkdownRef = useRef(markdown);
   const undoStackRef = useRef<string[]>([]);
+  const redoStackRef = useRef<string[]>([]);
   const restoringRef = useRef(false);
   const [floatingEditorPosition, setFloatingEditorPosition] = useState<FloatingEditorPosition | null>(null);
   const [richPendingEditorAction, setRichPendingEditorAction] = useState<PendingEditorAction | null>(null);
   const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
   const [guideMetrics, setGuideMetrics] = useState({ height: 0, offsetTop: 0 });
   const [guideDragReady, setGuideDragReady] = useState(false);
   const [guideDragging, setGuideDragging] = useState(false);
@@ -202,7 +210,10 @@ export function ControlConsole({
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   // §3.3：原文视图存在非空选区时，"增加"改为"改为"，反映即将发生的真正转换。
   const [rawSelectionActive, setRawSelectionActive] = useState(false);
-  const canConvertSelection = view === "raw" && rawSelectionActive;
+  // §item6：预览（render）视图内富文本存在非空选区时，同样把"增加"切换为"改为"。
+  const [renderSelectionActive, setRenderSelectionActive] = useState(false);
+  const canConvertSelection =
+    (view === "raw" && rawSelectionActive) || (view === "render" && renderSelectionActive);
 
   function syncRawSelection() {
     const editor = markdownEditorRef.current;
@@ -212,6 +223,12 @@ export function ControlConsole({
     }
     setRawSelectionActive(editor.selectionStart !== editor.selectionEnd);
   }
+
+  // §item9：状态徽标（草稿/已保存版本/保存状态）已从 UI 移除，但这些 props 仍是对外契约的一部分，
+  // 由上层传入。此处显式引用以保留 props 而不触发未使用告警。
+  void parseStatus;
+  void hasSavedVersion;
+  void saveStatus;
 
   const markers = bundle?.markerIndex ?? [];
   const safePlayerLink = playerEntryLink ?? roomLinks[0];
@@ -240,6 +257,31 @@ export function ControlConsole({
     const animationFrame = window.requestAnimationFrame(() => markdownEditorRef.current?.focus());
     return () => window.cancelAnimationFrame(animationFrame);
   }, [activePendingEditorKey, markdownEditorRef, view]);
+
+  // §item6：仅在预览视图监听 selectionchange，判断富文本内容区内是否存在非空选区，
+  // 以驱动 renderSelectionActive（进而把动作按钮从"增加"切换为"改为"）。
+  useEffect(() => {
+    if (view !== "render") {
+      return;
+    }
+    function handleSelectionChange() {
+      const wrap = richContentWrapRef.current;
+      const selection = window.getSelection();
+      if (!wrap || !selection || selection.isCollapsed || selection.rangeCount === 0) {
+        setRenderSelectionActive(false);
+        return;
+      }
+      const { anchorNode, focusNode } = selection;
+      const inside = !!anchorNode && !!focusNode && wrap.contains(anchorNode) && wrap.contains(focusNode);
+      setRenderSelectionActive(inside && selection.toString().trim().length > 0);
+    }
+    document.addEventListener("selectionchange", handleSelectionChange);
+    // 离开预览视图（或卸载）时在清理阶段复位选区标志——避免在 effect 主体中同步 setState。
+    return () => {
+      document.removeEventListener("selectionchange", handleSelectionChange);
+      setRenderSelectionActive(false);
+    };
+  }, [view]);
 
   useEffect(() => {
     if (view !== "render") {
@@ -456,6 +498,11 @@ export function ControlConsole({
     undoStackRef.current = [...undoStackRef.current.slice(-79), previousMarkdownRef.current];
     previousMarkdownRef.current = markdown;
     setCanUndo(true);
+    // 任何新的编辑都会作废重做栈（标准 undo/redo 语义）。
+    if (redoStackRef.current.length > 0) {
+      redoStackRef.current = [];
+      setCanRedo(false);
+    }
   }, [markdown]);
 
   const undoMarkdown = useCallback(() => {
@@ -465,25 +512,60 @@ export function ControlConsole({
       return;
     }
     restoringRef.current = true;
+    // 把撤销前的内容压入重做栈，供 Shift+Cmd/Ctrl+Z 恢复。
+    redoStackRef.current = [...redoStackRef.current.slice(-79), previousMarkdownRef.current];
+    setCanRedo(true);
     setFloatingEditorPosition(null);
     setRichPendingEditorAction(null);
     setCanUndo(undoStackRef.current.length > 0);
     setMarkdown(previous);
   }, [setMarkdown]);
 
+  const redoMarkdown = useCallback(() => {
+    const next = redoStackRef.current.pop();
+    if (!next) {
+      setCanRedo(false);
+      return;
+    }
+    restoringRef.current = true;
+    undoStackRef.current = [...undoStackRef.current.slice(-79), previousMarkdownRef.current];
+    setCanUndo(true);
+    setCanRedo(redoStackRef.current.length > 0);
+    setFloatingEditorPosition(null);
+    setRichPendingEditorAction(null);
+    setMarkdown(next);
+  }, [setMarkdown]);
+
   useEffect(() => {
-    function handleKeyboardUndo(event: KeyboardEvent) {
-      const isUndoKey = event.key.toLowerCase() === "z" && (event.metaKey || event.ctrlKey);
-      if (!isUndoKey || event.shiftKey || event.altKey || event.isComposing || !canUndo) {
+    function handleKeyboardHistory(event: KeyboardEvent) {
+      const isHistoryKey = event.key.toLowerCase() === "z" && (event.metaKey || event.ctrlKey);
+      if (!isHistoryKey || event.altKey || event.isComposing) {
         return;
       }
-      event.preventDefault();
-      undoMarkdown();
+      // 富文本（MDXEditor / Lexical）contentEditable 内的 Cmd/Ctrl+Z 交由其原生撤销栈处理，
+      // 避免与应用级 markdown 撤销栈冲突。原文视图（textarea）与其它焦点仍走应用级撤销/重做。
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest(".nike-rich-editor-content")) {
+        return;
+      }
+      if (event.shiftKey) {
+        if (!canRedo) {
+          return;
+        }
+        event.preventDefault();
+        redoMarkdown();
+      } else {
+        if (!canUndo) {
+          return;
+        }
+        event.preventDefault();
+        undoMarkdown();
+      }
     }
 
-    window.addEventListener("keydown", handleKeyboardUndo, { capture: true });
-    return () => window.removeEventListener("keydown", handleKeyboardUndo, { capture: true });
-  }, [canUndo, undoMarkdown]);
+    window.addEventListener("keydown", handleKeyboardHistory, { capture: true });
+    return () => window.removeEventListener("keydown", handleKeyboardHistory, { capture: true });
+  }, [canRedo, canUndo, redoMarkdown, undoMarkdown]);
 
   function runInRawEditor(action: () => void) {
     if (view !== "raw") {
@@ -494,9 +576,43 @@ export function ControlConsole({
     action();
   }
 
+  // §item6：预览视图下把当前非空选区"真正转换"为注释/标记指令（策略 b）。
+  // 与原文视图 room-client.beginMarkerEdit/beginCommentEdit 语义一致：选区文本经
+  // buildConvertedDirective 转义后成为指令 text=，随 sourceWithBlockInsertion 替换选区，
+  // 因此原文本移出朗读/语音索引（注释）或仅保留跳转锚点（标记）。
+  // 局限：按"首个正文出现位置"匹配选区纯文本，若选区跨越行内格式/多段落导致
+  // toString 与源文不完全一致而匹配失败，则返回 false，调用方退回占位插入。
+  function convertRenderSelectionToDirective(kind: "marker" | "notes") {
+    const selected = (window.getSelection()?.toString() ?? "").trim();
+    if (!selected || firstBodyOccurrence(markdown, selected) < 0) {
+      return false;
+    }
+    const pendingId = makeRandomId("pending");
+    const { directive, label } = buildConvertedDirective({
+      kind,
+      selectedText: selected,
+      markerId: kind === "marker" ? nextMarkerId(markers) : undefined,
+      pendingId,
+    });
+    setFloatingEditorPosition(floatingPositionForCurrentSelection());
+    setRichPendingEditorAction({ kind, pendingId, value: label });
+    setMarkdown((source) => {
+      const at = firstBodyOccurrence(source, selected);
+      if (at < 0) {
+        return source;
+      }
+      const next = sourceWithBlockInsertion(source, at, at + selected.length, directive);
+      return kind === "marker" ? renumberMarkerDirectives(next) : next;
+    });
+    return true;
+  }
+
   function beginInlineMarkerEdit() {
     if (view === "render") {
       if (!richEditorRef.current) {
+        return;
+      }
+      if (renderSelectionActive && convertRenderSelectionToDirective("marker")) {
         return;
       }
       const pendingId = makeRandomId("pending");
@@ -527,6 +643,9 @@ export function ControlConsole({
   function beginInlineCommentEdit() {
     if (view === "render") {
       if (!richEditorRef.current) {
+        return;
+      }
+      if (renderSelectionActive && convertRenderSelectionToDirective("notes")) {
         return;
       }
       const pendingId = makeRandomId("pending");
@@ -570,6 +689,15 @@ export function ControlConsole({
     copyStatusTimerRef.current = window.setTimeout(() => setCopyStatus("idle"), copied ? 1800 : 2400);
   }
 
+  // 播放端短链：一次点击同时（a）复制到剪贴板，（b）在系统外部浏览器打开。
+  // 桌面端未暴露通用 openExternal 桥接方法，故使用 window.open —— 在 Electron 中，
+  // 非本机 IP/origin 的地址（如 .local 记忆域名）会被 setWindowOpenHandler 交给
+  // shell.openExternal，从而在外部浏览器而非新的 App 窗口打开。
+  async function openPlayerLink(value: string) {
+    await copyPlayerLink(value);
+    window.open(value, "_blank", "noopener,noreferrer");
+  }
+
   function confirmFloatingEditorAction() {
     if (richPendingEditorAction) {
       const fallback = richPendingEditorAction.kind === "marker" ? "标记点" : "提示内容";
@@ -608,6 +736,24 @@ export function ControlConsole({
     setRichPendingEditorAction(null);
     setFloatingEditorPosition(null);
   }, [richPendingEditorAction, setMarkdown]);
+
+  // §item7：浮层"×"按钮 = 把该注释/标记"改为正文"（并非仅关闭）。
+  // 取出指令 text= 文本原地替换整段指令，使文字重新进入朗读/语音索引；
+  // 待定与已存在指令均支持。浮层外点击仍走 cancelFloatingEditorAction（关闭/放弃）。
+  const convertFloatingDirectiveToBody = useCallback(() => {
+    const action = richPendingEditorAction;
+    if (!action) {
+      // 原文视图 room-client 拥有的待定动作没有可就地转换的浮层入口，退回关闭。
+      cancelFloatingEditorAction();
+      return;
+    }
+    const target = action.pendingId
+      ? { kind: action.kind, pendingId: action.pendingId }
+      : { kind: action.kind, markerId: action.editTarget?.markerId, occurrence: action.editTarget?.occurrence ?? 0 };
+    setMarkdown((source) => convertDirectiveToBody(source, target));
+    setRichPendingEditorAction(null);
+    setFloatingEditorPosition(null);
+  }, [cancelFloatingEditorAction, richPendingEditorAction, setMarkdown]);
 
   useEffect(() => {
     if (!activePendingEditorAction || !floatingEditorPosition) {
@@ -752,9 +898,8 @@ export function ControlConsole({
           返回
         </Link>
         <div className="nike-brand">
-          <div className="nike-brand-ic">
-            <MiniPrompterIcon />
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="app-brand-logo nike-brand-logo" src="/brand/logo.png" alt="" width={28} height={28} />
           庄Sir的提词器
         </div>
         <div className="nike-u-div" />
@@ -788,13 +933,45 @@ export function ControlConsole({
               value={projectName}
               onChange={(event) => setProjectName(event.target.value)}
             />
-            <span className={`nike-bdg ${parseStatus === "valid" ? "nike-bdg-ok" : ""}`}>{parseStatus ?? "draft"}</span>
-            <span className="nike-bdg nike-bdg-ink">{hasSavedVersion ? "已保存版本" : "未保存版本"}</span>
-            {saveStatus && <span className="nike-bdg nike-bdg-ink">{saveStatus}</span>}
-            <div className="nike-vtabs">
+            <div className="nike-editor-tools" data-od-id="toolbar">
               <button
-                className={`nike-vtab ${view === "render" ? "on" : ""}`}
+                className="nike-tlb"
                 type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={beginInlineMarkerEdit}
+              >
+                <StarIcon />
+                {canConvertSelection ? "改为标记" : "增加标记"}
+              </button>
+              <button
+                className="nike-tlb"
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={beginInlineCommentEdit}
+              >
+                <CommentIcon />
+                {canConvertSelection ? "改为注释" : "增加注释"}
+              </button>
+              <button className="nike-tlb" type="button" onClick={() => exportMarkdown(true)}>
+                <DownloadIcon />
+                导出MD
+              </button>
+              <button className="nike-tlb" type="button" onClick={() => exportMarkdown(false)}>
+                <DownloadIcon />
+                导出纯文本MD
+              </button>
+              <button className="nike-t-save" type="button" onClick={onSaveVersion}>
+                <SaveIcon />
+                保存
+              </button>
+              {exportStatus && <span className="nike-export-status">{exportStatus}</span>}
+            </div>
+            <div className="nike-vswitch" role="tablist" aria-label="脚本视图切换">
+              <button
+                className={`nike-vswitch-seg ${view === "render" ? "on" : ""}`}
+                type="button"
+                role="tab"
+                aria-selected={view === "render"}
                 onClick={() => {
                   setRawSelectionActive(false);
                   setView("render");
@@ -802,57 +979,15 @@ export function ControlConsole({
               >
                 预览
               </button>
-              <button className={`nike-vtab ${view === "raw" ? "on" : ""}`} type="button" onClick={() => setView("raw")}>
+              <button
+                className={`nike-vswitch-seg ${view === "raw" ? "on" : ""}`}
+                type="button"
+                role="tab"
+                aria-selected={view === "raw"}
+                onClick={() => setView("raw")}
+              >
                 原文
               </button>
-            </div>
-          </div>
-
-          <div className="nike-editor-toolbar-shell">
-            <div className="nike-editor-toolbar-inner">
-              <div className="nike-editor-tools" data-od-id="toolbar">
-                <button
-                  className="nike-tlb"
-                  type="button"
-                  disabled={!canUndo}
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={undoMarkdown}
-                >
-                  <UndoIcon />
-                  撤销
-                </button>
-                <button
-                  className="nike-tlb"
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={beginInlineMarkerEdit}
-                >
-                  <StarIcon />
-                  {canConvertSelection ? "改为标记" : "增加标记"}
-                </button>
-                <button
-                  className="nike-tlb"
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={beginInlineCommentEdit}
-                >
-                  <CommentIcon />
-                  {canConvertSelection ? "改为注释" : "增加注释"}
-                </button>
-                <button className="nike-tlb" type="button" onClick={() => exportMarkdown(true)}>
-                  <DownloadIcon />
-                  导出MD
-                </button>
-                <button className="nike-tlb" type="button" onClick={() => exportMarkdown(false)}>
-                  <DownloadIcon />
-                  导出纯文本MD
-                </button>
-                <button className="nike-t-save" type="button" onClick={onSaveVersion}>
-                  <SaveIcon />
-                  保存
-                </button>
-                {exportStatus && <span className="nike-export-status">{exportStatus}</span>}
-              </div>
             </div>
           </div>
 
@@ -884,7 +1019,7 @@ export function ControlConsole({
                   }}
                   placeholder={activePendingEditorAction.kind === "marker" ? "输入标记文本" : "输入注释文本"}
                 />
-                <button className="muted" type="button" title="取消" onClick={cancelFloatingEditorAction}>
+                <button className="muted" type="button" title="改为正文" onClick={convertFloatingDirectiveToBody}>
                   <CloseIcon />
                 </button>
                 <button type="button" title="完成" onClick={confirmFloatingEditorAction}>
@@ -1068,13 +1203,6 @@ export function ControlConsole({
             <div className="nike-voice-status" role="status" aria-live="polite">
               {voiceAssistStatus}
             </div>
-            <button className="nike-srowb" type="button" onClick={async () => {
-              const openBrowser = (window as DesktopClipboardBridge).zhuangPrompter?.openVoiceBrowser;
-              if (openBrowser) {
-                if (!await openBrowser()) window.alert("未能打开 Chrome，请先安装 Chrome，再打开当前控制端网址。");
-              } else window.alert("请在这台主控电脑的 Chrome 中使用自动识别，并允许麦克风权限。");
-            }}>在 Chrome 中使用语音跟随</button>
-            {safePlayerLink && <a href={`${safePlayerLink.origin}/join`} target="_blank" rel="noreferrer">通用展示入口（输入房间号）</a>}
           </section>
 
           <section className="nike-psec" data-od-id="marker-jump">
@@ -1117,50 +1245,32 @@ export function ControlConsole({
 
           <section className="nike-psec" data-od-id="player-entrance">
             <div className="nike-ph">播放端入口</div>
-            {memorablePlayerLink ? (
-              <div className="nike-short-link" data-od-id="player-short-link">
-                <div className="nike-ql-lbl">好记网址（同一 Wi-Fi 直接输入）</div>
-                <button
-                  className="nike-short-link-v"
-                  type="button"
-                  onClick={() => void copyPlayerLink(memorablePlayerLink.shortPlayerUrl)}
-                  title="点击复制"
-                >
-                  {memorablePlayerLink.shortPlayerUrl}
-                </button>
-              </div>
-            ) : null}
-            {safePlayerLink ? (
+            {memorablePlayerLink && safePlayerLink ? (
               <>
-                <div className="nike-qra">
-                  <button className="nike-qrb" type="button" onClick={() => onOpenQr(safePlayerLink)} title="点击放大">
+                <div className="nike-entrance" data-od-id="player-short-link">
+                  <div className="nike-entrance-main">
+                    <div className="nike-ql-lbl">好记网址（点击复制并在浏览器打开）</div>
+                    <button
+                      className="nike-short-link-v"
+                      type="button"
+                      onClick={() => void openPlayerLink(memorablePlayerLink.shortPlayerUrl)}
+                      title="点击复制并在浏览器打开"
+                    >
+                      {stripUrlProtocol(memorablePlayerLink.shortPlayerUrl)}
+                    </button>
+                  </div>
+                  <button className="nike-qrb" type="button" onClick={() => onOpenQr(safePlayerLink)} title="点击放大二维码">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img alt="播放端二维码" src={`/api/qr?text=${encodeURIComponent(safePlayerLink.playerUrl)}`} />
                   </button>
-                  <div className="nike-qrl">
-                    <div className="nike-ql">
-                      <div className="nike-ql-lbl">播放端网址</div>
-                      <button className="nike-ql-v" type="button" onClick={() => void copyPlayerLink(safePlayerLink.playerUrl)}>
-                        {safePlayerLink.playerUrl}
-                      </button>
-                      {copyStatus !== "idle" && (
-                        <span className={`nike-copy-status ${copyStatus}`}>
-                          {copyStatus === "copied" ? "已复制到剪贴板" : "复制失败，请手动选中网址复制"}
-                        </span>
-                      )}
-                    </div>
-                  </div>
                 </div>
-                <div className="nike-qr-acts">
-                  <button className="nike-btn" type="button" onClick={() => void copyPlayerLink(safePlayerLink.playerUrl)}>
-                    {copyStatus === "copied" ? "已复制" : copyStatus === "failed" ? "复制失败" : "复制播放端网址"}
-                  </button>
-                  <button className="nike-btn" type="button" onClick={() => onOpenQr(safePlayerLink)}>
-                    放大二维码
-                  </button>
-                  <a className="nike-btn nike-btn-ink" href={safePlayerLink.playerUrl} target="_blank" rel="noreferrer">
-                    打开播放端
-                  </a>
+                {copyStatus !== "idle" && (
+                  <span className={`nike-copy-status ${copyStatus}`}>
+                    {copyStatus === "copied" ? "已复制到剪贴板" : "复制失败，请手动选中网址复制"}
+                  </span>
+                )}
+                <div className="nike-hint">
+                  播放电脑打开 {stripUrlProtocol(memorablePlayerLink.origin)}，输入房间号即可进入
                 </div>
               </>
             ) : (
@@ -1177,10 +1287,51 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function stripUrlProtocol(url: string) {
+  return url.replace(/^https?:\/\//, "");
+}
+
 function sourceWithBlockInsertion(source: string, start: number, end: number, replacement: string) {
   const prefix = start > 0 && !source.slice(0, start).endsWith("\n\n") ? "\n\n" : "";
   const suffix = end < source.length && !source.slice(end).startsWith("\n\n") ? "\n\n" : "";
   return `${source.slice(0, start)}${prefix}${replacement}${suffix}${source.slice(end)}`;
+}
+
+// §item6 策略 b：定位源文中所有指令占用的字符区间，供选区文本"避开指令"匹配之用。
+function directiveSpans(source: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  const patterns = [
+    /:{1,2}marker\[[^\]\r\n]*\]\{[^}]*\}/g,
+    /:{1,3}(?:notes|stage|stageCue)(?:\[[^\]]*\])?\{[^}]*\}/g,
+  ];
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(source))) {
+      spans.push([match.index, match.index + match[0].length]);
+    }
+  }
+  return spans;
+}
+
+// 返回选区文本在源文中首个"落在正文（不与任何指令区间重叠）"的位置，找不到返回 -1。
+function firstBodyOccurrence(source: string, needle: string): number {
+  if (!needle) {
+    return -1;
+  }
+  const spans = directiveSpans(source);
+  let from = 0;
+  for (;;) {
+    const index = source.indexOf(needle, from);
+    if (index < 0) {
+      return -1;
+    }
+    const end = index + needle.length;
+    const overlaps = spans.some(([spanStart, spanEnd]) => index < spanEnd && end > spanStart);
+    if (!overlaps) {
+      return index;
+    }
+    from = index + 1;
+  }
 }
 
 function nextMarkerId(markers: Array<{ markerId: string }>) {
@@ -1364,17 +1515,6 @@ function downloadMarkdownFile(fileName: string, markdown: string) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-function MiniPrompterIcon() {
-  return (
-    <svg width="12" height="10" viewBox="0 0 12 10" fill="none">
-      <rect x="1" y="1" width="7.5" height="7" rx="1" fill="#111111" opacity=".9" />
-      <rect x="9.5" y="2.8" width="1.5" height="3.5" rx=".4" fill="#111111" opacity=".7" />
-      <line x1="2.5" y1="3.8" x2="7" y2="3.8" stroke="#4493f8" strokeWidth="1.2" strokeLinecap="round" />
-      <line x1="2.5" y1="5.8" x2="5.5" y2="5.8" stroke="#4493f8" strokeWidth="1.2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 function StarIcon() {
   return (
     <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
@@ -1439,15 +1579,6 @@ function CloseIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
       <path d="m3 3 6 6M9 3 3 9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function UndoIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-      <path d="M5 3H2v3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M2.4 5.7A4.2 4.2 0 1 0 4 2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
