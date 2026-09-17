@@ -2,6 +2,7 @@ export { parseMarkdown } from "./parse";
 export { stripScriptDirectives } from "./export";
 export { extensionSpecFixture, longTokenFixture } from "./fixtures";
 export type {
+  InlineRun,
   MarkerAnchor,
   MarkerData,
   ParseOptions,

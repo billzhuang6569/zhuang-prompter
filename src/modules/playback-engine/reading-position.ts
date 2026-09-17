@@ -25,7 +25,7 @@ function textMap(root: HTMLElement): TextMap {
   let text = '';
   let node: Node | null;
   while ((node = walker.nextNode())) {
-    if (node.parentElement?.closest('[data-directive-kind], .script-marker, .inline-marker, .bound-stage-cue, .script-stage-cue')) continue;
+    if (node.parentElement?.closest('[data-directive-kind], .script-marker, .inline-marker, .bound-stage-cue, .script-stage-cue, .list-item-marker')) continue;
     let index = 0;
     for (const value of node.textContent ?? '') {
       const normalized = normalizeReadingText(value);

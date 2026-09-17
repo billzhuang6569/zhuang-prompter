@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { RenderBundle, RenderNode } from "@/modules/script-engine";
+import type { InlineRun, RenderBundle, RenderNode } from "@/modules/script-engine";
 
 type RenderBundleViewProps = {
   bundle: RenderBundle;
@@ -94,12 +94,63 @@ export function RenderBundleView({
   );
 }
 
+function ReadingText({ node }: { node: { text: string; inlines?: InlineRun[] } }) {
+  // Display-only enrichment: when inline runs are present, paint them; otherwise
+  // fall back to the flat spoken text. Both normalize to the same characters, so
+  // the reading indicator maps identically on control and player (§12.5).
+  return (
+    <span data-reading-text>
+      {node.inlines && node.inlines.length > 0 ? <InlineRuns runs={node.inlines} /> : node.text}
+    </span>
+  );
+}
+
+function InlineRuns({ runs }: { runs: InlineRun[] }) {
+  return (
+    <>
+      {runs.map((run, index) => (
+        <InlineRunView key={index} run={run} />
+      ))}
+    </>
+  );
+}
+
+function InlineRunView({ run }: { run: InlineRun }) {
+  switch (run.type) {
+    case "text":
+      return <>{run.text}</>;
+    case "break":
+      return <br />;
+    case "inlineCode":
+      return <code className="script-inline-code">{run.text}</code>;
+    case "strong":
+      return (
+        <strong>
+          <InlineRuns runs={run.children} />
+        </strong>
+      );
+    case "emphasis":
+      return (
+        <em>
+          <InlineRuns runs={run.children} />
+        </em>
+      );
+    case "link":
+      // Non-navigable on the stage; the href is kept as a title for reference.
+      return (
+        <span className="script-link" title={run.href}>
+          <InlineRuns runs={run.children} />
+        </span>
+      );
+  }
+}
+
 function RenderNodeView({ node }: { node: RenderNode }) {
   if (node.type === "heading") {
     const HeadingTag = `h${Math.min(Math.max(node.depth, 1), 3)}` as "h1" | "h2" | "h3";
     return (
       <HeadingTag className="script-heading" data-scroll-anchor-id={node.scrollAnchorId}>
-        <span data-reading-text>{node.text}</span>
+        <ReadingText node={node} />
       </HeadingTag>
     );
   }
@@ -119,22 +170,62 @@ function RenderNodeView({ node }: { node: RenderNode }) {
   if (node.type === "stageCue") {
     return (
       <div className="script-stage-cue">
-        <span>↳ {cueText(node.cue)}</span>
+        <span className="script-stage-cue-arrow" aria-hidden="true">
+          ↳
+        </span>
+        <span>{cueText(node.cue)}</span>
         {node.body && <p>{node.body}</p>}
       </div>
     );
   }
 
+  if (node.type === "thematicBreak") {
+    return <hr className="script-rule" data-scroll-anchor-id={node.scrollAnchorId} />;
+  }
+
+  if (node.type === "code") {
+    return (
+      <pre className="script-code" data-scroll-anchor-id={node.scrollAnchorId}>
+        <ReadingText node={node} />
+      </pre>
+    );
+  }
+
+  if (node.type === "blockquote") {
+    return (
+      <blockquote className="script-quote" data-scroll-anchor-id={node.scrollAnchorId}>
+        <ReadingText node={node} />
+      </blockquote>
+    );
+  }
+
   return (
-    <p className={node.type === "listItem" ? "script-list-item" : "script-paragraph"} data-scroll-anchor-id={node.scrollAnchorId}>
+    <p
+      className={`${node.type === "listItem" ? "script-list-item" : "script-paragraph"}${
+        node.type === "listItem" && node.ordered ? " is-ordered" : ""
+      }`}
+      data-scroll-anchor-id={node.scrollAnchorId}
+    >
+      {node.type === "listItem" && node.ordered && node.itemNumber != null && (
+        <span className="list-item-marker" aria-hidden="true">
+          {node.itemNumber}.{" "}
+        </span>
+      )}
       {node.inlineMarkers?.map((marker) => (
         <span className="inline-marker" data-marker-id={marker.markerId} key={marker.markerId}>
           ◆ {marker.markerId}
           {marker.label ? ` · ${marker.label}` : ""}
         </span>
       ))}
-      <span data-reading-text>{node.text}</span>
-      {node.cue && <span className="bound-stage-cue">↳ {cueText(node.cue)}</span>}
+      <ReadingText node={node} />
+      {node.cue && (
+        <span className="bound-stage-cue">
+          <span className="bound-stage-cue-arrow" aria-hidden="true">
+            ↳
+          </span>
+          {cueText(node.cue)}
+        </span>
+      )}
     </p>
   );
 }

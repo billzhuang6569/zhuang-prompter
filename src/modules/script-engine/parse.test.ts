@@ -1,6 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { extensionSpecFixture, longTokenFixture, parseMarkdown, stripScriptDirectives } from ".";
+import type { InlineRun } from "./types";
+import { normalizeReadingText } from "../playback-engine/reading-position";
+
+function flattenRuns(runs: InlineRun[]): string {
+  return runs
+    .map((run) => {
+      if (run.type === "text" || run.type === "inlineCode") return run.text;
+      if (run.type === "break") return "\n";
+      return flattenRuns(run.children);
+    })
+    .join("");
+}
 
 test("extracts speech and indexes from the full extension fixture", () => {
   const bundle = parseMarkdown(extensionSpecFixture, { scriptVersionId: "ver_fixture" });
@@ -207,4 +219,62 @@ test("single soft line breaks are preserved for rendering but normalized for spe
     ["文字1\n文字2", "文字3"],
   );
   assert.equal(bundle.speechIndex[0].normalizedText, "文字1 文字2");
+});
+
+test("inline emphasis enriches display without changing spoken text (§12.5)", () => {
+  const bundle = parseMarkdown("这是**加粗**和*斜体*以及`代码`和[链接](https://example.com)。");
+  const node = bundle.htmlTree.find((item) => item.type === "paragraph");
+  assert.ok(node && node.type === "paragraph");
+
+  // The spoken text is the plain flattened string — enrichment must not touch it.
+  assert.equal(node.text, "这是加粗和斜体以及代码和链接。");
+  // Reading-alignment invariant: normalized reading text is unchanged by enrichment.
+  assert.equal(normalizeReadingText(flattenRuns(node.inlines ?? [])), normalizeReadingText(node.text));
+
+  // Enrichment is present and additive.
+  assert.ok(node.inlines && node.inlines.length > 0);
+  assert.ok(node.inlines.some((run) => run.type === "strong"));
+  assert.ok(node.inlines.some((run) => run.type === "emphasis"));
+  assert.ok(node.inlines.some((run) => run.type === "inlineCode"));
+  const link = node.inlines.find((run) => run.type === "link");
+  assert.ok(link && link.type === "link" && link.href === "https://example.com");
+
+  // The formatting characters never enter the speech index.
+  assert.ok(!bundle.speechIndex.some((item) => item.rawText.includes("**")));
+  assert.ok(!bundle.speechIndex.some((item) => item.rawText.includes("`")));
+});
+
+test("hard line break separates words while soft break stays intact (§12.5)", () => {
+  const bundle = parseMarkdown("第一行  \n第二行");
+  const node = bundle.htmlTree.find((item) => item.type === "paragraph");
+  assert.ok(node && node.type === "paragraph");
+
+  // Without break→"\n" the two runs would merge into "第一行第二行".
+  assert.equal(node.text, "第一行\n第二行");
+  assert.ok(node.inlines?.some((run) => run.type === "break"));
+  assert.equal(flattenRuns(node.inlines ?? []), "第一行\n第二行");
+  // The break is whitespace, so speech normalizes it to a single space.
+  assert.equal(bundle.speechIndex[0].normalizedText, "第一行 第二行");
+});
+
+test("ordered list carries numbers kept out of reading text (§12.5)", () => {
+  const bundle = parseMarkdown("1. 第一项\n2. 第二项");
+  const items = bundle.htmlTree.filter((item) => item.type === "listItem");
+  assert.equal(items.length, 2);
+
+  assert.ok(items[0].type === "listItem" && items[0].ordered === true);
+  assert.equal(items[0].type === "listItem" ? items[0].itemNumber : undefined, 1);
+  assert.equal(items[1].type === "listItem" ? items[1].itemNumber : undefined, 2);
+
+  // The list number is presentational — it is not part of the spoken text.
+  assert.equal(items[0].type === "listItem" ? items[0].text : undefined, "第一项");
+  assert.ok(!bundle.speechIndex.some((item) => /^\s*1\./.test(item.rawText)));
+});
+
+test("unordered list items carry no number (§12.5)", () => {
+  const bundle = parseMarkdown("- 甲\n- 乙");
+  const items = bundle.htmlTree.filter((item) => item.type === "listItem");
+  assert.equal(items.length, 2);
+  assert.ok(items.every((item) => item.type === "listItem" && item.ordered !== true));
+  assert.ok(items.every((item) => item.type === "listItem" && item.itemNumber == null));
 });

@@ -3,6 +3,7 @@ import remarkParse from "remark-parse";
 import { unified } from "unified";
 import { toString } from "mdast-util-to-string";
 import type {
+  InlineRun,
   MarkerAnchor,
   MarkerData,
   ParseOptions,
@@ -20,6 +21,9 @@ type MarkdownNode = {
   value?: string;
   depth?: number;
   ordered?: boolean;
+  start?: number;
+  url?: string;
+  lang?: string;
   name?: string;
   label?: string;
   attributes?: Record<string, string | number | boolean | null | undefined>;
@@ -130,13 +134,14 @@ export function parseMarkdown(markdown: string, options: ParseOptions = {}): Ren
     blockIndex += 1;
 
     if (node.type === "heading") {
-      const text = cleanDisplayText(toString(node));
+      const text = cleanDisplayText(flattenInlineText(node));
       const speech = addSpeech(text, node, "heading");
       htmlTree.push({
         renderNodeId: `render_heading_${blockIndex}`,
         type: "heading",
         depth: node.depth ?? 1,
         text,
+        inlines: inlinesOrUndefined(buildInlines(node.children ?? [])),
         sourceRange: rangeOf(node),
         scrollAnchorId: speech?.scrollAnchorId ?? addRenderLineAnchor(node, scriptVersionId, scrollAnchorIndex),
       });
@@ -180,6 +185,7 @@ export function parseMarkdown(markdown: string, options: ParseOptions = {}): Ren
           renderNodeId: `render_paragraph_${blockIndex}_${segmentIndex}`,
           type: "paragraph",
           text: parsed.spokenText,
+          inlines: parsed.spokenText ? inlinesOrUndefined(buildInlines(parsed.inlineNodes)) : undefined,
           cue: parsed.cue,
           inlineMarkers: parsed.markers.map((markerNode) => markerFromNode(markerNode)),
           sourceRange: rangeOf(node),
@@ -195,18 +201,63 @@ export function parseMarkdown(markdown: string, options: ParseOptions = {}): Ren
     }
 
     if (node.type === "list") {
+      const ordered = node.ordered === true;
+      const startNumber = ordered ? node.start ?? 1 : 1;
+      let itemOffset = 0;
       for (const item of node.children ?? []) {
         blockIndex += 1;
-        const text = cleanDisplayText(toString(item));
+        const text = cleanDisplayText(flattenInlineText(item));
         const speech = addSpeech(text, item, "paragraph");
         htmlTree.push({
           renderNodeId: `render_list_item_${blockIndex}`,
           type: "listItem",
           text,
+          inlines: inlinesOrUndefined(buildInlines(listItemInlineChildren(item))),
+          ordered,
+          itemNumber: ordered ? startNumber + itemOffset : undefined,
           sourceRange: rangeOf(item),
           scrollAnchorId: speech?.scrollAnchorId ?? addRenderLineAnchor(item, scriptVersionId, scrollAnchorIndex),
         });
+        itemOffset += 1;
       }
+      return;
+    }
+
+    if (node.type === "thematicBreak") {
+      htmlTree.push({
+        renderNodeId: `render_rule_${blockIndex}`,
+        type: "thematicBreak",
+        sourceRange: rangeOf(node),
+        scrollAnchorId: addRenderLineAnchor(node, scriptVersionId, scrollAnchorIndex),
+      });
+      return;
+    }
+
+    if (node.type === "blockquote") {
+      const text = cleanDisplayText(flattenInlineText(node));
+      const speech = addSpeech(text, node, "paragraph");
+      htmlTree.push({
+        renderNodeId: `render_quote_${blockIndex}`,
+        type: "blockquote",
+        text,
+        inlines: inlinesOrUndefined(blockContainerInlines(node)),
+        sourceRange: rangeOf(node),
+        scrollAnchorId: speech?.scrollAnchorId ?? addRenderLineAnchor(node, scriptVersionId, scrollAnchorIndex),
+      });
+      return;
+    }
+
+    if (node.type === "code") {
+      const text = cleanDisplayText(node.value ?? "");
+      const speech = addSpeech(text, node, "paragraph");
+      htmlTree.push({
+        renderNodeId: `render_code_${blockIndex}`,
+        type: "code",
+        text,
+        lang: typeof node.lang === "string" && node.lang ? node.lang : undefined,
+        sourceRange: rangeOf(node),
+        scrollAnchorId: speech?.scrollAnchorId ?? addRenderLineAnchor(node, scriptVersionId, scrollAnchorIndex),
+      });
       return;
     }
 
@@ -233,13 +284,14 @@ export function parseMarkdown(markdown: string, options: ParseOptions = {}): Ren
       return;
     }
 
-    const text = cleanDisplayText(toString(node));
+    const text = cleanDisplayText(flattenInlineText(node));
     if (text) {
       const speech = addSpeech(text, node, "paragraph");
       htmlTree.push({
         renderNodeId: `render_paragraph_${blockIndex}`,
         type: "paragraph",
         text,
+        inlines: inlinesOrUndefined(buildInlines(node.children ?? [])),
         sourceRange: rangeOf(node),
         scrollAnchorId: speech?.scrollAnchorId ?? addRenderLineAnchor(node, scriptVersionId, scrollAnchorIndex),
       });
@@ -274,34 +326,128 @@ function collectUnsupportedDirectives(node: MarkdownNode, warnings: ParseWarning
 }
 
 function paragraphSegments(node: MarkdownNode) {
-  const segments: Array<{ spokenText: string; cue?: StageCueData; markers: MarkdownNode[] }> = [];
+  const segments: Array<{ spokenText: string; cue?: StageCueData; markers: MarkdownNode[]; inlineNodes: MarkdownNode[] }> = [];
   let parts: string[] = [];
+  let inlineNodes: MarkdownNode[] = [];
   let markers: MarkdownNode[] = [];
 
-  function flush(cue?: StageCueData, forcedText?: string) {
-    const spokenText = cleanDisplayText(forcedText ?? parts.join(""));
+  function flush() {
+    const spokenText = cleanDisplayText(parts.join(""));
     if (spokenText || markers.length > 0) {
-      segments.push({ spokenText, cue, markers });
+      segments.push({ spokenText, markers, inlineNodes });
     }
     parts = [];
+    inlineNodes = [];
     markers = [];
   }
 
   for (const child of node.children ?? []) {
     if (isNoteDirective(child)) {
       flush();
-      segments.push({ spokenText: "", cue: cueFromNode(child), markers: [] });
+      segments.push({ spokenText: "", cue: cueFromNode(child), markers: [], inlineNodes: [] });
       continue;
     }
     if (isDirective(child, "marker")) {
       markers.push(child);
       continue;
     }
-    parts.push(toString(child));
+    parts.push(flattenInlineText(child));
+    inlineNodes.push(child);
   }
   flush();
 
   return segments;
+}
+
+// Mirror of mdast-util-to-string for our inline set, except a hard `break` node
+// contributes "\n" so adjacent words no longer merge (§12.5). Kept in lockstep
+// with buildInlines so `text` and the rendered runs carry the same characters.
+function flattenInlineText(node: MarkdownNode): string {
+  if (node.type === "break") {
+    return "\n";
+  }
+  if (typeof node.value === "string") {
+    return node.value;
+  }
+  if (node.children) {
+    return node.children.map(flattenInlineText).join("");
+  }
+  return "";
+}
+
+function buildInlines(children: MarkdownNode[]): InlineRun[] {
+  const runs: InlineRun[] = [];
+  for (const child of children) {
+    switch (child.type) {
+      case "text":
+        runs.push({ type: "text", text: child.value ?? "" });
+        break;
+      case "inlineCode":
+        runs.push({ type: "inlineCode", text: child.value ?? "" });
+        break;
+      case "break":
+        runs.push({ type: "break" });
+        break;
+      case "strong":
+        runs.push({ type: "strong", children: buildInlines(child.children ?? []) });
+        break;
+      case "emphasis":
+        runs.push({ type: "emphasis", children: buildInlines(child.children ?? []) });
+        break;
+      case "link":
+        runs.push({
+          type: "link",
+          href: typeof child.url === "string" ? child.url : undefined,
+          children: buildInlines(child.children ?? []),
+        });
+        break;
+      default: {
+        // Unknown inline (e.g. delete/strikethrough without gfm, stray directive):
+        // keep its text so nothing silently disappears from the spoken line.
+        const text = flattenInlineText(child);
+        if (text) {
+          runs.push({ type: "text", text });
+        }
+      }
+    }
+  }
+  return runs;
+}
+
+function inlinesOrUndefined(runs: InlineRun[]): InlineRun[] | undefined {
+  return runs.length > 0 ? runs : undefined;
+}
+
+// A list item wraps its inline content in a child paragraph; unwrap it so the
+// runs sit directly on the item (matches how `text` is flattened).
+function listItemInlineChildren(item: MarkdownNode): MarkdownNode[] {
+  const children = item.children ?? [];
+  if (children.length === 1 && children[0]?.type === "paragraph") {
+    return children[0].children ?? [];
+  }
+  return children;
+}
+
+// Blockquotes (and similar containers) hold block children; join their inline
+// runs with a break between blocks so the visible text matches the flattened
+// spoken text after normalization.
+function blockContainerInlines(node: MarkdownNode): InlineRun[] {
+  const runs: InlineRun[] = [];
+  const blocks = node.children ?? [];
+  blocks.forEach((block, index) => {
+    if (index > 0) {
+      runs.push({ type: "break" });
+    }
+    if (block.children && block.children.length > 0) {
+      runs.push(...buildInlines(block.children));
+    } else {
+      const text = flattenInlineText(block);
+      if (text) {
+        runs.push({ type: "text", text });
+      }
+    }
+  });
+  return runs;
 }
 
 function paragraphMarkers(node: MarkdownNode) {
