@@ -2032,6 +2032,32 @@ input {
   background: transparent;
 }
 
+/* §3.1 rich-text format bar. Rendered by MDXEditor's toolbarPlugin at the top of the editor,
+   i.e. directly below the operation bar (.nike-editor-toolbar-shell) and aligned to the editor's
+   width + scroll container. It is a single fixed-height line kept in normal layout flow so it
+   always reserves its height — selecting text never shifts the reading area vertically. `sticky`
+   keeps the controls reachable while scrolling without collapsing that reserved slot. */
+.nike-rich-editor .mdxeditor-toolbar.nike-format-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 11;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  margin: 0 0 var(--nike-md);
+  padding: var(--nike-xs) 0;
+  gap: var(--nike-xs);
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  border-radius: 0;
+  border-bottom: 1px solid var(--nike-hl);
+  background: var(--nike-canvas);
+}
+
+.nike-rich-editor .mdxeditor-toolbar.nike-format-toolbar::-webkit-scrollbar {
+  height: 0;
+}
+
 .nike-rich-editor-content {
   min-height: 620px;
   outline: 0;

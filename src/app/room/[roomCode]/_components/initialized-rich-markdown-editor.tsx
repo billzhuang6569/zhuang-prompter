@@ -11,6 +11,7 @@ import {
   quotePlugin,
   tablePlugin,
   thematicBreakPlugin,
+  toolbarPlugin,
   lexicalTheme,
   type DirectiveDescriptor,
   type DirectiveEditorProps,
@@ -18,6 +19,7 @@ import {
   type MDXEditorProps,
 } from "@mdxeditor/editor";
 import type { ForwardedRef } from "react";
+import { RichFormatToolbar, richEditorTranslation } from "./rich-format-toolbar";
 
 type DirectiveNodeLike = {
   name?: string;
@@ -65,6 +67,7 @@ export default function InitializedRichMarkdownEditor({ editorRef, ...props }: I
       {...props}
       ref={editorRef}
       lexicalTheme={zhuangLexicalTheme}
+      translation={richEditorTranslation}
       plugins={[
         headingsPlugin(),
         listsPlugin(),
@@ -75,6 +78,10 @@ export default function InitializedRichMarkdownEditor({ editorRef, ...props }: I
         codeBlockPlugin(),
         directivesPlugin({ directiveDescriptors: [markerDirectiveDescriptor, notesDirectiveDescriptor] }),
         markdownShortcutPlugin(),
+        toolbarPlugin({
+          toolbarClassName: "nike-format-toolbar",
+          toolbarContents: () => <RichFormatToolbar />,
+        }),
       ]}
     />
   );
