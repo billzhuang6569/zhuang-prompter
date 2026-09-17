@@ -61,7 +61,8 @@ export default function Home() {
     const formData = new FormData(event.currentTarget);
     const roomCode = String(formData.get("roomCode") ?? "").replace(/\D/g, "");
     if (roomCode) {
-      window.location.href = `/room/${roomCode}/select-role`;
+      // 加入即播放端：不再经过角色确认页（§12.3）。
+      window.location.href = `/room/${roomCode}/player`;
     }
   }
 
