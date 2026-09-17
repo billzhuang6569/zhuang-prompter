@@ -99,8 +99,8 @@ async function startLocalServer() {
   const origin = `http://localhost:${port}`;
   await waitForServer(origin);
 
-  // 本机服务已成功监听后，启动固定短链 ptan.local 的 mDNS responder，
-  // 让同一局域网内的用户都能通过 http://ptan.local:<port> 进入。
+  // 本机服务已成功监听后，启动固定短链 play.local 的 mDNS responder，
+  // 让同一局域网内的用户都能通过 http://play.local:<port> 进入。
   try {
     mdnsResponder?.destroy();
     mdnsResponder = startMdnsResponder();

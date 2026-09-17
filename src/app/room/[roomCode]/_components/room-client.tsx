@@ -15,6 +15,7 @@ import type { RenderBundle } from "@/modules/script-engine";
 import { parseMarkdown } from "@/modules/script-engine";
 import { buildConvertedDirective, escapeDirectiveAttr, renumberMarkerDirectives } from "@/modules/script-engine/editing";
 import { makeRandomId } from "@/shared/id";
+import { copyTextToClipboard } from "@/shared/clipboard";
 import { effectivePrimary, readingAtY, readingY, offsetForReadingY } from "@/modules/playback-engine/reading-position";
 import { followVelocity } from "@/modules/voice-follow/match";
 import { ControlConsole } from "./control-console";
@@ -296,7 +297,11 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [expandedQrLink, setExpandedQrLink] = useState<(NetworkOrigin & { playerUrl: string }) | null>(null);
   const [projectName, setProjectName] = useState("小庄Sir013");
-  const [inviteStatus, setInviteStatus] = useState<"idle" | "copied" | "fallback">("idle");
+  // §item5：邀请弹窗——固定展示短链（手输）+ 二维码（扫码），不再依赖即时复制成功与否。
+  // 邀请按钮恒显示"邀请"（点击即开弹窗），故 inviteStatus 固定为 idle。
+  const inviteStatus: "idle" | "copied" | "fallback" = "idle";
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteCopyState, setInviteCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [pendingEditorAction, setPendingEditorAction] = useState<PendingEditorAction | null>(null);
 
   const selectedRole = preferredRole(mode);
@@ -1639,20 +1644,24 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     }
   }
 
-  async function invitePlayer() {
+  // §item5：点击"邀请"打开弹窗，展示短链 + 二维码，不再直接复制。
+  function invitePlayer() {
     if (!playerEntryLink) {
       return;
     }
+    setInviteCopyState("idle");
+    setInviteOpen(true);
+  }
 
-    try {
-      await navigator.clipboard.writeText(playerEntryLink.playerUrl);
-      setInviteStatus("copied");
-      window.setTimeout(() => setInviteStatus("idle"), 1800);
-    } catch {
-      setInviteStatus("fallback");
-      setExpandedQrLink(playerEntryLink);
-      window.setTimeout(() => setInviteStatus("idle"), 2200);
+  // 复制邀请短链（走统一多级降级复制，修复非安全上下文下复制失败——§item1/§item5）。
+  async function copyInviteShortLink() {
+    const value = (memorablePlayerLink ?? playerEntryLink)?.shortPlayerUrl;
+    if (!value) {
+      return;
     }
+    const ok = await copyTextToClipboard(value);
+    setInviteCopyState(ok ? "copied" : "failed");
+    window.setTimeout(() => setInviteCopyState("idle"), 1800);
   }
 
   if (connection === "not-found") {
@@ -1758,6 +1767,41 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
             </div>
           </div>
         )}
+        {inviteOpen && (
+          <div className="qrm open" role="dialog" aria-modal="true" aria-label="邀请播放端" onClick={() => setInviteOpen(false)}>
+            <div className="qrm-in nike-invite" onClick={(event) => event.stopPropagation()}>
+              <div className="qrm-h">邀请播放端加入房间 {roomCode}</div>
+              {/* 短链：好记、便于手输（§item5）。点击复制到剪贴板。 */}
+              <button
+                type="button"
+                className={`nike-invite-link${inviteCopyState === "copied" ? " is-copied" : ""}${inviteCopyState === "failed" ? " is-failed" : ""}`}
+                onClick={() => void copyInviteShortLink()}
+                aria-label="复制播放端短链"
+              >
+                <span className="nike-invite-link-label">提词器网址（手输）</span>
+                <strong className="nike-invite-link-value">
+                  {((memorablePlayerLink ?? playerEntryLink)?.shortPlayerUrl ?? "").replace(/^https?:\/\//, "")}
+                </strong>
+                <span className="nike-invite-link-hint">
+                  {inviteCopyState === "copied" ? "已复制到剪贴板" : inviteCopyState === "failed" ? "复制失败，请手动输入" : "点击复制"}
+                </span>
+              </button>
+              {/* 二维码：编码可扫码的局域网 IP 地址（.local 域名部分手机无法解析）（§item5）。 */}
+              {playerEntryLink && (
+                <div className="nike-invite-qr">
+                  <div className="qrm-card">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img alt="播放端二维码" src={`/api/qr?text=${encodeURIComponent(playerEntryLink.playerUrl)}`} />
+                  </div>
+                  <span className="nike-invite-qr-hint">扫码进入 · {playerEntryLink.playerUrl.replace(/^https?:\/\//, "")}</span>
+                </div>
+              )}
+              <button className="nike-btn" type="button" onClick={() => setInviteOpen(false)}>
+                关闭
+              </button>
+            </div>
+          </div>
+        )}
       </>
     );
   }
@@ -1815,7 +1859,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
               onClick={() => void invitePlayer()}
             >
               <Icon name="invite" />
-              {inviteStatus === "copied" ? "已复制" : inviteStatus === "fallback" ? "扫码邀请" : "邀请"}
+              邀请
             </button>
             <div className="user-chip">ZS</div>
           </div>

@@ -8,7 +8,7 @@ export type NetworkOrigin = {
 
 // 固定 mDNS 短链 + 内置 responder 方案：
 // 所有机器统一广播同一个固定的 mDNS 主机名（见 MDNS_SHORT_HOST），
-// 因此同一局域网内的任意用户都通过同一个好记地址（如 http://ptan.local:<端口>）进入，
+// 因此同一局域网内的任意用户都通过同一个好记地址（如 http://play.local:<端口>）进入，
 // 而不再随机器名（Bill-3.local 之类）变化。
 // 关键：仅返回这个字符串并不足以让它可解析——Electron 主进程会启动一个
 // multicast-dns responder（见 electron/mdns-responder.cjs），对局域网内针对
@@ -16,7 +16,7 @@ export type NetworkOrigin = {
 // （复用下方 getLanIPv4() 的选择逻辑，保持一致）。
 
 // 固定的 mDNS 短链主机名，所有机器统一广播这个名字。
-export const MDNS_SHORT_HOST = "ptan.local";
+export const MDNS_SHORT_HOST = "play.local";
 
 function getMdnsHost(): string {
   return MDNS_SHORT_HOST;

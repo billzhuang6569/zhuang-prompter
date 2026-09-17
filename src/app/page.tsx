@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { copyTextToClipboard } from "@/shared/clipboard";
 
 type RoomSummary = {
   roomId: string;
@@ -24,7 +25,27 @@ type NetworkOrigin = {
 export default function Home() {
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [networkOrigins, setNetworkOrigins] = useState<NetworkOrigin[]>([]);
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  // 是否为"短链/播放端主机"：即通过 play.local 或局域网 IP 访问（非本机 localhost）。
+  // 这类访问只展示干净的播放入口（画册→播放端 + 房间号输入），不显示创建房间等控制端功能（§item3）。
+  const [isPlayerHost, setIsPlayerHost] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    // 延后到微任务后再置状态，避免在 effect 体内同步 setState（与 room-client 一致）。
+    const timer = window.setTimeout(() => {
+      if (!alive) {
+        return;
+      }
+      const hostname = window.location.hostname;
+      const isLocalHost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
+      setIsPlayerHost(!isLocalHost);
+    }, 0);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -51,8 +72,8 @@ export default function Home() {
   const lanOrigin = useMemo(() => networkOrigins.find((origin) => origin.kind === "lan"), [networkOrigins]);
   // 固定统一短链（mDNS）：所有机器统一广播的好记地址，作为播放端进入入口（§12.5）。
   const mdnsOrigin = useMemo(() => networkOrigins.find((origin) => origin.kind === "mdns"), [networkOrigins]);
-  // 展示串去掉协议前缀（如 ptan.local:3000）；拿不到时用占位串，不崩。
-  const shortLink = mdnsOrigin?.origin.replace(/^https?:\/\//, "") ?? "ptan.local:3000";
+  // 展示串去掉协议前缀（如 play.local:3000）；拿不到时用占位串，不崩。
+  const shortLink = mdnsOrigin?.origin.replace(/^https?:\/\//, "") ?? "play.local:3000";
   const shortLinkHref = mdnsOrigin?.origin ?? `http://${shortLink}`;
 
   function openShortLink() {
@@ -60,13 +81,10 @@ export default function Home() {
   }
 
   async function copyShortLink() {
-    try {
-      await navigator.clipboard.writeText(shortLink);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      // 剪贴板不可用时静默失败，避免崩溃。
-    }
+    // 走统一的多级降级复制（原生桥 → clipboard API → execCommand），修复大字网址点击不复制（§item1）。
+    const ok = await copyTextToClipboard(shortLink);
+    setCopyState(ok ? "copied" : "failed");
+    window.setTimeout(() => setCopyState("idle"), 1800);
   }
 
   async function createRoom() {
@@ -86,6 +104,79 @@ export default function Home() {
     }
   }
 
+  // —— 短链/播放端主机：干净的播放入口界面（§item3）——
+  if (isPlayerHost) {
+    return (
+      <main className="home-workspace">
+        <header className="home-appbar">
+          <div className="control-brand">
+            <img className="app-brand-logo" src="/brand/logo.png" alt="" width={40} height={40} />
+            <div>
+              <strong>庄Sir的提词器</strong>
+              <span>播放端入口</span>
+            </div>
+          </div>
+          <div className="home-appbar-meta">
+            <span>提词器网址</span>
+            <strong>{shortLink}</strong>
+          </div>
+        </header>
+
+        <section className="home-entry-shell">
+          {/* 左列：项目画册。点击进入播放端（§item3）。 */}
+          <div className="home-left-col">
+            <section className="home-projects home-projects-lead" aria-label="项目画册">
+              <div className="home-section-title">
+                <span>PROJECTS</span>
+                <strong>项目画册</strong>
+              </div>
+              {rooms.length > 0 ? (
+                <div className="home-project-grid">
+                  {rooms.map((room) => (
+                    <a className="home-project-card" href={`/room/${room.roomCode}/player`} key={room.roomId}>
+                      <span className="home-project-code">ROOM {room.roomCode}</span>
+                      <strong>{room.projectName || `房间 ${room.roomCode}`}</strong>
+                      <p>{room.previewText || "还没有文稿内容"}</p>
+                      <div>
+                        <span>{room.markerCount} 个标记</span>
+                        <span>{room.versionCount} 个版本</span>
+                        <span>{formatTime(room.updatedAt)}</span>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <div className="home-empty-projects">控制端还没有创建房间。请在控制端电脑上创建房间后，这里会出现可进入的项目。</div>
+              )}
+            </section>
+          </div>
+
+          {/* 右列：只保留房间号输入 → 播放端（§item3）。 */}
+          <div className="home-right-col">
+            <div className="home-action-panel">
+              <div className="home-action-head">
+                <span>JOIN</span>
+                <Icon name="player" />
+              </div>
+              <form onSubmit={joinRoom} className="home-join-form">
+                <label htmlFor="roomCode">输入房间号进入播放端</label>
+                <div className="home-join-row">
+                  <input id="roomCode" name="roomCode" inputMode="numeric" placeholder="输入 6 位房间号" autoFocus />
+                  <button type="submit">
+                    <Icon name="arrow" />
+                    进入
+                  </button>
+                </div>
+              </form>
+              <p className="home-join-hint">选择左侧项目画册中的房间，或直接输入房间号，即可作为提词器（播放端）加入。</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  // —— 本机（控制端）：完整的控制房间界面 ——
   return (
     <main className="home-workspace">
       <header className="home-appbar">
@@ -210,8 +301,8 @@ export default function Home() {
           <button type="button" className="home-shortlink-box" onClick={copyShortLink} aria-label={`复制短链地址 ${shortLink}`}>
             <span className="home-shortlink-label">短链地址（局域网内直接输入）</span>
             <strong className="home-shortlink-value">{shortLink}</strong>
-            <span className={`home-shortlink-hint${copied ? " is-copied" : ""}`}>
-              {copied ? "已复制到剪贴板" : "点击复制"}
+            <span className={`home-shortlink-hint${copyState === "copied" ? " is-copied" : ""}${copyState === "failed" ? " is-failed" : ""}`}>
+              {copyState === "copied" ? "已复制到剪贴板" : copyState === "failed" ? "复制失败，请手动输入" : "点击复制"}
             </span>
           </button>
         </div>

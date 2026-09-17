@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 
-// 内置 mDNS responder：让固定短链 ptan.local 在整个局域网内可解析。
+// 内置 mDNS responder：让固定短链 play.local 在整个局域网内可解析。
 //
 // 所有机器广播同一个固定主机名（MDNS_SHORT_HOST），responder 监听针对该名字的
 // A 查询并回一条 A 记录，data = 本机当前的局域网 IPv4（每次应答时现算，IP 可能变）。
@@ -13,7 +13,7 @@ const os = require("node:os");
 const makeMdns = require("multicast-dns");
 
 // 固定的 mDNS 短链主机名（与 network-info.ts 的 MDNS_SHORT_HOST 一致）。
-const MDNS_SHORT_HOST = "ptan.local";
+const MDNS_SHORT_HOST = "play.local";
 const TTL_SECONDS = 120;
 
 // 计算本机局域网 IPv4，与 network-info.ts 的 getLanIPv4() 逻辑保持一致。

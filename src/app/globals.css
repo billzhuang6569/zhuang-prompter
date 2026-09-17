@@ -1198,7 +1198,9 @@ input {
   margin-top: 46px;
 }
 
-/* 吸顶：滚动到顶后冻结，画册网格在其下方继续滚动（§12.5）。 */
+/* 吸顶：滚动到顶后冻结，画册网格在其下方继续滚动（§12.5）。
+   §item6：底色用页面基色（#080908）的半透明版本 + backdrop-blur，
+   让底层渐变/橙色光晕透出，避免翻到顶部时出现一块与页面不匹配的"死黑"矩形。 */
 .home-section-title {
   position: sticky;
   top: 0;
@@ -1208,8 +1210,8 @@ input {
   gap: 12px;
   margin-bottom: 14px;
   padding: 10px 0 12px;
-  background: linear-gradient(180deg, #0a0b0a 78%, rgb(10 11 10 / 0%));
-  backdrop-filter: blur(6px);
+  background: linear-gradient(180deg, rgb(8 9 8 / 86%) 60%, rgb(8 9 8 / 0%));
+  backdrop-filter: blur(8px);
 }
 
 .home-section-title span {
@@ -1440,6 +1442,24 @@ input {
 
 .home-shortlink-hint.is-copied {
   color: #1eaa52;
+}
+
+.home-shortlink-hint.is-failed {
+  color: #ff6a4d;
+}
+
+/* §item3：播放端主机的说明文案。 */
+.home-join-hint {
+  margin: 0;
+  color: #9f9d95;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+/* §item3：播放端主机没有 hero，画册作为左列首个元素，去掉顶部额外间距。 */
+.home-projects.home-projects-lead {
+  margin-top: 0;
 }
 
 .nike-back-btn {
@@ -2208,6 +2228,12 @@ input {
   flex: 1;
   overflow-y: auto;
   padding: var(--nike-sec);
+}
+
+/* §item4：预览态下去掉滚动区顶部内边距，让 sticky 的格式工具栏紧贴标题行，
+   消除标题行与工具栏之间那段空隙（原文态保留内边距，避免文本框贴顶）。 */
+.nike-sr:has(.nike-rich-editor-wrap) {
+  padding-top: 0;
 }
 
 .nike-sr::-webkit-scrollbar,
@@ -3088,6 +3114,77 @@ input {
 .qrm-url {
   max-width: 320px;
   color: #707072;
+  font-family: var(--nike-fm, "SF Mono", Menlo, monospace);
+  font-size: 11px;
+  text-align: center;
+  word-break: break-all;
+}
+
+/* §item5：邀请弹窗——短链（手输）+ 二维码（扫码）。 */
+.nike-invite {
+  min-width: min(360px, 86vw);
+  gap: 20px;
+}
+
+.nike-invite-link {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: 100%;
+  border: 1px solid rgb(240 75 8 / 34%);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgb(240 75 8 / 12%), rgb(255 255 255 / 2%));
+  color: inherit;
+  cursor: pointer;
+  padding: 16px 18px;
+  text-align: center;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
+}
+
+.nike-invite-link:hover {
+  border-color: rgb(240 75 8 / 58%);
+  background: linear-gradient(180deg, rgb(240 75 8 / 18%), rgb(255 255 255 / 3%));
+}
+
+.nike-invite-link-label {
+  color: #b8b5ad;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.nike-invite-link-value {
+  color: #f4f3ef;
+  font-family: var(--nike-fm, "SF Mono", Menlo, monospace);
+  font-size: clamp(20px, 5vw, 28px);
+  font-weight: 900;
+  word-break: break-all;
+}
+
+.nike-invite-link-hint {
+  color: #9f9d95;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.nike-invite-link.is-copied .nike-invite-link-hint {
+  color: #1eaa52;
+}
+
+.nike-invite-link.is-failed .nike-invite-link-hint {
+  color: #ff6a4d;
+}
+
+.nike-invite-qr {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+
+.nike-invite-qr-hint {
+  max-width: 320px;
+  color: #9f9d95;
   font-family: var(--nike-fm, "SF Mono", Menlo, monospace);
   font-size: 11px;
   text-align: center;

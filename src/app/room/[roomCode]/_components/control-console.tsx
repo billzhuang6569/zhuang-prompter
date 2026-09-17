@@ -25,6 +25,7 @@ import {
 } from "@/modules/script-engine/editing";
 import type { RenderBundle } from "@/modules/script-engine/types";
 import { makeRandomId } from "@/shared/id";
+import { copyTextToClipboard } from "@/shared/clipboard";
 import { readingAtY, readingY } from "@/modules/playback-engine/reading-position";
 import { RichMarkdownEditor } from "./rich-markdown-editor";
 
@@ -63,13 +64,6 @@ type EditorInsertionTarget = {
 type FloatingEditorPosition = {
   left: number;
   top: number;
-};
-
-type DesktopClipboardBridge = Window & {
-  zhuangPrompter?: {
-    openVoiceBrowser?: () => Promise<boolean>;
-    writeClipboardText?: (value: string) => boolean | void | Promise<boolean | void>;
-  };
 };
 
 type ControlConsoleProps = {
@@ -681,7 +675,7 @@ export function ControlConsole({
   }
 
   async function copyPlayerLink(value: string) {
-    const copied = await copyToClipboard(value);
+    const copied = await copyTextToClipboard(value);
     setCopyStatus(copied ? "copied" : "failed");
     if (copyStatusTimerRef.current) {
       window.clearTimeout(copyStatusTimerRef.current);
@@ -1439,56 +1433,6 @@ function directiveTextFromElement(element: HTMLElement, kind: "marker" | "notes"
 
 function formatTime(value: number) {
   return new Date(value).toLocaleTimeString("zh-CN", { hour12: false });
-}
-
-async function copyToClipboard(value: string) {
-  if (!value) {
-    return false;
-  }
-
-  try {
-    const bridge = (window as DesktopClipboardBridge).zhuangPrompter;
-    if (bridge?.writeClipboardText) {
-      await bridge.writeClipboardText(value);
-      return true;
-    }
-  } catch {
-    // Fall back to browser clipboard APIs below.
-  }
-
-  try {
-    if (navigator.clipboard?.writeText && window.isSecureContext) {
-      await navigator.clipboard.writeText(value);
-      return true;
-    }
-  } catch {
-    // Fall back to the selection-based copy path below.
-  }
-
-  return copyToClipboardWithSelection(value);
-}
-
-function copyToClipboardWithSelection(value: string) {
-  const textArea = document.createElement("textarea");
-  textArea.value = value;
-  textArea.readOnly = true;
-  textArea.style.position = "fixed";
-  textArea.style.top = "0";
-  textArea.style.left = "-9999px";
-  textArea.style.opacity = "0";
-  textArea.style.pointerEvents = "none";
-  document.body.appendChild(textArea);
-
-  try {
-    textArea.focus();
-    textArea.select();
-    textArea.setSelectionRange(0, value.length);
-    return document.execCommand("copy");
-  } catch {
-    return false;
-  } finally {
-    textArea.remove();
-  }
 }
 
 function safeFileName(value: string) {
