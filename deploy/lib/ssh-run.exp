@@ -1,0 +1,19 @@
+#!/usr/bin/expect -f
+# 通过密码认证在发布服务器上执行一条远程命令。
+# 用法: expect deploy/lib/ssh-run.exp <host> <user> <port> <remote-command>
+# 密码从环境变量 DEPLOY_SSH_PASSWORD 读取（不放进 argv，避免出现在 ps 里）。
+# 透传远程命令的退出码。
+set timeout 900
+set host [lindex $argv 0]
+set user [lindex $argv 1]
+set port [lindex $argv 2]
+set cmd  [lindex $argv 3]
+set pass $env(DEPLOY_SSH_PASSWORD)
+spawn ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -p $port $user@$host $cmd
+expect {
+  "yes/no" { send "yes\r"; exp_continue }
+  -re "assword:" { send "$pass\r"; exp_continue }
+  eof {}
+}
+catch wait result
+exit [lindex $result 3]

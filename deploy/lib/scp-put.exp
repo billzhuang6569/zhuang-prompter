@@ -1,0 +1,19 @@
+#!/usr/bin/expect -f
+# 通过密码认证把一个本地文件上传到发布服务器。
+# 用法: expect deploy/lib/scp-put.exp <host> <user> <port> <local-src> <remote-dst>
+# 密码从环境变量 DEPLOY_SSH_PASSWORD 读取（不放进 argv）。
+set timeout 1800
+set host [lindex $argv 0]
+set user [lindex $argv 1]
+set port [lindex $argv 2]
+set src  [lindex $argv 3]
+set dst  [lindex $argv 4]
+set pass $env(DEPLOY_SSH_PASSWORD)
+spawn scp -o StrictHostKeyChecking=accept-new -o ConnectTimeout=25 -P $port $src $user@$host:$dst
+expect {
+  "yes/no" { send "yes\r"; exp_continue }
+  -re "assword:" { send "$pass\r"; exp_continue }
+  eof {}
+}
+catch wait result
+exit [lindex $result 3]

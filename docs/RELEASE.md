@@ -1,0 +1,134 @@
+# 发布 / 更新链路 Runbook
+
+本文件是**唯一权威的发布流程**。任何 thread 发布新版本都按此执行。先读 [`docs/WORKSPACE.md`](./WORKSPACE.md)。
+
+工作目录：`/Users/billzhuang/Documents/AI Workspace/codex/zhuangsir-prompter`（每条命令前 `cd`）。
+
+---
+
+## 全景
+
+```
+改代码 → 打 tag v X.Y.Z → GitHub Actions 构建 3 平台
+   → 本地 gh run download 拉产物 → prepare-public-release.mjs 打包
+   → deploy-release.sh 上传+原子切换 stable 指针 → 验证 API → 旧版 App 内更新自测
+```
+
+- **下载链接 API**：`https://bill-api.whatonearth.work/prompter/releases/latest.json`（= 服务器 `channels/stable/manifest.json`）。
+- **Windows 应用内更新**：electron-updater 读 `…/prompter/updates/stable/windows-<arch>/latest.yml`。
+- **macOS 更新**：installer-handoff——App 读 `releases/latest.json`，按 sha256 校验后下载 DMG，用户拖入 Applications（Mac 不读 latest-mac.yml）。
+
+---
+
+## 平台构建职责（重要）
+
+**Windows 安装包只能在 Windows 上构建**（本 Mac 无 wine/docker，无法本地产出 win exe）。
+标准做法：打 `v*.*.*` tag，`.github/workflows/release.yml` 在 `macos-latest` + `windows-latest`(x64/arm64) 三个 runner 上构建，产物同时：
+- 作为 **run artifacts**（`desktop-mac-arm64` / `desktop-win-x64` / `desktop-win-arm64`，**含 `latest*.yml`**）；
+- 作为 **GitHub Release 资产**（dmg/zip/exe/blockmap，**不含 yml**）。
+
+发布取 **run artifacts**（含 yml，且两个 win 的 `latest.yml` 分目录不冲突）。
+
+---
+
+## 步骤
+
+### 0. 前置
+- 已在 `feat/*` 分支完成改动并跑过验收闸门（见 WORKSPACE.md §3）。
+- `package.json` 的 `version` 已改为目标版本（如 `0.1.7`）并提交。
+- `gh auth status` 已登录。
+- 发布前查远端确认版本号未被占用：
+  ```bash
+  git ls-remote --tags origin | grep vX.Y.Z   # 应为空
+  ```
+
+### 1. 更新发布说明
+`scripts/prepare-public-release.mjs` 里的 `releaseNotes` 字段改为本次版本的实际改动（它会进 manifest，App 更新提示会显示）。
+
+### 2. 打 tag 触发 CI
+```bash
+git tag -a vX.Y.Z -m "Release vX.Y.Z" <commit>
+git push origin vX.Y.Z
+```
+（tag 推送不等于 push main；这是发布唯一入口。会创建公开 GitHub Release。）
+
+监控：
+```bash
+gh run list --limit 3
+gh run view <run-id> --json status,conclusion,jobs -q '.status+" "+(.conclusion//"")'
+```
+
+### 3. 下载 CI 产物并落到 prepare 期望的路径
+```bash
+gh run download <run-id> --dir /tmp/ci-X.Y.Z
+# mac（用 CI 产物，保证 bill-api 与 GitHub Release 一致）
+cp -f /tmp/ci-X.Y.Z/desktop-mac-arm64/zhuang-prompter-X.Y.Z-mac-arm64.dmg          release/
+cp -f /tmp/ci-X.Y.Z/desktop-mac-arm64/zhuang-prompter-X.Y.Z-mac-arm64.dmg.blockmap release/
+cp -f /tmp/ci-X.Y.Z/desktop-mac-arm64/zhuang-prompter-X.Y.Z-mac-arm64.zip          release/
+cp -f /tmp/ci-X.Y.Z/desktop-mac-arm64/zhuang-prompter-X.Y.Z-mac-arm64.zip.blockmap release/
+cp -f /tmp/ci-X.Y.Z/desktop-mac-arm64/latest-mac.yml                               release/
+# win x64 / arm64（分目录，各自 latest.yml）
+mkdir -p release/win-x64 release/win-arm64
+cp -f /tmp/ci-X.Y.Z/desktop-win-x64/*   release/win-x64/
+cp -f /tmp/ci-X.Y.Z/desktop-win-arm64/* release/win-arm64/
+```
+
+### 4. 打发布包
+```bash
+node scripts/prepare-public-release.mjs
+# → release/public/X.Y.Z/ ：manifest.json、SHA256SUMS、三平台 exe/dmg + 别名 + blockmap、updater/<key>/latest*.yml
+# 本地自检：
+cd release/public/X.Y.Z && shasum -a 256 -c SHA256SUMS && cd -
+```
+
+### 5. 部署到服务器（最后一公里）
+```bash
+bash scripts/deploy-release.sh X.Y.Z
+```
+脚本行为（幂等、可回退）：打包 tar → 若 `releases/X.Y.Z` 已存在则中止 → 记录当前 stable 指向（回退用）→ scp 上传 → 服务器解包到 `releases/X.Y.Z` 并 `sha256sum -c` → **原子切换** `channels/stable -> ../releases/X.Y.Z` → `nginx -t` + reload → 清理 → 打印线上 manifest 版本。
+
+凭据从 `deploy/secrets/server-ssh.env` 读（见 WORKSPACE.md §4）。
+
+### 6. 线上验证
+```bash
+curl -s https://bill-api.whatonearth.work/prompter/releases/latest.json | grep -m1 version
+curl -sI https://bill-api.whatonearth.work/prompter/downloads/X.Y.Z/zhuang-prompter-X.Y.Z-mac-arm64.dmg | head -1
+curl -s  https://bill-api.whatonearth.work/prompter/updates/stable/windows-x64/latest.yml   | grep -m1 version
+curl -s  https://bill-api.whatonearth.work/prompter/updates/stable/windows-arm64/latest.yml | grep -m1 version
+```
+（若本机 DNS 走假 IP，改从服务器上 `curl 127.0.0.1 -H 'Host: bill-api.whatonearth.work'` 或直接看 `channels/stable/manifest.json`。）
+
+### 7. App 内更新自测（旧版升到新版）
+- **Windows**：装旧版 → 启动 30s 后自动检查（>24h 才自动；也可从 App 内触发）→ 下载 → `quitAndInstall` → 确认稿件保留。隔离引擎测试见 `scripts/fixtures/windows-update-main.cjs`。
+- **macOS**：装旧版 → App 检查到新版 → 下载 DMG（sha256 校验）→ 打开 → 拖入 Applications → 重启 → 确认稿件保留。
+- 更新前 `rooms.json` 会自动备份为 `rooms.json.before-update.bak`。
+
+### 8. 收尾
+- 在 `docs/CHANGELOG.md` 记录本次发布。
+- 若链路本身有变化，更新本文件。
+- 清理 `/tmp/ci-X.Y.Z`、`/tmp/zhuang-prompter-X.Y.Z.tar.gz`。
+
+---
+
+## 服务器目录结构
+
+```
+/mnt/pictshare/zhuang-prompter/
+├── incoming/                     # 上传暂存（可选）
+├── releases/
+│   ├── 0.1.5/  0.1.6/  X.Y.Z/    # 每版一个不可变包（含 updater/ 子目录）
+└── channels/
+    └── stable -> ../releases/X.Y.Z   # 原子切换的指针（发布即改这个软链）
+```
+nginx 映射见 `deploy/prompter.locations.conf`。
+
+## 回退
+```bash
+set -a; source deploy/secrets/server-ssh.env; set +a
+expect deploy/lib/ssh-run.exp "$DEPLOY_SSH_HOST" "$DEPLOY_SSH_USER" "${DEPLOY_SSH_PORT:-22}" \
+  "cd /mnt/pictshare/zhuang-prompter/channels && ln -sfn ../releases/<上一个稳定版> .stable.new && mv -Tf .stable.new stable && readlink stable"
+```
+旧版本包仍在 `releases/`，切回指针即可（秒级、无需重传）。
+
+## 已知技术债（P5，非阻塞）
+- `prepare-public-release.mjs` 的 `sourceWorkingTree` 仍硬编码 `true`；`package.json` `build.publish.url` 为扁平 `updates/stable/`，与运行时 `updates/stable/windows-<arch>/` 不一致（因 CI `--publish never` 而无害）。将来统一。
