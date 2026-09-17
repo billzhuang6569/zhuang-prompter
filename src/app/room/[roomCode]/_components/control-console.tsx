@@ -33,9 +33,10 @@ type VersionSummary = {
 type PlayerLink = {
   label: string;
   origin: string;
-  kind: "local" | "lan";
+  kind: "local" | "lan" | "mdns";
   controlUrl: string;
   playerUrl: string;
+  shortPlayerUrl: string;
 };
 
 type PendingEditorAction = {
@@ -92,6 +93,7 @@ type ControlConsoleProps = {
   voiceAssistWanted: boolean;
   voiceAssistStatus: string;
   playerEntryLink?: PlayerLink;
+  memorablePlayerLink?: PlayerLink;
   roomLinks: PlayerLink[];
   inviteStatus: "idle" | "copied" | "fallback";
   previewScrollRef: RefObject<HTMLDivElement | null>;
@@ -147,6 +149,7 @@ export function ControlConsole({
   voiceAssistWanted,
   voiceAssistStatus,
   playerEntryLink,
+  memorablePlayerLink,
   roomLinks,
   inviteStatus,
   previewScrollRef,
@@ -1114,6 +1117,19 @@ export function ControlConsole({
 
           <section className="nike-psec" data-od-id="player-entrance">
             <div className="nike-ph">播放端入口</div>
+            {memorablePlayerLink ? (
+              <div className="nike-short-link" data-od-id="player-short-link">
+                <div className="nike-ql-lbl">好记网址（同一 Wi-Fi 直接输入）</div>
+                <button
+                  className="nike-short-link-v"
+                  type="button"
+                  onClick={() => void copyPlayerLink(memorablePlayerLink.shortPlayerUrl)}
+                  title="点击复制"
+                >
+                  {memorablePlayerLink.shortPlayerUrl}
+                </button>
+              </div>
+            ) : null}
             {safePlayerLink ? (
               <>
                 <div className="nike-qra">

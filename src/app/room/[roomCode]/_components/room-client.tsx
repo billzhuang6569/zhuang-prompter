@@ -128,7 +128,7 @@ type VersionSummary = {
 type NetworkOrigin = {
   label: string;
   origin: string;
-  kind: "local" | "lan";
+  kind: "local" | "lan" | "mdns";
 };
 
 type IconName =
@@ -313,6 +313,8 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       ...origin,
       controlUrl: `${origin.origin}/room/${roomCode}/control`,
       playerUrl: `${origin.origin}/room/${roomCode}/player`,
+      // §12.2 短链：根路由 /<房间号> 会跳转到播放端，便于口头/手输。
+      shortPlayerUrl: `${origin.origin}/${roomCode}`,
     }));
   }, [currentOrigin, networkOrigins, roomCode]);
   const bundle = useMemo<RenderBundle | undefined>(() => {
@@ -341,6 +343,8 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
         ? Math.max(0, Math.min(1, primaryPlaybackState.positionPx / (primaryPlaybackState.contentHeightPx - primaryPlaybackState.viewportHeightPx)))
         : 0;
   const playerEntryLink = roomLinks.find((link) => link.kind === "lan") ?? roomLinks[0];
+  // 记忆型入口：优先 .local 主机（好记），否则退回可扫码的局域网 IP。用于展示短链。
+  const memorablePlayerLink = roomLinks.find((link) => link.kind === "mdns") ?? playerEntryLink;
   const voiceMatch = roomState?.voiceState.match;
   const voiceAssistSummary = voiceAssistWanted
     ? voiceMatch
@@ -1705,6 +1709,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           voiceAssistWanted={voiceAssistWanted}
           voiceAssistStatus={voiceAssistSummary}
           playerEntryLink={playerEntryLink}
+          memorablePlayerLink={memorablePlayerLink}
           roomLinks={roomLinks}
           inviteStatus={inviteStatus}
           previewScrollRef={controlPreviewScrollRef}

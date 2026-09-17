@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 type RoomSummary = {
@@ -18,7 +19,7 @@ type RoomSummary = {
 type NetworkOrigin = {
   label: string;
   origin: string;
-  kind: "local" | "lan";
+  kind: "local" | "lan" | "mdns";
 };
 
 export default function Home() {
@@ -151,7 +152,7 @@ export default function Home() {
 
           <div className="home-note-card">
             <strong>同局域网使用</strong>
-            <p><a href="/join">打开通用展示端入口</a></p>
+            <p><Link href="/join">打开通用展示端入口</Link></p>
             <p>
               本机服务已监听局域网。其他电脑与这台电脑 在同一 Wi-Fi 或热点下，打开{" "}
               {lanOrigin?.origin ?? "http://本机IP:3000"} 即可进入。
