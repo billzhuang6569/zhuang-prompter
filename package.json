@@ -1,6 +1,6 @@
 {
   "name": "zhuang-prompter",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Markdown-first local/LAN teleprompter for recorded production.",
   "private": false,
   "license": "MIT",
@@ -88,6 +88,7 @@
     "appId": "com.zhuangsir.prompter",
     "productName": "庄Sir的提词器",
     "asar": false,
+    "afterPack": "scripts/ensure-app-deps.cjs",
     "directories": {
       "output": "release"
     },
