@@ -41,6 +41,7 @@
   ```bash
   git ls-remote --tags origin | grep vX.Y.Z   # 应为空
   ```
+- **打 tag 前必读并核对 [§打包陷阱：pnpm 依赖收集](#打包陷阱pnpm-依赖收集必读打-tag-前核对)。** 这是 0.1.8/0.1.9 两次"启动即崩溃"的根因，不核对会再次翻车。
 
 ### 1. 更新发布说明
 `scripts/prepare-public-release.mjs` 里的 `releaseNotes` 字段改为本次版本的实际改动（它会进 manifest，App 更新提示会显示）。
@@ -83,6 +84,14 @@ node scripts/prepare-public-release.mjs
 # 本地自检：
 cd release/public/X.Y.Z && shasum -a 256 -c SHA256SUMS && cd -
 ```
+
+**部署前强制验证：CI 产物里传递依赖 `ms` 真的在包内**（防 0.1.8/0.1.9 类崩溃，见 §打包陷阱）。挂载 mac DMG 检查（`asar: false`，直接查 `resources/app/node_modules`）：
+```bash
+hdiutil attach -nobrowse -readonly release/zhuang-prompter-X.Y.Z-mac-arm64.dmg
+ls -d "/Volumes/庄Sir的提词器 X.Y.Z/庄Sir的提词器.app/Contents/Resources/app/node_modules/ms" && echo "ms OK" || echo "ms MISSING — 不要发布"
+hdiutil detach "/Volumes/庄Sir的提词器 X.Y.Z" >/dev/null
+```
+（同理可查 `debug`。缺任一即说明 CI 又打成 isolated 布局，回到 §打包陷阱修正后重打 tag。）
 
 ### 5. 部署到服务器（最后一公里）
 ```bash
@@ -153,6 +162,39 @@ expect deploy/lib/ssh-run.exp "$DEPLOY_SSH_HOST" "$DEPLOY_SSH_USER" "${DEPLOY_SS
   "cd /mnt/pictshare/zhuang-prompter/channels && ln -sfn ../releases/<上一个稳定版> .stable.new && mv -Tf .stable.new stable && readlink stable"
 ```
 旧版本包仍在 `releases/`，切回指针即可（秒级、无需重传）。
+
+## 打包陷阱：pnpm 依赖收集（必读，打 tag 前核对）
+
+> **症状**：安装后启动即崩溃，主进程报 `A JavaScript error occurred in the main process / Error: Cannot find module 'ms'`（或 `debug`），require 链 `electron-updater → builder-util-runtime → debug → ms`。**0.1.8 与 0.1.9 均因此四端全崩。**
+
+**根因**：pnpm 默认 isolated 布局把传递依赖放在 `node_modules/.pnpm/` 深处、顶层只留符号链接；electron-builder 的依赖收集器遍历不到 `debug` 的子依赖 `ms`，于是没打进包。与 CPU 架构无关（arm64/x64 都复现），社区已知缺陷（electron-builder issue #6289 等）。
+
+**修复（本仓库已生效，勿回退）**：让 pnpm 生成扁平化 `node_modules`。**配置位置取决于 pnpm 版本，这是最大的坑：**
+
+| 谁在跑 install | pnpm 版本 | 读哪个文件的哪个键 |
+|---|---|---|
+| 本机日常开发 | 10.x | `.npmrc` 的 `node-linker=hoisted` |
+| **CI（发布用，真正决定线上产物）** | **11.1.0** | **`pnpm-workspace.yaml` 的 `nodeLinker: hoisted`** |
+
+⚠️ **pnpm 11 不再从 `.npmrc` 读 `node-linker`**。0.1.9 只改了 `.npmrc`，本机（pnpm 10）验证通过、CI（pnpm 11）却依旧 isolated → 仍缺 `ms` → 照崩。因此**真正生效的是 `pnpm-workspace.yaml`**；两个文件都保留（各服务一个 pnpm 大版本），但**决定线上产物的是 `pnpm-workspace.yaml`**。
+
+`pnpm-workspace.yaml` 同时承载构建脚本审批（`allowBuilds` / `ignoredBuiltDependencies`）——编辑时**务必保留**，否则 pnpm 11 会因 `[ERR_PNPM_IGNORED_BUILDS]` 直接 install 失败。
+
+**打 tag 前的两道核对：**
+1. `pnpm-workspace.yaml` 顶部有 `nodeLinker: hoisted`，且 `allowBuilds`/`ignoredBuiltDependencies` 仍在。
+2. **用 CI 完全相同的 pnpm 版本本地复现**（不要只信本机默认的 pnpm 10）：
+   ```bash
+   corepack pnpm@11.1.0 install --frozen-lockfile     # 期望退出 0
+   ls -d node_modules/ms node_modules/debug            # 期望是真实目录，不是 .pnpm 的 symlink
+   ```
+   两条都过，再打 tag。打包后另有 DMG 内验证，见步骤 4。
+
+## 目标输出格式：四平台 + Intel(x64) Mac 交叉构建
+
+- 目标产物固定为**四平台**：mac arm64 + mac x64(Intel) + win x64 + win arm64。缺 Intel Mac 包，Intel 用户既无法下载也无法 App 内自更新（选包逻辑按 `process.arch` 找 `macos`+`x64`+`dmg`）。
+- **Intel Mac 包在 `macos-latest`(arm64) runner 上交叉构建**：`electron-builder --mac --x64` + `CSC_IDENTITY_AUTO_DISCOVERY=false`。electron 代码零改动（`electron/updater.cjs` 已按 `process.arch` 选包，Intel App 天然选 `macos-x64`）。
+- 两个 mac 构建产出同名 `latest-mac.yml`（相互冲突），故 mac x64 产物必须落独立目录 `release/mac-x64/`（见步骤 3）。
+- 下载别名 `macos-x64.dmg` 由 `prepare-public-release.mjs` 自动 hardlink；下载短链 `/prompter/download/macos-x64` 由 `deploy/prompter.locations.conf` 提供（改 API 用 `scripts/deploy-nginx-conf.sh` 部署，见步骤 5b）。
 
 ## 已知技术债（P5，非阻塞）
 - `prepare-public-release.mjs` 的 `sourceWorkingTree` 仍硬编码 `true`；`package.json` `build.publish.url` 为扁平 `updates/stable/`，与运行时 `updates/stable/windows-<arch>/` 不一致（因 CI `--publish never` 而无害）。将来统一。

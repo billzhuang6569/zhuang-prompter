@@ -24,7 +24,9 @@
 | `docs/WORKSPACE.md` | 本文件：工作区规则（本文件是规则的唯一来源） | 是 |
 | `docs/RELEASE.md` | 发布/更新链路 runbook（构建→CI→上传→切换→验证→App 内更新测试）。目标输出格式=四平台：mac arm64 + mac x64(Intel) + win x64 + win arm64 | 是 |
 | `docs/CHANGELOG.md` | 每次发布的版本记录 | 是 |
-| `docs/release-packaging.md` | electron-builder 打包细节参考 | 是 |
+| `docs/release-packaging.md` | electron-builder 打包细节参考（含 pnpm 依赖收集陷阱） | 是 |
+| `pnpm-workspace.yaml` | **`nodeLinker: hoisted`（CI 的 pnpm 11 认这个，决定线上产物能否收全传递依赖 `ms`）** + 构建脚本审批 `allowBuilds`/`ignoredBuiltDependencies`。勿删 nodeLinker、勿删审批。见 RELEASE.md §打包陷阱 | 是 |
+| `.npmrc` | `node-linker=hoisted`（仅本机 pnpm 10 认；pnpm 11 忽略）。保留但不决定线上产物 | 是 |
 | `docs/landing-page/` | 官网（独立 Vercel 部署，不属于 App 发布链路） | 否（gitignore） |
 | `docs/plans/` | 本地工作计划草稿 | 否（gitignore） |
 | `deploy/prompter.locations.conf` | 服务器 nginx location 映射（真实来源）；下载短链路由 `/prompter/download/{macos-arm64,macos-x64,windows-x64,windows-arm64}` | 是 |
@@ -45,6 +47,13 @@ pnpm test:contracts       # 全绿
 ```
 
 需要现场自测时构建未打包版本：`pnpm dist:dir`，从 `release/mac-arm64/庄Sir的提词器.app` 启动（首启会下载 swc，属正常）。
+
+**发布相关改动（改依赖 / 改打包配置 / 发版）额外一关**：本机默认 pnpm 10，与 CI 的 pnpm 11 行为不同（`.npmrc` 的 `node-linker` pnpm 11 不认）。打 tag 前用 CI 相同版本复现，确认扁平化布局收全传递依赖：
+```bash
+corepack pnpm@11.1.0 install --frozen-lockfile   # 退出 0
+ls -d node_modules/ms node_modules/debug         # 真实目录，非 .pnpm symlink
+```
+这是 0.1.8/0.1.9 启动即崩（`Cannot find module 'ms'`）的根因，详见 `docs/RELEASE.md` §打包陷阱。
 
 ## 4. 服务器凭据的读取位置
 
