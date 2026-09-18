@@ -7,17 +7,23 @@
 
 ---
 
-## 0.1.9 — 2026-09-18
+## 0.1.10 — 2026-09-18
 
 **面向用户**
-- 修复 0.1.8 全平台一启动即崩溃的问题（`A JavaScript error occurred in the main process / Error: Cannot find module 'ms'`）。0.1.8 四端安装包因该缺陷均无法启动，请升级到 0.1.9。
-- 功能与 0.1.8 一致：覆盖 Apple Silicon 与 Intel(x64) 两种架构 Mac；Windows（x64 / ARM64）不变；沿用 Mac 拖拽安装、Windows 应用内更新与拍摄保护。
+- 修复启动即崩溃（`A JavaScript error occurred in the main process / Error: Cannot find module 'ms'`）。0.1.8 与 0.1.9 四端安装包均因该缺陷无法启动，请升级到 0.1.10。
+- 功能不变：覆盖 Apple Silicon 与 Intel(x64) 两种架构 Mac；Windows（x64 / ARM64）不变；沿用 Mac 拖拽安装、Windows 应用内更新与拍摄保护。
 
 **发布链路 / 修复细节**
-- 根因：pnpm 默认隔离式 `node_modules` 布局下，electron-builder 未把传递依赖 `ms`（`electron-updater → builder-util-runtime → debug → ms`）收进包，导致主进程启动同步 `require` 失败。因 `node_modules` 内容与 CPU 架构无关，缺陷影响 0.1.8 全部四个平台包。
-- 修复：新增根目录 `.npmrc`（`node-linker=hoisted`），让 pnpm 生成 npm 扁平式 `node_modules`，electron-builder 得以完整收录全部传递依赖。改动最小化，`pnpm-lock.yaml` 不变。已本地 `pnpm dist:dir` 打包验证：新包内含顶层 `node_modules/ms`，崩溃 require 链在打包目录中逐级解析成功。
-- 服务器 `channels/stable` 由 `releases/0.1.8` 原子切换到 `releases/0.1.9`（0.1.8 损坏包保留在 `releases/` 仅作记录，不再被 stable 指向）。
-- sourceCommit：见 tag `v0.1.9`。
+- 根因：electron-builder 依赖收集器在 pnpm 布局下打包了 `debug` 却漏掉其子依赖 `ms`（链路 `electron-updater → builder-util-runtime → debug → ms`），主进程启动同步 `require('ms')` 失败。`node_modules` 与 CPU 架构无关，故缺陷影响全部四个平台包。
+- 0.1.9 的修复尝试无效：新增的 `.npmrc`（`node-linker=hoisted`）只被 pnpm 10 读取，**CI 用的 pnpm 11.1.0 不再从 `.npmrc` 读取 `node-linker`**，故 CI 产物仍为隔离式布局、`ms` 仍缺失，0.1.9 与 0.1.8 一样崩溃。
+- 0.1.10 真正修复：在 `pnpm-workspace.yaml` 声明 `nodeLinker: hoisted`（pnpm 11 从此文件读取该设置），生成 npm 扁平式 `node_modules`，`ms`/`debug` 成为顶层真实目录，electron-builder 完整收录。已在**与 CI 一致的条件**下验证：`corepack pnpm@11.1.0 install --frozen-lockfile` 退出 0（构建脚本审批沿用 `pnpm-workspace.yaml` 中的 `allowBuilds`），`pnpm dist:dir` 产出的包内含顶层 `node_modules/ms@2.1.3`，崩溃 require 链在包内逐级解析成功。
+- `.npmrc` 的 `node-linker=hoisted` 保留（供本地 pnpm 10 开发保持一致），但真正生效的是 `pnpm-workspace.yaml`。
+- 服务器 `channels/stable` 由 `releases/0.1.8` 原子切换到 `releases/0.1.10`（0.1.8 / 0.1.9 损坏包保留在 `releases/` 仅作记录，不再被 stable 指向）。
+- sourceCommit：见 tag `v0.1.10`。
+
+## 0.1.9 — 2026-09-18（已废弃：修复无效，请勿使用）
+
+- 尝试用 `.npmrc`（`node-linker=hoisted`）修复 0.1.8 的 `Cannot find module 'ms'` 崩溃，但该设置不被 CI 的 pnpm 11.1.0 读取，四端产物依旧缺失 `ms`、启动即崩溃。**从未部署到服务器 `channels/stable`**（stable 仍停在 0.1.8，直到 0.1.10）。已由 0.1.10 取代，详见上。
 
 ## 0.1.8 — 2026-09-18
 
