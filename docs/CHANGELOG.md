@@ -18,7 +18,7 @@
 **发布链路**
 - CI 由 4 平台矩阵构建：mac arm64 + mac x64(Intel) + win x64 + win arm64（Intel DMG 在 `macos-latest` 上以 `electron-builder --mac --x64` 交叉构建，run artifact 新增 `desktop-mac-x64`，落到 `release/mac-x64/` 以避开 `latest-mac.yml` 冲突）。
 - 新增 `scripts/deploy-nginx-conf.sh` 与 `/prompter/download/macos-x64` 下载路由；发布前用该脚本同步 `deploy/prompter.locations.conf` 到服务器。
-- sourceCommit：`<release commit>`（发布时填入实际提交）。
+- sourceCommit：`ea2221043ade10929be7026209930b6ad1b7846b`（tag `v0.1.8`）。
 
 ## 0.1.7 — 2026-09-17
 
