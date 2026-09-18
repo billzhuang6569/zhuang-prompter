@@ -7,19 +7,22 @@
 
 ---
 
-## 0.1.10 — 2026-09-18
+## 0.1.11 — 2026-09-18
 
 **面向用户**
-- 修复启动即崩溃（`A JavaScript error occurred in the main process / Error: Cannot find module 'ms'`）。0.1.8 与 0.1.9 四端安装包均因该缺陷无法启动，请升级到 0.1.10。
+- 彻底修复启动即崩溃（`A JavaScript error occurred in the main process / Error: Cannot find module 'ms'`）。0.1.8 / 0.1.9 / 0.1.10 四端安装包均因该缺陷无法启动，请升级到 0.1.11。
 - 功能不变：覆盖 Apple Silicon 与 Intel(x64) 两种架构 Mac；Windows（x64 / ARM64）不变；沿用 Mac 拖拽安装、Windows 应用内更新与拍摄保护。
 
 **发布链路 / 修复细节**
-- 根因：electron-builder 依赖收集器在 pnpm 布局下打包了 `debug` 却漏掉其子依赖 `ms`（链路 `electron-updater → builder-util-runtime → debug → ms`），主进程启动同步 `require('ms')` 失败。`node_modules` 与 CPU 架构无关，故缺陷影响全部四个平台包。
-- 0.1.9 的修复尝试无效：新增的 `.npmrc`（`node-linker=hoisted`）只被 pnpm 10 读取，**CI 用的 pnpm 11.1.0 不再从 `.npmrc` 读取 `node-linker`**，故 CI 产物仍为隔离式布局、`ms` 仍缺失，0.1.9 与 0.1.8 一样崩溃。
-- 0.1.10 真正修复：在 `pnpm-workspace.yaml` 声明 `nodeLinker: hoisted`（pnpm 11 从此文件读取该设置），生成 npm 扁平式 `node_modules`，`ms`/`debug` 成为顶层真实目录，electron-builder 完整收录。已在**与 CI 一致的条件**下验证：`corepack pnpm@11.1.0 install --frozen-lockfile` 退出 0（构建脚本审批沿用 `pnpm-workspace.yaml` 中的 `allowBuilds`），`pnpm dist:dir` 产出的包内含顶层 `node_modules/ms@2.1.3`，崩溃 require 链在包内逐级解析成功。
-- `.npmrc` 的 `node-linker=hoisted` 保留（供本地 pnpm 10 开发保持一致），但真正生效的是 `pnpm-workspace.yaml`。
-- 服务器 `channels/stable` 由 `releases/0.1.8` 原子切换到 `releases/0.1.10`（0.1.8 / 0.1.9 损坏包保留在 `releases/` 仅作记录，不再被 stable 指向）。
-- sourceCommit：见 tag `v0.1.10`。
+- 根因分两层：①源码 `node_modules` 需扁平化（`pnpm-workspace.yaml` 的 `nodeLinker: hoisted`，0.1.10 已具备）；②**即便扁平，electron-builder 依赖收集器仍会在打包阶段非确定性漏包**——0.1.10 的源码树在 CI 与本机都正确，CI 却依旧漏掉 `ms` + 50 个包（本地复现不出），导致 0.1.10 的 CI 安装包同样崩溃、**从未部署到 `channels/stable`**（stable 一直停在 0.1.8）。
+- 0.1.11 真正修复：新增 `scripts/ensure-app-deps.cjs`（`build.afterPack`），打包后按源码依赖树重算生产闭包、补齐安装包内被收集器漏掉的成员（保留 pnpm 嵌套结构），并**强制校验**关键运行时依赖，缺失即让构建失败，杜绝静默产出坏包。钩子在真实 electron-builder 流水线中已验证会修复漏包（本机干净构建也曾观测到漏 ~6 个包被补回）。
+- `nodeLinker: hoisted`（`pnpm-workspace.yaml`，pnpm 11 生效）与 `.npmrc` 的 `node-linker=hoisted`（本地 pnpm 10）均保留——它们保证源码树完整，是 afterPack 修复的前提。
+- 服务器 `channels/stable`：由 `releases/0.1.8` 原子切换到 `releases/0.1.11`（0.1.8 保留作回退；0.1.9 / 0.1.10 损坏包保留在 `releases/` 仅作记录，从未被 stable 指向）。
+- sourceCommit：见 tag `v0.1.11`。
+
+## 0.1.10 — 2026-09-18（已废弃：CI 产物仍缺 `ms`，从未部署，请勿使用）
+
+- 尝试用 `pnpm-workspace.yaml` 的 `nodeLinker: hoisted` 修复 0.1.8/0.1.9 的 `Cannot find module 'ms'` 崩溃。该设置确实让**源码** `node_modules` 扁平化（本机构建产物含 `ms`），但 **CI 的 electron-builder 收集器在打包阶段非确定性漏包**：同一 commit 的 CI 产物依旧缺 `ms`（含 Intel `mac-x64` DMG），四端仍会启动即崩溃。因此 0.1.10 **从未部署到服务器 `channels/stable`**（stable 仍停在 0.1.8）。已由 0.1.11（afterPack 钩子兜底）取代，详见上。
 
 ## 0.1.9 — 2026-09-18（已废弃：修复无效，请勿使用）
 

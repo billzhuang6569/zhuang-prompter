@@ -41,7 +41,7 @@
   ```bash
   git ls-remote --tags origin | grep vX.Y.Z   # 应为空
   ```
-- **打 tag 前必读并核对 [§打包陷阱：pnpm 依赖收集](#打包陷阱pnpm-依赖收集必读打-tag-前核对)。** 这是 0.1.8/0.1.9 两次"启动即崩溃"的根因，不核对会再次翻车。
+- **打 tag 前必读并核对 [§打包陷阱：pnpm 依赖收集](#打包陷阱pnpm-依赖收集必读打-tag-前核对)。** 这是 0.1.8/0.1.9/0.1.10 三次"启动即崩溃"的根因，不核对会再次翻车。
 
 ### 1. 更新发布说明
 `scripts/prepare-public-release.mjs` 里的 `releaseNotes` 字段改为本次版本的实际改动（它会进 manifest，App 更新提示会显示）。
@@ -85,13 +85,16 @@ node scripts/prepare-public-release.mjs
 cd release/public/X.Y.Z && shasum -a 256 -c SHA256SUMS && cd -
 ```
 
-**部署前强制验证：CI 产物里传递依赖 `ms` 真的在包内**（防 0.1.8/0.1.9 类崩溃，见 §打包陷阱）。挂载 mac DMG 检查（`asar: false`，直接查 `resources/app/node_modules`）：
+**部署前强制验证：CI 产物里关键运行时依赖真的在包内**（防 0.1.8/0.1.9/0.1.10 类崩溃，见 §打包陷阱）。afterPack 钩子已在构建时强制校验并会让缺失时构建失败，此处是发布前的独立复核。挂载 mac DMG 检查（`asar: false`，直接查 `resources/app/node_modules`；注意 `builder-util-runtime` 常嵌套在 `electron-updater/node_modules/` 下）：
 ```bash
 hdiutil attach -nobrowse -readonly release/zhuang-prompter-X.Y.Z-mac-arm64.dmg
-ls -d "/Volumes/庄Sir的提词器 X.Y.Z/庄Sir的提词器.app/Contents/Resources/app/node_modules/ms" && echo "ms OK" || echo "ms MISSING — 不要发布"
+APP="/Volumes/庄Sir的提词器 X.Y.Z/庄Sir的提词器.app/Contents/Resources/app/node_modules"
+ls -d "$APP/ms" "$APP/debug" "$APP/multicast-dns" "$APP/next" "$APP/react" \
+      "$APP/electron-updater/node_modules/builder-util-runtime" \
+  && echo "closure OK" || echo "MISSING — 不要发布"
 hdiutil detach "/Volumes/庄Sir的提词器 X.Y.Z" >/dev/null
 ```
-（同理可查 `debug`。缺任一即说明 CI 又打成 isolated 布局，回到 §打包陷阱修正后重打 tag。）
+（缺任一即说明 afterPack 钩子未生效或源码树不完整，回到 §打包陷阱修正后重打 tag。Intel 包同理查 `release/mac-x64/...-mac-x64.dmg`。）
 
 ### 5. 部署到服务器（最后一公里）
 ```bash
@@ -165,29 +168,31 @@ expect deploy/lib/ssh-run.exp "$DEPLOY_SSH_HOST" "$DEPLOY_SSH_USER" "${DEPLOY_SS
 
 ## 打包陷阱：pnpm 依赖收集（必读，打 tag 前核对）
 
-> **症状**：安装后启动即崩溃，主进程报 `A JavaScript error occurred in the main process / Error: Cannot find module 'ms'`（或 `debug`），require 链 `electron-updater → builder-util-runtime → debug → ms`。**0.1.8 与 0.1.9 均因此四端全崩。**
+> **症状**：安装后启动即崩溃，主进程报 `A JavaScript error occurred in the main process / Error: Cannot find module 'ms'`（或 `debug`），require 链 `electron-updater → builder-util-runtime → debug → ms`。**0.1.8 / 0.1.9 / 0.1.10 均因此四端全崩。**
 
-**根因**：pnpm 默认 isolated 布局把传递依赖放在 `node_modules/.pnpm/` 深处、顶层只留符号链接；electron-builder 的依赖收集器遍历不到 `debug` 的子依赖 `ms`，于是没打进包。与 CPU 架构无关（arm64/x64 都复现），社区已知缺陷（electron-builder issue #6289 等）。
+**根因有两层，缺一不可修：**
 
-**修复（本仓库已生效，勿回退）**：让 pnpm 生成扁平化 `node_modules`。**配置位置取决于 pnpm 版本，这是最大的坑：**
+**① 源码 `node_modules` 必须扁平化。** pnpm 默认 isolated 布局把传递依赖放在 `node_modules/.pnpm/` 深处、顶层只留符号链接；electron-builder 收集器遍历不到 `debug` 的子依赖 `ms`。**配置位置取决于 pnpm 版本，这是最大的坑：**
 
 | 谁在跑 install | pnpm 版本 | 读哪个文件的哪个键 |
 |---|---|---|
 | 本机日常开发 | 10.x | `.npmrc` 的 `node-linker=hoisted` |
 | **CI（发布用，真正决定线上产物）** | **11.1.0** | **`pnpm-workspace.yaml` 的 `nodeLinker: hoisted`** |
 
-⚠️ **pnpm 11 不再从 `.npmrc` 读 `node-linker`**。0.1.9 只改了 `.npmrc`，本机（pnpm 10）验证通过、CI（pnpm 11）却依旧 isolated → 仍缺 `ms` → 照崩。因此**真正生效的是 `pnpm-workspace.yaml`**；两个文件都保留（各服务一个 pnpm 大版本），但**决定线上产物的是 `pnpm-workspace.yaml`**。
+⚠️ **pnpm 11 不再从 `.npmrc` 读 `node-linker`**。0.1.9 只改了 `.npmrc`，本机（pnpm 10）验证通过、CI（pnpm 11）却依旧 isolated → 仍缺 `ms` → 照崩。两个文件都保留（各服务一个 pnpm 大版本），但**决定线上产物的是 `pnpm-workspace.yaml`**。它同时承载构建脚本审批（`allowBuilds` / `ignoredBuiltDependencies`）——编辑时**务必保留**，否则 pnpm 11 会因 `[ERR_PNPM_IGNORED_BUILDS]` 直接 install 失败。
 
-`pnpm-workspace.yaml` 同时承载构建脚本审批（`allowBuilds` / `ignoredBuiltDependencies`）——编辑时**务必保留**，否则 pnpm 11 会因 `[ERR_PNPM_IGNORED_BUILDS]` 直接 install 失败。
+**② 即便扁平，electron-builder 收集器仍会非确定性漏包。** 0.1.10 的源码树在 CI 与本机都是正确的扁平布局，CI 却**依旧**在打包阶段漏掉 `ms` + 50 个包，而同一 commit 的本机构建却完整——本地复现不出。所以不再信任收集器，改为**打包后修复**：
 
-**打 tag 前的两道核对：**
-1. `pnpm-workspace.yaml` 顶部有 `nodeLinker: hoisted`，且 `allowBuilds`/`ignoredBuiltDependencies` 仍在。
+- **`scripts/ensure-app-deps.cjs`（`build.afterPack`）**：每个平台打包完、生成 DMG/安装包之前运行。按源码 `node_modules`（从源码运行永远正确）重算生产依赖闭包，用经典 node 解析并**保留 pnpm 的嵌套结构**（如 `electron-updater/node_modules/builder-util-runtime`），补齐安装包内缺失成员；随后**强制校验**：任一闭包成员未落地、或关键运行时依赖（`ms`/`debug`/`builder-util-runtime`/`electron-updater`/`multicast-dns`/`next`/`react`/`react-dom`）缺失，即抛错让构建失败——**再也不会静默产出坏包**。钩子幂等自校验，本机 `dist:*` 也受保护（曾观测到本机干净构建也漏 ~6 个包被钩子补回）。
+
+**打 tag 前的核对：**
+1. `pnpm-workspace.yaml` 顶部有 `nodeLinker: hoisted`，`allowBuilds`/`ignoredBuiltDependencies` 仍在；`package.json` 的 `build.afterPack` 指向 `scripts/ensure-app-deps.cjs`。
 2. **用 CI 完全相同的 pnpm 版本本地复现**（不要只信本机默认的 pnpm 10）：
    ```bash
    corepack pnpm@11.1.0 install --frozen-lockfile     # 期望退出 0
    ls -d node_modules/ms node_modules/debug            # 期望是真实目录，不是 .pnpm 的 symlink
    ```
-   两条都过，再打 tag。打包后另有 DMG 内验证，见步骤 4。
+3. **去风险干跑**：`gh workflow run release.yml --ref <分支>`（workflow_dispatch，不打 tag、不建 Release），四平台全绿后 `gh run download <run> -n desktop-mac-x64`，确认 DMG 内含 `ms` 等关键依赖，再打 tag。打包后另有 DMG 内验证，见步骤 4。
 
 ## 目标输出格式：四平台 + Intel(x64) Mac 交叉构建
 
