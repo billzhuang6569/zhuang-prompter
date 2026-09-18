@@ -22,12 +22,13 @@
 | 路径 | 作用 | 是否提交 |
 |---|---|---|
 | `docs/WORKSPACE.md` | 本文件：工作区规则（本文件是规则的唯一来源） | 是 |
-| `docs/RELEASE.md` | 发布/更新链路 runbook（构建→CI→上传→切换→验证→App 内更新测试） | 是 |
+| `docs/RELEASE.md` | 发布/更新链路 runbook（构建→CI→上传→切换→验证→App 内更新测试）。目标输出格式=四平台：mac arm64 + mac x64(Intel) + win x64 + win arm64 | 是 |
 | `docs/CHANGELOG.md` | 每次发布的版本记录 | 是 |
 | `docs/release-packaging.md` | electron-builder 打包细节参考 | 是 |
 | `docs/landing-page/` | 官网（独立 Vercel 部署，不属于 App 发布链路） | 否（gitignore） |
 | `docs/plans/` | 本地工作计划草稿 | 否（gitignore） |
-| `deploy/prompter.locations.conf` | 服务器 nginx location 映射（真实来源） | 是 |
+| `deploy/prompter.locations.conf` | 服务器 nginx location 映射（真实来源）；下载短链路由 `/prompter/download/{macos-arm64,macos-x64,windows-x64,windows-arm64}` | 是 |
+| `scripts/deploy-nginx-conf.sh` | 部署 `deploy/prompter.locations.conf` 到服务器 nginx snippet（备份→测试→reload→校验），改下载/更新 API 后用它 | 是 |
 | `deploy/lib/*.exp` | 密码认证的 ssh/scp expect 助手 | 是 |
 | `deploy/secrets/` | 服务器凭据（机密） | **否（gitignore）** |
 | `scripts/prepare-public-release.mjs` | 打发布包 `release/public/<version>/` | 是 |

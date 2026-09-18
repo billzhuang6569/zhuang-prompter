@@ -1,6 +1,6 @@
 {
   "name": "zhuang-prompter",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Markdown-first local/LAN teleprompter for recorded production.",
   "private": false,
   "license": "MIT",

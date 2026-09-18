@@ -39,7 +39,7 @@ git tag v0.1.0
 git push origin main --tags
 ```
 
-The workflow builds macOS and Windows packages and attaches them to the GitHub Release.
+The workflow builds four installers and attaches them to the GitHub Release: Apple Silicon Mac (arm64), Intel Mac (x64), Windows x64, and Windows arm64.
 
 ## Signing Status
 

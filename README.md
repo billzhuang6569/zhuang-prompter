@@ -2,9 +2,9 @@
 
 为真实拍摄现场准备的本地提词器。
 
-[访问官网](https://zhuang-prompter-web.vercel.app) · [下载 Mac（Apple Silicon）](https://bill-api.whatonearth.work/prompter/download/macos-arm64) · [下载 Windows x64](https://bill-api.whatonearth.work/prompter/download/windows-x64) · [下载 Windows ARM64](https://bill-api.whatonearth.work/prompter/download/windows-arm64)
+[访问官网](https://zhuang-prompter-web.vercel.app) · [下载 Mac（Apple Silicon）](https://bill-api.whatonearth.work/prompter/download/macos-arm64) · [下载 Mac（Intel）](https://bill-api.whatonearth.work/prompter/download/macos-x64) · [下载 Windows x64](https://bill-api.whatonearth.work/prompter/download/windows-x64) · [下载 Windows ARM64](https://bill-api.whatonearth.work/prompter/download/windows-arm64)
 
-当前发行版 **v0.1.7**。这一版重点升级了「加入」体验：局域网内统一用好记短链 `play.local:3000` 进入，播放端打开地址、输入房间号即可加入；控制端提供短链一键复制 + 二维码邀请。Mac 打开下载的 DMG 拖入「应用程序」安装，Windows 支持 App 内自动更新；文稿与房间数据始终留在本机。网站部署在 Vercel，安装包与更新源独立存放在下载服务器。
+当前发行版 **v0.1.8**。这一版新增 Intel(x64) 芯片 Mac 安装包：macOS 现同时覆盖 Apple Silicon 与 Intel 两种架构，Intel Mac 用户可直接下载对应 DMG 并获得 App 内更新提示；Windows（x64 / ARM64）不变。Mac 打开下载的 DMG 拖入「应用程序」安装，Windows 支持 App 内自动更新；文稿与房间数据始终留在本机。网站部署在 Vercel，安装包与更新源独立存放在下载服务器。
 
 它不是一个简单的“滚动文字网页”，而是一套可以直接上现场的提词工作台：一台电脑负责写稿、改稿和控制播放，另一块屏幕、另一台电脑、iPad 或手机负责给出镜者显示清爽的大字提词画面。
 
@@ -88,6 +88,7 @@
 当前推荐：
 
 - macOS Apple Silicon：下载 `.dmg`，打开后拖入「应用程序」
+- macOS Intel：下载 Intel 版 `.dmg`，打开后拖入「应用程序」
 - Windows x64 / ARM64：下载 `.exe` 安装包，之后可在 App 内自动更新
 
 > 当前是早期公开版本，安装包还没有商业代码签名。首次打开时，macOS 或 Windows 可能会提示“未知开发者”，这是未签名软件的常见提示。
@@ -120,7 +121,7 @@ play.local:3000
 
 ## 当前版本
 
-v0.1.7 已在真实拍摄现场使用。已覆盖 macOS（Apple Silicon）与 Windows（x64 / ARM64）：Windows 支持 App 内自动更新，Mac 打开 DMG 拖入安装。
+v0.1.8 已在真实拍摄现场使用。已覆盖 macOS（Apple Silicon / Intel）与 Windows（x64 / ARM64）：Windows 支持 App 内自动更新，Mac 打开 DMG 拖入安装。
 
 它仍在快速迭代，后续会继续优化：
 
