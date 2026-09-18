@@ -7,6 +7,18 @@
 
 ---
 
+## 0.1.9 — 2026-09-18
+
+**面向用户**
+- 修复 0.1.8 全平台一启动即崩溃的问题（`A JavaScript error occurred in the main process / Error: Cannot find module 'ms'`）。0.1.8 四端安装包因该缺陷均无法启动，请升级到 0.1.9。
+- 功能与 0.1.8 一致：覆盖 Apple Silicon 与 Intel(x64) 两种架构 Mac；Windows（x64 / ARM64）不变；沿用 Mac 拖拽安装、Windows 应用内更新与拍摄保护。
+
+**发布链路 / 修复细节**
+- 根因：pnpm 默认隔离式 `node_modules` 布局下，electron-builder 未把传递依赖 `ms`（`electron-updater → builder-util-runtime → debug → ms`）收进包，导致主进程启动同步 `require` 失败。因 `node_modules` 内容与 CPU 架构无关，缺陷影响 0.1.8 全部四个平台包。
+- 修复：新增根目录 `.npmrc`（`node-linker=hoisted`），让 pnpm 生成 npm 扁平式 `node_modules`，electron-builder 得以完整收录全部传递依赖。改动最小化，`pnpm-lock.yaml` 不变。已本地 `pnpm dist:dir` 打包验证：新包内含顶层 `node_modules/ms`，崩溃 require 链在打包目录中逐级解析成功。
+- 服务器 `channels/stable` 由 `releases/0.1.8` 原子切换到 `releases/0.1.9`（0.1.8 损坏包保留在 `releases/` 仅作记录，不再被 stable 指向）。
+- sourceCommit：见 tag `v0.1.9`。
+
 ## 0.1.8 — 2026-09-18
 
 **面向用户**
