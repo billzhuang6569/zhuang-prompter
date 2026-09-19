@@ -186,18 +186,22 @@ expect deploy/lib/ssh-run.exp "$DEPLOY_SSH_HOST" "$DEPLOY_SSH_USER" "${DEPLOY_SS
 - **`scripts/ensure-app-deps.cjs`（`build.afterPack`）**：每个平台打包完、生成 DMG/安装包之前运行。按源码 `node_modules`（从源码运行永远正确）重算生产依赖闭包，用经典 node 解析并**保留 pnpm 的嵌套结构**（如 `electron-updater/node_modules/builder-util-runtime`），补齐安装包内缺失成员；随后**强制校验**：任一闭包成员未落地、或关键运行时依赖（`ms`/`debug`/`builder-util-runtime`/`electron-updater`/`multicast-dns`/`next`/`react`/`react-dom`）缺失，即抛错让构建失败——**再也不会静默产出坏包**。钩子幂等自校验，本机 `dist:*` 也受保护（曾观测到本机干净构建也漏 ~6 个包被钩子补回）。
 
 **打 tag 前的核对：**
-1. `pnpm-workspace.yaml` 顶部有 `nodeLinker: hoisted`，`allowBuilds`/`ignoredBuiltDependencies` 仍在；`package.json` 的 `build.afterPack` 指向 `scripts/ensure-app-deps.cjs`。
+1. `pnpm-workspace.yaml` 顶部有 `nodeLinker: hoisted`、`supportedArchitectures`（os: darwin+win32、cpu: x64+arm64，均含 `current`），`allowBuilds`/`ignoredBuiltDependencies` 仍在；`package.json` 的 `build.afterPack` 指向 `scripts/ensure-app-deps.cjs`。
 2. **用 CI 完全相同的 pnpm 版本本地复现**（不要只信本机默认的 pnpm 10）：
    ```bash
-   corepack pnpm@11.1.0 install --frozen-lockfile     # 期望退出 0
-   ls -d node_modules/ms node_modules/debug            # 期望是真实目录，不是 .pnpm 的 symlink
+   CI=true corepack pnpm@11.1.0 install --frozen-lockfile   # 期望退出 0（CI=true 自动确认 node_modules 重装提示）
+   ls -d node_modules/ms node_modules/debug                 # 陷阱①：真实目录，不是 .pnpm 的 symlink
+   # 陷阱③：四个 swc 变体齐全（跨架构已安装）
+   ls -d node_modules/@next/swc-darwin-arm64 node_modules/@next/swc-darwin-x64 \
+         node_modules/@next/swc-win32-arm64-msvc node_modules/@next/swc-win32-x64-msvc
    ```
-3. **去风险干跑**：`gh workflow run release.yml --ref <分支>`（workflow_dispatch，不打 tag、不建 Release），四平台全绿后 `gh run download <run> -n desktop-mac-x64`，确认 DMG 内含 `ms` 等关键依赖，再打 tag。打包后另有 DMG 内验证，见步骤 4。
+3. **去风险干跑**：`gh workflow run release.yml --ref <分支>`（workflow_dispatch，不打 tag、不建 Release），四平台全绿后 `gh run download <run> -n desktop-mac-x64`，确认 DMG 内含 `ms` 等关键依赖、且 `@next/swc-*` 与 `@img/sharp-*` 的 `.node` 均为**目标架构**（`file` 查为 x86_64），再打 tag。打包后另有 DMG 内验证，见步骤 4。
 
 ## 目标输出格式：四平台 + Intel(x64) Mac 交叉构建
 
 - 目标产物固定为**四平台**：mac arm64 + mac x64(Intel) + win x64 + win arm64。缺 Intel Mac 包，Intel 用户既无法下载也无法 App 内自更新（选包逻辑按 `process.arch` 找 `macos`+`x64`+`dmg`）。
 - **Intel Mac 包在 `macos-latest`(arm64) runner 上交叉构建**：`electron-builder --mac --x64` + `CSC_IDENTITY_AUTO_DISCOVERY=false`。electron 代码零改动（`electron/updater.cjs` 已按 `process.arch` 选包，Intel App 天然选 `macos-x64`）。
+- **交叉构建必须先在源码树装齐目标架构的原生库**（`pnpm-workspace.yaml` 的 `supportedArchitectures`）。否则 `pnpm install` 只装 runner 自身架构的 `@next/swc-*`/`@img/sharp-*`，交叉构建包会打入**错误架构**的 `.node`，本机服务启动即卡死超时（"The local server did not start in time"）——这是 0.1.11 Intel Mac 与 ARM64 Windows 的根因，0.1.12 修复。`scripts/ensure-app-deps.cjs`（afterPack）随后按目标架构复制、剥离错误架构，并硬校验目标架构 `@next/swc-*` `.node` 存在，缺失即让构建失败。详见 `docs/release-packaging.md` 问题③。
 - 两个 mac 构建产出同名 `latest-mac.yml`（相互冲突），故 mac x64 产物必须落独立目录 `release/mac-x64/`（见步骤 3）。
 - 下载别名 `macos-x64.dmg` 由 `prepare-public-release.mjs` 自动 hardlink；下载短链 `/prompter/download/macos-x64` 由 `deploy/prompter.locations.conf` 提供（改 API 用 `scripts/deploy-nginx-conf.sh` 部署，见步骤 5b）。
 

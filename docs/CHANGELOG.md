@@ -7,6 +7,21 @@
 
 ---
 
+## 0.1.12 — 2026-09-19
+
+**面向用户**
+- 修复 **Intel(x64) Mac** 与 **ARM64 Windows** 安装包安装后启动失败：打开 App 后左上角出现窗口但点其他功能无反应，约 30 秒后弹出「庄Sir的提词器启动失败 / The local server did not start in time（本机服务未能及时启动）」。0.1.11 的这两个平台安装包受此问题影响,请升级到 0.1.12。
+- **Apple Silicon Mac 与 x64 Windows 不受影响**（0.1.11 在这两个平台工作正常，可继续使用或升级）。
+- 功能不变：沿用 Mac 拖拽安装、Windows 应用内更新与拍摄保护；文稿与房间数据始终留在本机。
+
+**发布链路 / 修复细节**
+- 根因：Intel Mac 与 ARM64 Windows 在**异构 runner 上交叉构建**（Intel Mac 在 arm64 的 `macos-latest`、ARM64 Windows 在 x64 的 `windows-latest`）。`pnpm install --frozen-lockfile` 默认只装 **runner 自身架构**的平台相关原生依赖,导致 x64 Mac 包里装进了 `@next/swc-darwin-arm64`（arm64 的 `.node`）而**没有 x64 版本**。x64 的 Electron 进程以 node 模式启动本机服务时 `dlopen` 该 arm64 `.node` 卡死 → Next.js 生产服务器起不来 → 触发 `waitForServer` 30 秒超时 → 启动失败弹窗。
+- 雪上加霜：0.1.11 修 `ms` 崩溃时新增的 `scripts/ensure-app-deps.cjs`（`afterPack`）**架构盲**,反而把错误架构的闭包又复制进包里。
+- 修复分两部分:①`pnpm-workspace.yaml` 新增 `supportedArchitectures`（os: darwin+win32、cpu: x64+arm64），令源码树装齐全部平台/架构的原生库,交叉构建时目标架构的 `.node` 可用;②`scripts/ensure-app-deps.cjs` 改为**架构感知**——只按目标架构复制原生包、剥离错误架构的,并新增**硬校验闸门**:打包时若目标架构的 `@next/swc-*` `.node` 缺失即让构建失败（本可拦下本次 bug）。
+- 本地验证:交叉构建的 x64 Mac 包中仅含 x86_64 原生库（`swc-darwin-x64`/`sharp-darwin-x64`，无 arm64 残留），Rosetta 下本机服务约 6 秒启动并返回 HTTP 200（旧包会卡到 30 秒超时）。
+- 服务器 `channels/stable`：由 `releases/0.1.11` 原子切换到 `releases/0.1.12`（0.1.11 保留作回退）。
+- sourceCommit：见 tag `v0.1.12`。
+
 ## 0.1.11 — 2026-09-18
 
 **面向用户**

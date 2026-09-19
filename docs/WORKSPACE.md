@@ -25,8 +25,8 @@
 | `docs/RELEASE.md` | 发布/更新链路 runbook（构建→CI→上传→切换→验证→App 内更新测试）。目标输出格式=四平台：mac arm64 + mac x64(Intel) + win x64 + win arm64 | 是 |
 | `docs/CHANGELOG.md` | 每次发布的版本记录 | 是 |
 | `docs/release-packaging.md` | electron-builder 打包细节参考（含 pnpm 依赖收集陷阱 + afterPack 修复 + Intel 打包实践） | 是 |
-| `scripts/ensure-app-deps.cjs` | **`build.afterPack` 钩子**：按源码依赖树补齐安装包内被 electron-builder 收集器漏掉的传递依赖（含嵌套版本），并强制校验关键运行时依赖（`ms`/`next`/`react` 等），缺失即让构建失败。这是 `Cannot find module 'ms'` 的最终修复，勿删。见 release-packaging.md | 是 |
-| `pnpm-workspace.yaml` | **`nodeLinker: hoisted`（CI 的 pnpm 11 认这个，是收全传递依赖的必要条件——但不充分，收集器仍会非确定性漏包，靠上面的 afterPack 钩子兜底）** + 构建脚本审批 `allowBuilds`/`ignoredBuiltDependencies`。勿删 nodeLinker、勿删审批。见 release-packaging.md | 是 |
+| `scripts/ensure-app-deps.cjs` | **`build.afterPack` 钩子**：按源码依赖树补齐安装包内被 electron-builder 收集器漏掉的传递依赖（含嵌套版本），并强制校验关键运行时依赖（`ms`/`next`/`react` 等），缺失即让构建失败。**架构感知**：交叉构建时只保留目标架构的原生库（`@next/swc-*`/`@img/sharp-*`）、剥离错误架构，并硬校验目标架构 swc `.node` 存在（0.1.12 修 Intel/ARM64-Win 启动失败）。这是 `Cannot find module 'ms'` 与 "server did not start in time" 的最终修复，勿删。见 release-packaging.md | 是 |
+| `pnpm-workspace.yaml` | **`nodeLinker: hoisted`（CI 的 pnpm 11 认这个，是收全传递依赖的必要条件——但不充分，收集器仍会非确定性漏包，靠上面的 afterPack 钩子兜底）** + **`supportedArchitectures`（装齐 darwin+win32 × x64+arm64 原生库，交叉构建包才有正确架构，勿删）** + 构建脚本审批 `allowBuilds`/`ignoredBuiltDependencies`。勿删 nodeLinker、勿删审批。见 release-packaging.md | 是 |
 | `.npmrc` | `node-linker=hoisted`（仅本机 pnpm 10 认；pnpm 11 忽略）。保留但不决定线上产物 | 是 |
 | `docs/landing-page/` | 官网（独立 Vercel 部署，不属于 App 发布链路） | 否（gitignore） |
 | `docs/plans/` | 本地工作计划草稿 | 否（gitignore） |

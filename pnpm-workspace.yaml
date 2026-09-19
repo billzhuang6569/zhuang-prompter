@@ -2,6 +2,22 @@
 # collector packages ALL transitive deps (e.g. debug's child `ms`).
 # pnpm 11 reads nodeLinker from here (NOT from .npmrc). See docs/RELEASE.md.
 nodeLinker: hoisted
+# Cross-arch native binaries MUST be installed in the source tree so cross-builds
+# ship the RIGHT arch. mac/x64 is cross-built on the arm64 runner and win/arm64 on
+# the x64 runner; without this pnpm only installs the runner's own arch, so the
+# packaged app gets a wrong-arch @next/swc / sharp .node and the local server fails
+# to boot ("The local server did not start in time"). This installs all darwin+win
+# x64/arm64 optional deps; scripts/ensure-app-deps.cjs (afterPack) then copies the
+# target arch and strips the others. See docs/release-packaging.md.
+supportedArchitectures:
+  os:
+    - current
+    - darwin
+    - win32
+  cpu:
+    - current
+    - x64
+    - arm64
 allowBuilds:
   electron-winstaller: true
   esbuild: true

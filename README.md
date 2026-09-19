@@ -4,7 +4,7 @@
 
 [访问官网](https://zhuang-prompter-web.vercel.app) · [下载 Mac（Apple Silicon）](https://bill-api.whatonearth.work/prompter/download/macos-arm64) · [下载 Mac（Intel）](https://bill-api.whatonearth.work/prompter/download/macos-x64) · [下载 Windows x64](https://bill-api.whatonearth.work/prompter/download/windows-x64) · [下载 Windows ARM64](https://bill-api.whatonearth.work/prompter/download/windows-arm64)
 
-当前发行版 **v0.1.11**。这一版彻底修复了安装后启动即崩溃（`Cannot find module 'ms'`，影响 0.1.8 / 0.1.9 / 0.1.10 四端安装包）；功能不变：macOS 同时覆盖 Apple Silicon 与 Intel(x64) 两种架构，Windows（x64 / ARM64）不变。Mac 打开下载的 DMG 拖入「应用程序」安装，Windows 支持 App 内自动更新；文稿与房间数据始终留在本机。网站部署在 Vercel，安装包与更新源独立存放在下载服务器。
+当前发行版 **v0.1.12**。这一版修复了 **Intel(x64) Mac 与 ARM64 Windows** 安装包安装后启动失败（打开后点功能无反应、约 30 秒弹出「本机服务未能及时启动 / The local server did not start in time」）——根因是这两个平台交叉构建时打入了错误架构的原生库；**Apple Silicon Mac 与 x64 Windows 不受影响**。0.1.11 的这两个平台安装包受影响,请升级到 0.1.12。功能不变：macOS 同时覆盖 Apple Silicon 与 Intel(x64) 两种架构，Windows（x64 / ARM64）不变。Mac 打开下载的 DMG 拖入「应用程序」安装，Windows 支持 App 内自动更新；文稿与房间数据始终留在本机。网站部署在 Vercel，安装包与更新源独立存放在下载服务器。
 
 它不是一个简单的“滚动文字网页”，而是一套可以直接上现场的提词工作台：一台电脑负责写稿、改稿和控制播放，另一块屏幕、另一台电脑、iPad 或手机负责给出镜者显示清爽的大字提词画面。
 
@@ -121,7 +121,7 @@ play.local:3000
 
 ## 当前版本
 
-v0.1.11 已在真实拍摄现场使用。已覆盖 macOS（Apple Silicon / Intel）与 Windows（x64 / ARM64）：Windows 支持 App 内自动更新，Mac 打开 DMG 拖入安装。
+v0.1.12 已在真实拍摄现场使用。已覆盖 macOS（Apple Silicon / Intel）与 Windows（x64 / ARM64）：Windows 支持 App 内自动更新，Mac 打开 DMG 拖入安装。本版修复了 Intel Mac 与 ARM64 Windows 交叉构建包的启动失败问题。
 
 它仍在快速迭代，后续会继续优化：
 
