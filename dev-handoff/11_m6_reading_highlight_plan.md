@@ -23,7 +23,7 @@
 | [`control-console.tsx`](https://github.com/billzhuang6569/zhuang-prompter/blob/bbebee9/src/app/room/%5BroomCode%5D/_components/control-console.tsx#L314) | 横线优先 `readingY()`，失败按总高度比例回退；另有拖线跳转和始终可编辑的富文本/原文 | 删除整条拖线路径，改为高亮派生横线；只读时拦截所有修改入口 |
 | [`room-client.tsx`](https://github.com/billzhuang6569/zhuang-prompter/blob/bbebee9/src/app/room/%5BroomCode%5D/_components/room-client.tsx#L1253) | 播放中约每 100ms 上报；**字符锚点解析目前只在 paused 分支**，playing 分支直接按像素时钟推进 | 换行时及时报告；播放中点字必须先应用锚点并重设本地计时基点，再继续播放 |
 | [`room-store.ts`](https://github.com/billzhuang6569/zhuang-prompter/blob/bbebee9/src/modules/room-sync/room-store.ts#L354) | 保存递增 draftRevision、清空版本及 ScrollClock；控制端可能有未保存稿 | 完成动作有成功/失败状态，报告与时钟绑定实际渲染的修订 |
-| [`sendScrollClock()`](https://github.com/billzhuang6569/zhuang-prompter/blob/bbebee9/src/app/room/%5BroomCode%5D/_components/room-client.tsx#L753) | 写死 `fixture_m1`；现有比例 seek 强制暂停 | 清理测试版本标识；新增点字操作保留当前播放状态、速度和控制模式 |
+| [`sendScrollClock()`](https://github.com/billzhuang6569/zhuang-prompter/blob/bbebee9/src/app/room/%5BroomCode%5D/_components/room-client.tsx#L753) | 写死 `fixture_m1`；现有所有跳转（比例 seek、前进/后退一段、回到开始/结束、标记跳转，`room-client.tsx:956–1027`）都发 `paused` 时钟 | 清理测试版本标识；点字及上述全部跳转统一保留当前播放状态、速度和控制模式 |
 | 字号控件与 CSS | range max=200 是百分比；两入口受 MAX_PLAYER_FONT_SCALE=2 限制；最终 CSS 使用 32–64px 响应式基准，覆盖旧字号变量 | 全链路解限，保留滑块、数字框和 A+/A−；仅清理实际无效的字号变量 |
 
 ## 产品决策
@@ -34,6 +34,7 @@
 2. **「完成」= 保存草稿并进入只读态**，取代中央区域独立的「保存草稿」按钮。历史版本的「保存」及版本备注继续保留；完成不自动生成历史版本。无改动时不重复保存、不清空时钟。
 3. 有改动时沿用保存清空 ScrollClock 的现有语义，不自动续播。先处理输入法 composition 和待确认标记/注释，再提交最终文本；保存中防重复提交，失败保留编辑内容和编辑态。保存后不能拿旧修订的偏移直接套新稿。
 4. **完成态点字后保持点击前的播放状态**：正在播放时，把目标字所在行放到中线，从那里以当前速度继续；暂停时定位后保持暂停。允许向前跳到尚未播到的位置，也允许后退。不得强制暂停或临时发一个暂停时钟。冻结态也不被点击解除。
+   **同一规则适用于所有位置跳转**（2026-10-22 产品确认）：前进/后退一段（`onNudge`）、回到开始/结束（`onJumpToStart`/`onJumpToEnd`）、标记跳转（`onJumpToMarker`）全部改为保持点击前的播放状态和当前速度；播放中跳转后从新位置继续播，暂停中跳转后保持暂停。现有这些入口一律发 `paused` 时钟的行为（`room-client.tsx:956–1027`）在本里程碑一并改掉，使控制端所有「改位置」的操作口径一致。只有播放/暂停按钮和保存改稿改变播放状态。
 5. 删除指示线拖动跳转，包括 `beginGuideDrag`、`beginGuideRailDrag`、移动/释放监听、悬停计时和 `role="slider"`。横线成为纯显示元素，不截获点字、滚动或选择事件。
 6. 编辑态且本地稿与房间草稿一致时，**同样显示高亮和指示线**；有未保存修改时两者一起隐藏，显示「未同步」。撤销回同步稿或保存成功后，要等同修订的有效报告才能恢复。编辑态点击用于编辑，不跳转，也不自动抢滚动。
 7. 多端仍以 `effectivePrimary()` 选出的主播放端为高亮事实来源。主端切换、离线或重连后等待有效新报告；无有效主端时不伪造高亮或定位成功。
@@ -74,6 +75,7 @@
 完成态由 `caretRangeFromPoint` 或受支持的等价接口取得文本节点和偏移，反查缓存映射，发送现有 `Anchor{type: "renderLine", textOffset}`。需要几何回退时用 DOM Range，不加入新依赖。点在标点/emoji 上时，第一阶段吸附到同一正文块内最近的朗读字符；等距按阅读顺序，排除注释、标记和块外内容。此行为的精度边界见 D 节。
 
 1. 点击瞬间读取最新已接受的时钟状态、`velocityPxPerSecond` 和 `controlMode`，生成新 scrollClockId，携带当前修订和目标 anchor。暂停时不引入速度，playing（含零速度）保留当前速度；不能用面板默认 speed 覆盖正在运行的实际速度。
+   把这段「读当前状态 → 带 anchor/offset 发新时钟」抽成一个共用的跳转函数，`onNudge`、`onJumpToStart`、`onJumpToEnd`、`onJumpToMarker` 和点字都走它；现有各入口里硬编码的 `sendScrollClock("paused", …)` 全部替换，不再有任何跳转路径强制暂停。
 2. **先执行语义定位，再决定是否推进。** 当前代码只有 paused 分支调用 `readingY()`；实施时让新点字时钟在 paused/playing 两种状态下都解析 anchor，通过 `offsetForReadingY()` 得到目标行居中后的 offset，然后重设 playbackPositionRef 与 scrollClockTimingRef 的 offset、receivedAt 和 key。
 3. playing 从该本地单调时钟基点按原速度继续，paused/frozen 不推进。定位对每个新时钟只执行一次，不能因每个报告、React 重渲染或 ResizeObserver 回调重复拉回目标。速度变更沿用原有规则。
 4. 不把目标位置伪装成旧 offset 的一次播放 tick，不发送临时暂停，不用比例估算覆盖精确 anchor。控制端以新 scrollClockId 对应的主端报告确认定位，旧报告不能拉回高亮。
@@ -105,7 +107,7 @@
 
 - [ ] 1. readingMap 缓存、正文/布局失效和点选反查；normalized 行尾范围、边界反例测试；draftRevision 与固定测试版本标识清理。
 - [ ] 2. 同一 MDXEditor 的 readOnly 切换；完成取代保存草稿；同步编辑态高亮、未同步提示及保存失败保护。
-- [ ] 3. 点字后保持状态，补齐 playing 锚点应用与时钟重设；换行报告、高亮及本地多数行横线，删除旧拖线/比例路径。
+- [ ] 3. 所有跳转（点字、前进/后退一段、回到开始/结束、标记跳转）统一保持播放状态，补齐 playing 锚点应用与时钟重设；换行报告、高亮及本地多数行横线，删除旧拖线/比例路径。
 - [ ] 4. 滑块 + 数字框 + A+/A− 全链路解限，播放/暂停中重排与大字号长词验收。
 - [ ] 5. 真实布局和浏览器验收；若第一阶段精确性测试失败，列证据评审第二阶段最小补充，未通过前不宣告 M6 完成。
 
@@ -118,7 +120,8 @@
 - [ ] 行选择：中线在行间、空行、稿首尾时稳定；混合字号不拆错行。控制端高亮跨 2–3 行保持完整，横线落在字素最多的本地行，平局稳定；本地改宽度无需远端新消息即可重算。
 - [ ] 编辑/完成：同一富文本实例切换不改变正文排版、不重置撤销栈；完成态不允许输入、粘贴、剪切修改或 directive 弹窗修改，无 caret。同步编辑态有高亮/横线；未保存改动隐藏两者并提示未同步，撤销回同步稿可恢复。原文切换单独核验，不把原文当渲染字符索引。
 - [ ] 保存：完成替代独立保存草稿；无改动不打断播放；IME、待确认浮层、断线/失败、重复点击不丢字。有改动清空时钟，旧修订报告失效，无法重锚定时明确提示重新定位。
-- [ ] 点字：playing 向前/向后定位后按原速度继续，paused 保持暂停，frozen 不被解冻；不产生临时暂停、第一帧旧 offset、重复居中或速度重置。旧语音目标不得拉回位置。标点吸附跨行失败纳入第二阶段阻塞；拖选/空白/注释不误跳，基本键盘等价操作可用。
+- [ ] 点字：playing 向前/向后定位后按原速度继续，paused 保持暂停，frozen 不被解冻；不产生临时暂停、第一帧旧 offset、重复居中或速度重置。
+- [ ] 其他跳转：播放中按前进/后退一段、回到开始/结束、标记跳转后继续以原速度播放，暂停中跳转后保持暂停；`room-client.tsx` 中不再存在跳转入口硬编码 `paused` 的路径；语音跟随模式下跳转后 `controlMode` 不变。旧语音目标不得拉回位置。标点吸附跨行失败纳入第二阶段阻塞；拖选/空白/注释不误跳，基本键盘等价操作可用。
 - [ ] 字号：两端超过 200%，覆盖 300%、500%、1000% 及实际正文 >200px；数字/A+ 超过滑块常用范围仍有效，保存/重连不截断，非法值不进入状态；长 Latin 单词/URL 无横向溢出。
 - [ ] 布局与多端：1280×800、768×1024、390×844；水平/垂直/组合镜像；播放/暂停中的 resize、fullscreen、字号与字体加载；主副端尺寸差异、主端切换、断线重连、旧会话/修订/时钟报告不会污染高亮。
 - [ ] 延迟目标 P95 ≤ 150ms：**单机双窗口、同一浏览器上下文**下采集至少 200 次真实换行，从独立测试探针看到播放端 DOM 换行的 rAF 到控制端覆盖层已提交并经过下一绘制帧（rAF 探针作为绘制完成时间的上界代理，精确屏幕呈现用录像复核）；时间用 `performance.timeOrigin + performance.now()`，先校验两窗口时基偏差并随结果报告，不能只量消息到达。跨设备不直接相减各机 Date.now/reportedAt/serverReceivedAt；可用同画面高帧率录像测双屏响应，单机结果不能冒充真实局域网结果。记录样本数、P95、丢失/乱序样本和测试环境。
