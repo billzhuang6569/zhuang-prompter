@@ -581,9 +581,13 @@ function validReadingFields(state: RoomState, value: ScrollClock | PlaybackState
   if (value.scriptVersionId !== version || !['playing','paused','frozen'].includes(value.state) || !['fixedSpeed','manual','voiceFollow'].includes(value.controlMode) || !Number.isFinite(value.velocityPxPerSecond)) return false;
   let length = draftLengths.get(state.scriptDraft);
   if (length === undefined) { length = readingBlocks(parseMarkdown(state.scriptDraft.markdown)).reduce((n,b)=>n+b.text.length,0); draftLengths.set(state.scriptDraft,length); }
+  if (report && (value as PlaybackState).readingReanchorFailed !== undefined && typeof (value as PlaybackState).readingReanchorFailed !== "boolean") return false;
   const start = anchor.textOffset, end = anchor.lineEndOffset;
   if (start !== undefined && (!Number.isSafeInteger(start) || start < 0 || start >= Math.max(1,length))) return false;
   if (end !== undefined && (start === undefined || !Number.isSafeInteger(end) || end < start || end > length)) return false;
+  for (const extra of [anchor.lineLeadingExtra, anchor.lineTrailingExtra]) {
+    if (extra !== undefined && (start === undefined || end === undefined || !Number.isSafeInteger(extra) || extra < 0 || extra > 64)) return false;
+  }
   if (report && anchor.type === 'renderLine' && (start === undefined || end === undefined || (length > 0 && end <= start))) return false;
   return true;
 }

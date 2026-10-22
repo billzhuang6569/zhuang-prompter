@@ -16,7 +16,7 @@ import { parseMarkdown } from "@/modules/script-engine";
 import { buildConvertedDirective, escapeDirectiveAttr, renumberMarkerDirectives } from "@/modules/script-engine/editing";
 import { makeRandomId } from "@/shared/id";
 import { copyTextToClipboard } from "@/shared/clipboard";
-import { effectivePrimary, readingAtY, readingY, offsetForReadingY, releaseReadingMap } from "@/modules/playback-engine/reading-position";
+import { effectivePrimary, readingBlocks, reanchorReadingText, readingAtY, readingY, offsetForReadingY, releaseReadingMap } from "@/modules/playback-engine/reading-position";
 import { followVelocity } from "@/modules/voice-follow/match";
 import { ControlConsole } from "./control-console";
 import { RenderBundleView } from "./render-bundle-view";
@@ -260,6 +260,9 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   const voiceRestartTimerRef = useRef<number | undefined>(undefined);
   const voiceTranscriptFlushRef = useRef(0);
   const lastReadingAnchorRef = useRef<Anchor | undefined>(undefined);
+  const lastReadingTextRef = useRef("");
+  const playerRevisionRef = useRef<number | undefined>(undefined);
+  const reanchorFailedRef = useRef(false);
   const voiceFailuresRef = useRef(0);
   const scrollClockRef = useRef<ScrollClock | null>(null);
   const scrollClockTimingRef = useRef<LocalScrollClockTiming | null>(null);
@@ -322,12 +325,15 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     }));
   }, [currentOrigin, networkOrigins, roomCode]);
   const bundle = useMemo<RenderBundle | undefined>(() => {
-    if (!markdown) {
+    if (!markdown && mode !== "player") {
       return undefined;
     }
     return parseMarkdown(markdown, { scriptVersionId: roomState?.currentScriptVersionId ?? "draft" });
-  }, [markdown, roomState?.currentScriptVersionId]);
-  const renderedRevision = markdown === normalizeEditableDirectives(scriptDraft?.markdown ?? "") ? scriptDraft?.draftRevision ?? -1 : -1;
+  }, [markdown, mode, roomState?.currentScriptVersionId]);
+  const readingText = useMemo(() => bundle ? readingBlocks(bundle).map(block => block.text).join("") : "", [bundle]);
+  // Raw-view text keeps `::directive` lines; compare the normalized forms so a saved raw edit counts as synchronized.
+  const draftSynchronized = scriptDraft !== undefined && normalizeEditableDirectives(markdown) === normalizeEditableDirectives(scriptDraft.markdown);
+  const renderedRevision = draftSynchronized ? scriptDraft?.draftRevision ?? -1 : -1;
   const scriptVersionId = roomState?.currentScriptVersionId ?? `draft:${renderedRevision}`;
   const appliedClockRef = useRef("");
   const activeScrollClock = roomState?.scrollClock ?? null;
@@ -464,66 +470,58 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!roomState?.settings) {
-      return;
-    }
-    const settings = roomState.settings;
-    const timer = window.setTimeout(() => {
-      setProjectName(settings.projectName);
-      setSpeed(settings.playbackSpeedPxPerSecond);
-      setPlayerFontScale(settings.playerFontScale);
-      setPlayerMirrorX(settings.playerMirrorX);
-      setPlayerMirrorY(settings.playerMirrorY);
-      setPlayerMarkersVisible(settings.playerMarkersVisible);
-    }, 0);
-    return () => window.clearTimeout(timer);
-  }, [roomState?.settings]);
+  const remoteSettingsKey = roomState ? JSON.stringify({
+    projectName: roomState.settings.projectName,
+    playbackSpeedPxPerSecond: roomState.settings.playbackSpeedPxPerSecond,
+    playerFontScale: roomState.settings.playerFontScale,
+    playerMirrorX: roomState.settings.playerMirrorX,
+    playerMirrorY: roomState.settings.playerMirrorY,
+    playerMarkersVisible: roomState.settings.playerMarkersVisible,
+  }) : "";
+  const localSettingsKey = JSON.stringify({ projectName, playbackSpeedPxPerSecond: speed, playerFontScale, playerMirrorX, playerMirrorY, playerMarkersVisible });
+  const localSettingsRef = useRef(localSettingsKey);
+  const syncedSettingsRef = useRef("");
+  const [settingsSyncKey, setSettingsSyncKey] = useState("");
+  useLayoutEffect(() => { localSettingsRef.current = localSettingsKey; }, [localSettingsKey]);
 
   useEffect(() => {
-    if (!joinResult || !roomState?.settings) {
-      return;
-    }
-    const nextSettings = {
-      projectName,
-      playbackSpeedPxPerSecond: speed,
-      playerFontScale,
-      playerMirrorX,
-      playerMirrorY,
-      playerMarkersVisible,
-    };
-    if (
-      roomState.settings.projectName === nextSettings.projectName &&
-      roomState.settings.playbackSpeedPxPerSecond === nextSettings.playbackSpeedPxPerSecond &&
-      roomState.settings.playerFontScale === nextSettings.playerFontScale &&
-      roomState.settings.playerMirrorX === nextSettings.playerMirrorX &&
-      roomState.settings.playerMirrorY === nextSettings.playerMirrorY &&
-      roomState.settings.playerMarkersVisible === nextSettings.playerMarkersVisible
-    ) {
-      return;
-    }
-    const controller = new AbortController();
+    if (!remoteSettingsKey) return;
+    const timer = window.setTimeout(() => {
+      const remote = JSON.parse(remoteSettingsKey);
+      const previous = syncedSettingsRef.current ? JSON.parse(syncedSettingsRef.current) : null;
+      const local = JSON.parse(localSettingsRef.current);
+      // A local field differing from the last server value is still awaiting its save.
+      const merged = { ...remote };
+      for (const key of Object.keys(remote)) {
+        if (previous && local[key] !== previous[key]) merged[key] = local[key];
+      }
+      syncedSettingsRef.current = remoteSettingsKey;
+      setSettingsSyncKey(remoteSettingsKey);
+      setProjectName(merged.projectName);
+      setSpeed(merged.playbackSpeedPxPerSecond);
+      setPlayerFontScale(merged.playerFontScale);
+      setPlayerMirrorX(merged.playerMirrorX);
+      setPlayerMirrorY(merged.playerMirrorY);
+      setPlayerMarkersVisible(merged.playerMarkersVisible);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [remoteSettingsKey]);
+
+  useEffect(() => {
+    if (!joinResult || !remoteSettingsKey || settingsSyncKey !== remoteSettingsKey || localSettingsKey === remoteSettingsKey) return;
     const timer = window.setTimeout(() => {
       void fetch(`/api/rooms/${roomCode}/settings`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(nextSettings),
-        signal: controller.signal,
-      })
-        .then(async (response) => {
-          if (!response.ok) {
-            return;
-          }
-          const data = (await response.json()) as { roomState: RoomState };
-          setRoomState(data.roomState);
-        })
-        .catch(() => undefined);
+        body: localSettingsKey,
+      }).then(async response => {
+        if (!response.ok) return;
+        const data = (await response.json()) as { roomState: RoomState };
+        setRoomState(current => !current || data.roomState.serverSeq >= current.serverSeq ? data.roomState : current);
+      }).catch(() => undefined);
     }, 350);
-    return () => {
-      controller.abort();
-      window.clearTimeout(timer);
-    };
-  }, [joinResult, playerFontScale, playerMarkersVisible, playerMirrorX, playerMirrorY, projectName, roomCode, roomState?.settings, speed]);
+    return () => window.clearTimeout(timer);
+  }, [joinResult, localSettingsKey, remoteSettingsKey, settingsSyncKey, roomCode]);
 
   const loadDraftAndVersions = useCallback(async () => {
     const [draftResponse, versionsResponse] = await Promise.all([
@@ -561,7 +559,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }, [mode, scriptDraft, setMarkdown]);
 
   async function saveDraft(finalMarkdown = markdown) {
-    if (finalMarkdown === normalizeEditableDirectives(scriptDraft?.markdown ?? "")) return true;
+    if (normalizeEditableDirectives(finalMarkdown) === normalizeEditableDirectives(scriptDraft?.markdown ?? "")) return true;
     if (!joinResult) {
       setSaveStatus("连接后再保存");
       return false;
@@ -579,7 +577,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       }
       const data = (await response.json()) as { roomState: RoomState };
       setRoomState(data.roomState);
-      setSaveStatus("草稿已保存，请重新定位");
+      setSaveStatus("草稿已保存");
       return true;
     } catch {
       setSaveStatus("保存失败，请刷新重试");
@@ -589,7 +587,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
 
   useEffect(() => {
     if (mode !== "control") return;
-    const dirty = markdown !== normalizeEditableDirectives(scriptDraft?.markdown ?? "");
+    const dirty = !draftSynchronized;
     const beforeUnload = (event: BeforeUnloadEvent) => { if (dirty) { event.preventDefault(); event.returnValue = ""; } };
     const saveAndHome = async () => {
       if (scrollClockRef.current?.state === "playing") { setSaveStatus("请先暂停播放再返回首页安装更新"); return; }
@@ -752,13 +750,13 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     controlMode: ScrollClock["controlMode"] = "fixedSpeed",
   ) {
     const rendered = latestRoomRef.current;
-    if (!joinResult || rendered.renderedRevision < 0) {
+    if (!joinResult || !rendered.roomState) {
       return;
     }
     const scrollClock: Omit<ScrollClock, "roomRevision"> = {
       scrollClockId: makeRandomId("clk"),
-      scriptVersionId: rendered.scriptVersionId,
-      draftRevision: rendered.renderedRevision,
+      scriptVersionId: rendered.roomState.currentScriptVersionId ?? `draft:${rendered.roomState.scriptDraft.draftRevision}`,
+      draftRevision: rendered.roomState.scriptDraft.draftRevision,
       state,
       controlMode,
       anchor,
@@ -1229,11 +1227,14 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       document.querySelector<HTMLElement>(".player-stage .teleprompter-content")?.style.setProperty("--playback-offset", `${positionPx}px`);
       const { currentAnchor, ...metrics } = playerDisplayMetrics(positionPx, bundle);
       lastReadingAnchorRef.current = currentAnchor;
+      lastReadingTextRef.current = typeof currentAnchor?.textOffset === "number"
+        ? readingText.slice(currentAnchor.textOffset, currentAnchor.lineEndOffset) : "";
       const playbackState: PlaybackState = {
         scriptVersionId,
         draftRevision: renderedRevision,
         state: clock?.state ?? "paused",
         positionPx,
+        readingReanchorFailed: reanchorFailedRef.current,
         ...metrics,
         currentAnchor: currentAnchor ?? clock?.anchor ?? defaultAnchor,
         velocityPxPerSecond: clock?.velocityPxPerSecond ?? 0,
@@ -1245,7 +1246,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       const payload: PlaybackReportPayload = { playbackState };
       sendEvent("playback.reportState", payload);
     },
-    [bundle, joinResult, sendEvent, renderedRevision, scriptVersionId, defaultAnchor],
+    [bundle, readingText, joinResult, sendEvent, renderedRevision, scriptVersionId, defaultAnchor],
   );
 
   useEffect(() => {
@@ -1255,6 +1256,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     let animationFrame = 0;
     let lastReportedAt = 0, lastLine = "";
     const tick = () => {
+      const previousPosition = playbackPositionRef.current;
       const content = document.querySelector<HTMLElement>(".player-stage .teleprompter-content");
       if (clock && appliedClockRef.current !== clock.scrollClockId) {
         const markerOffset = clock.anchor.type === "marker" && clock.anchor.markerId ? playerOffsetForMarker(clock.anchor.markerId, playbackPositionRef.current, playerMirrorY) : undefined;
@@ -1264,15 +1266,16 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
         playbackPositionRef.current = offset;
         scrollClockTimingRef.current = { key: activeScrollClockKey, offsetPx: offset, receivedAt: monotonicTime(), velocityPxPerSecond: clock.velocityPxPerSecond };
         appliedClockRef.current = clock.scrollClockId;
+        reanchorFailedRef.current = false;
       }
       const timing = scrollClockTimingRef.current;
       const position = clock?.state === "playing" ? positionFromScrollClock(clock) : timing?.offsetPx ?? clock?.offsetPx ?? playbackPositionRef.current;
       content?.style.setProperty("--playback-offset", `${position}px`);
-      setPlaybackPositionPx(position);
+      if (position !== previousPosition) setPlaybackPositionPx(position);
       playbackPositionRef.current = position;
       const anchor = currentPlayerCenterAnchor(bundle)?.anchor;
-      const line = `${anchor?.textOffset}:${anchor?.lineEndOffset}`;
-      if (line !== lastLine || Date.now()-lastReportedAt >= 100) {
+      const line = `${anchor?.textOffset}:${anchor?.lineEndOffset}:${anchor?.lineLeadingExtra}:${anchor?.lineTrailingExtra}`;
+      if (line !== lastLine || (clock?.state === "playing" && Date.now()-lastReportedAt >= 100)) {
         lastLine = line;
         lastReportedAt = Date.now();
         reportPlayerState(clock, position);
@@ -1330,20 +1333,32 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }, [mode, bundle]);
 
   useLayoutEffect(() => {
+    if (mode !== "player" || renderedRevision < 0 || !bundle || playerRevisionRef.current === renderedRevision) return;
+    const content = document.querySelector<HTMLElement>(".player-stage .teleprompter-content");
+    const changed = playerRevisionRef.current !== undefined;
+    const textOffset = changed ? reanchorReadingText(lastReadingTextRef.current, bundle) : undefined;
+    reanchorFailedRef.current = changed && textOffset === undefined;
     lastReadingAnchorRef.current = undefined;
-    if (mode !== "player" || renderedRevision < 0) return;
-    playbackPositionRef.current = 0;
     appliedClockRef.current = "";
-    document.querySelector<HTMLElement>(".player-stage .teleprompter-content")?.style.setProperty("--playback-offset", "0px");
-  }, [renderedRevision, mode]);
+    scrollClockTimingRef.current = null;
+    if (content && textOffset !== undefined) {
+      const y = readingY(content, bundle, { textOffset });
+      if (y !== undefined) {
+        playbackPositionRef.current = offsetForReadingY(playbackPositionRef.current, y, window.innerHeight, playerMirrorY);
+      } else reanchorFailedRef.current = true;
+    }
+    content?.style.setProperty("--playback-offset", `${playbackPositionRef.current}px`);
+    setPlaybackPositionPx(playbackPositionRef.current);
+    playerRevisionRef.current = renderedRevision;
+  }, [renderedRevision, mode, bundle, playerMirrorY]);
 
   useLayoutEffect(() => {
-    if (mode !== "player" || !bundle) return;
+    if (mode !== "player" || !bundle || renderedRevision < 0) return;
     const content = document.querySelector<HTMLElement>(".player-stage .teleprompter-content");
     if (!content) return;
     const preserveReadingPosition = () => {
       const anchor = lastReadingAnchorRef.current;
-      if (typeof anchor?.textOffset !== "number") return;
+      if (typeof anchor?.textOffset !== "number") { reportPlayerState(scrollClockRef.current, playbackPositionRef.current); return; }
       const y = readingY(content, bundle, { textOffset: anchor.textOffset, lineFraction: (anchor.lineFraction ?? 0) * (playerMirrorY ? -1 : 1) });
       if (y === undefined) return;
       const position = offsetForReadingY(playbackPositionRef.current, y, window.innerHeight, playerMirrorY);
@@ -1356,12 +1371,17 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       reportPlayerState(clock, position);
     };
     preserveReadingPosition();
-    const observer = new ResizeObserver(preserveReadingPosition);
+    let initialResize = true;
+    const observer = new ResizeObserver(() => {
+      // observe() delivers an initial sample; the layout effect already sampled this layout.
+      if (initialResize) { initialResize = false; return; }
+      preserveReadingPosition();
+    });
     observer.observe(content);
     window.addEventListener("resize", preserveReadingPosition);
     document.fonts?.addEventListener("loadingdone", preserveReadingPosition);
     return () => { observer.disconnect(); window.removeEventListener("resize", preserveReadingPosition); document.fonts?.removeEventListener("loadingdone", preserveReadingPosition); };
-  }, [bundle, mode, playerFontScale, playerMirrorY, reportPlayerState]);
+  }, [bundle, mode, renderedRevision, playerFontScale, playerMirrorX, playerMirrorY, reportPlayerState]);
 
   useEffect(() => {
     return () => {
@@ -1592,7 +1612,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           setProjectName={setProjectName}
           parseStatus={scriptDraft?.parseStatus}
           hasSavedVersion={versions.length > 0}
-          saveStatus={saveStatus}
+          saveStatus={primaryPlaybackState?.readingReanchorFailed ? `${saveStatus} 请重新定位`.trim() : saveStatus}
           markdown={markdown}
           setMarkdown={setMarkdown}
           versionMessage={versionMessage}
@@ -1600,7 +1620,9 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           bundle={bundle}
           versions={versions}
           roomMarkdown={scriptDraft ? normalizeEditableDirectives(scriptDraft.markdown) : undefined}
+          draftSynchronized={draftSynchronized}
           readingAnchor={primaryPlaybackState?.currentAnchor}
+          hasPrimaryPlayer={Boolean(primaryPlayerDevice)}
           speed={speed}
           isPlaying={isControlPlaying}
           playerFontScale={playerFontScale}

@@ -83,7 +83,9 @@ type ControlConsoleProps = {
   bundle?: RenderBundle;
   versions: VersionSummary[];
   roomMarkdown?: string;
+  draftSynchronized?: boolean;
   readingAnchor?: Anchor;
+  hasPrimaryPlayer: boolean;
   speed: number;
   isPlaying: boolean;
   playerFontScale: number;
@@ -139,7 +141,9 @@ export function ControlConsole({
   bundle,
   versions,
   roomMarkdown,
+  draftSynchronized = false,
   readingAnchor,
+  hasPrimaryPlayer,
   speed,
   isPlaying,
   playerFontScale,
@@ -176,6 +180,14 @@ export function ControlConsole({
   onConfirmPendingEditorAction,
   onPreviewScroll,
 }: ControlConsoleProps) {
+  const [fontPercentInput, setFontPercentInput] = useState<string | null>(null);
+  function commitFontPercent() {
+    if (fontPercentInput !== null && fontPercentInput.trim() !== "") {
+      const percent = Number(fontPercentInput);
+      if (Number.isFinite(percent) && percent >= 75) onPlayerFontScaleChange(percent / 100);
+    }
+    setFontPercentInput(null);
+  }
   const [view, setView] = useState<"render" | "raw">("render");
   const quickInputRef = useRef<HTMLInputElement | null>(null);
   const richEditorRef = useRef<MDXEditorMethods | null>(null);
@@ -195,7 +207,7 @@ export function ControlConsole({
   const latestMarkdownRef = useRef(markdown);
   useLayoutEffect(() => { latestMarkdownRef.current = markdown; }, [markdown]);
   const pointerStartRef = useRef<{x:number;y:number;scroll:number;moved:boolean} | null>(null);
-  const synchronized = roomMarkdown !== undefined && markdown === roomMarkdown && typeof readingAnchor?.lineEndOffset === "number";
+  const synchronized = draftSynchronized && typeof readingAnchor?.lineEndOffset === "number";
   const previousMarkdownRef = useRef(markdown);
   const undoStackRef = useRef<string[]>([]);
   const redoStackRef = useRef<string[]>([]);
@@ -304,7 +316,7 @@ export function ControlConsole({
         readingRootRef.current = content;
       }
       if (!content || !bundle || !synchronized || view !== "render" || readingAnchor?.textOffset === undefined || readingAnchor.lineEndOffset === undefined) return;
-      const highlight = readingHighlight(content,bundle,readingAnchor.textOffset,readingAnchor.lineEndOffset);
+      const highlight = readingHighlight(content,bundle,readingAnchor.textOffset,readingAnchor.lineEndOffset,readingAnchor.lineLeadingExtra,readingAnchor.lineTrailingExtra);
       if (!highlight) return;
       setHasHighlight(true);
       const origin = scroll.getBoundingClientRect();
@@ -857,35 +869,44 @@ export function ControlConsole({
                 <DownloadIcon />
                 导出纯文本MD
               </button>
-              <button className="nike-t-save" type="button" onClick={onSaveVersion}>
-                <SaveIcon />
-                保存
-              </button>
               {exportStatus && <span className="nike-export-status">{exportStatus}</span>}
             </div>
-            <div className="nike-vswitch" role="tablist" aria-label="脚本视图切换">
-              <button
-                className={`nike-vswitch-seg ${view === "render" ? "on" : ""}`}
-                type="button"
-                role="tab"
-                aria-selected={view === "render"}
-                onClick={() => {
-                  setRawSelectionActive(false);
-                  setView("render");
-                }}
-              >
-                预览
-              </button>
-              <button
-                className={`nike-vswitch-seg ${view === "raw" ? "on" : ""}`}
-                type="button"
-                role="tab"
-                aria-selected={view === "raw"}
-                disabled={!editing || saving}
-                onClick={() => setView("raw")}
-              >
-                原文
-              </button>
+            <div className="nike-edit-controls">
+              <span className="nike-edit-status" role="status">{saving ? "正在保存" : saveStatus} {!hasPrimaryPlayer ? "未连接播放端" : !synchronized || !hasHighlight ? "未同步" : ""}</span>
+              {!editing && <button className="nike-selection-seek" type="button" onMouseDown={event => event.preventDefault()} onClick={() => {
+                const selection = window.getSelection();
+                if (selection?.anchorNode) seekPoint(selection.anchorNode, selection.anchorOffset);
+              }}>定位到选区</button>}
+            </div>
+            <div className="nike-script-switches">
+              <div className="nike-vswitch nike-mode-toggle" role="group" aria-label="编辑模式">
+                <button className={`nike-vswitch-seg ${editing ? "on" : ""}`} type="button" aria-pressed={editing} disabled={saving} onClick={() => setEditing(true)}>编辑</button>
+                <button className={`nike-vswitch-seg ${!editing ? "on" : ""}`} type="button" aria-pressed={!editing} disabled={saving} onClick={() => { if (editing) void finishEditing(); }}>完成</button>
+              </div>
+              <div className="nike-vswitch" role="tablist" aria-label="脚本视图切换">
+                <button
+                  className={`nike-vswitch-seg ${view === "render" ? "on" : ""}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === "render"}
+                  onClick={() => {
+                    setRawSelectionActive(false);
+                    setView("render");
+                  }}
+                >
+                  预览
+                </button>
+                <button
+                  className={`nike-vswitch-seg ${view === "raw" ? "on" : ""}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === "raw"}
+                  disabled={!editing || saving}
+                  onClick={() => setView("raw")}
+                >
+                  原文
+                </button>
+              </div>
             </div>
           </div>
 
@@ -992,107 +1013,65 @@ export function ControlConsole({
                   onChange={(event) => setVersionMessage(event.target.value)}
                   placeholder="版本备注，如「现场保存」..."
                 />
-                <button className="nike-mde-save nike-mode-toggle" type="button" disabled={saving} onClick={() => editing ? void finishEditing() : setEditing(true)}>
-                  {saving ? "正在保存" : editing ? "完成" : "编辑"}
-                </button>
-                <span role="status">{saveStatus} {!synchronized || !hasHighlight ? "未同步" : ""}</span>
-                {!editing && <button type="button" onMouseDown={event=>event.preventDefault()} onClick={() => {
-                  const selection = window.getSelection();
-                  if (selection?.anchorNode) seekPoint(selection.anchorNode,selection.anchorOffset);
-                }}>定位到选区</button>}
+                <button className="nike-mde-save" type="button" onClick={onSaveVersion}><SaveIcon /> 保存版本</button>
               </div>
             </div>
           </div>
         </section>
 
         <aside className="nike-rp" data-od-id="right-panel">
-          <section className="nike-psec" data-od-id="playback-controls">
-            <div className="nike-ph">播放控制</div>
-            <div className="nike-pb">
-              <button className="nike-stpb" type="button" title="回到开始" onClick={onJumpToStart}>
-                |&lt;
-              </button>
-              <button className="nike-stpb" type="button" title="后退 160px" onClick={() => onNudge(-160)}>
-                ‹
-              </button>
-              <button className="nike-play-btn" type="button" onClick={onTogglePlay}>
-                {isPlaying ? <PauseIcon /> : <PlayIcon />}
-              </button>
-              <button className="nike-stpb" type="button" title="前进 160px" onClick={() => onNudge(160)}>
-                ›
-              </button>
-              <button className="nike-stpb" type="button" title="回到结束" onClick={onJumpToEnd}>
-                &gt;|
-              </button>
-            </div>
-            <div className="nike-spdr">
-              <span className="nike-spd-l">速度</span>
-              <input type="range" min="10" max="150" value={speed} onChange={(event) => onSpeedChange(Number(event.target.value))} />
-              <span className="nike-spd-v">{speed}px/s</span>
-            </div>
-            <div className="nike-sadj">
-              <button className="nike-sadjb" type="button" onClick={() => onSpeedChange(speed - 10)}>
-                -10
-              </button>
-              <button className="nike-sadjb" type="button" onClick={() => onSpeedChange(speed + 10)}>
-                +10
-              </button>
-            </div>
-            <div className="nike-srow">
-              <button className="nike-srowb" type="button" onClick={() => onNudge(-160)}>
-                ← 160px
-              </button>
-              <button className="nike-srowb" type="button" onClick={() => onNudge(160)}>
-                160px →
-              </button>
-            </div>
-            <div className="nike-control-label">播放端显示</div>
-            <div className="nike-spdr">
-              <span className="nike-spd-l">字号</span>
-              <input
-                type="range"
-                min="75"
-                max={Math.max(500,Math.round(playerFontScale*100))}
-                value={Math.round(playerFontScale * 100)}
-                onChange={(event) => onPlayerFontScaleChange(Number(event.target.value) / 100)}
-              />
-              <span className="nike-spd-v">{Math.round(playerFontScale * 100)}%</span>
-            </div>
-            <div className="nike-sadj">
-              <button className="nike-sadjb" type="button" onClick={() => onPlayerFontScaleChange(playerFontScale - 0.1)}>
-                A-
-              </button>
-              <button className="nike-sadjb" type="button" onClick={() => onPlayerFontScaleChange(playerFontScale + 0.1)}>
-                A+
-              </button>
-            </div>
-            <div className="nike-srow">
-              <button
-                className="nike-srowb"
-                type="button"
-                aria-pressed={playerMirrorX}
-                onClick={() => onPlayerMirrorXChange(!playerMirrorX)}
-              >
-                水平镜像
-              </button>
-              <button
-                className="nike-srowb"
-                type="button"
-                aria-pressed={playerMirrorY}
-                onClick={() => onPlayerMirrorYChange(!playerMirrorY)}
-              >
-                垂直镜像
-              </button>
-            </div>
-            <div className="nike-control-label">语音辅助</div>
-            <div className="nike-srow">
-              <button className="nike-srowb" type="button" aria-pressed={voiceAssistWanted} onClick={onToggleVoiceAssist}>
-                {voiceAssistWanted ? "识别中" : "自动识别"}
-              </button>
-            </div>
-            <div className="nike-voice-status" role="status" aria-live="polite">
-              {voiceAssistStatus}
-            </div>
+          <div className="nike-playback-cards" data-od-id="playback-controls">
+            <section className="nike-playback-card" aria-label="播放位置">
+              <h2><PanelIcon kind="position" />播放位置</h2>
+              <p>控制播放端现在停在稿子的哪里</p>
+              <div className="nike-transport">
+                <button type="button" title="回到开始" aria-label="开头" onClick={onJumpToStart}><PanelIcon kind="start" /><span>开头</span></button>
+                <button type="button" title="后退 160px" aria-label="后退一段" onClick={() => onNudge(-160)}><PanelIcon kind="back" /><span>后退一段</span></button>
+                <button className="nike-play-btn" type="button" title={isPlaying ? "暂停" : "播放"} aria-label={isPlaying ? "暂停" : "播放"} onClick={onTogglePlay}>
+                  <span className="nike-play-disc">{isPlaying ? <PauseIcon /> : <PlayIcon />}</span><span>{isPlaying ? "暂停" : "播放"}</span>
+                </button>
+                <button type="button" title="前进 160px" aria-label="前进一段" onClick={() => onNudge(160)}><PanelIcon kind="forward" /><span>前进一段</span></button>
+                <button type="button" title="回到结束" aria-label="结尾" onClick={onJumpToEnd}><PanelIcon kind="end" /><span>结尾</span></button>
+              </div>
+            </section>
+            <section className="nike-playback-card" aria-label="播放速度">
+              <div className="nike-card-heading"><h2><PanelIcon kind="speed" />播放速度</h2><div className="nike-card-value">{speed} <small>px/s</small></div></div>
+              <p>稿子向上滚动的快慢</p>
+              <div className="nike-card-slider">
+                <button className="nike-step" type="button" title="减速 10 px/s" aria-label="减速 10 px/s" onClick={() => onSpeedChange(speed - 10)}>−</button>
+                <input aria-label="播放速度" type="range" min="10" max="150" value={speed} onChange={event => onSpeedChange(Number(event.target.value))} />
+                <button className="nike-step" type="button" title="加速 10 px/s" aria-label="加速 10 px/s" onClick={() => onSpeedChange(speed + 10)}>+</button>
+              </div>
+              <div className="nike-slider-labels"><span>慢 10</span><span>快 150</span></div>
+            </section>
+            <section className="nike-playback-card" aria-label="播放端字号">
+              <div className="nike-card-heading"><h2><PanelIcon kind="font" />播放端字号</h2><div className="nike-card-value">
+                <input aria-label="播放端字号百分比" type="number" min="75" value={fontPercentInput ?? Math.round(playerFontScale * 100)}
+                  onChange={event => setFontPercentInput(event.target.value)} onBlur={commitFontPercent}
+                  onKeyDown={event => { if (event.key === "Enter") event.currentTarget.blur(); }} /><small>%</small>
+              </div></div>
+              <p>只影响播放端屏幕，不影响这里</p>
+              <div className="nike-card-slider">
+                <button className="nike-step nike-font-step" type="button" title="字号减小 10%" aria-label="字号减小 10%" onClick={() => onPlayerFontScaleChange(playerFontScale - 0.1)}>A−</button>
+                <input aria-label="播放端字号" type="range" min="75" max={Math.max(500, Math.round(playerFontScale * 100))} value={Math.round(playerFontScale * 100)} onChange={event => onPlayerFontScaleChange(Number(event.target.value) / 100)} />
+                <button className="nike-step nike-font-step" type="button" title="字号增大 10%" aria-label="字号增大 10%" onClick={() => onPlayerFontScaleChange(playerFontScale + 0.1)}>A+</button>
+              </div>
+              <div className="nike-slider-labels"><span>小 75%</span><span>大 500%+</span></div>
+              <div className="nike-font-sample"><span>字</span>播放端字号示意</div>
+            </section>
+            <section className="nike-playback-card" aria-label="镜像">
+              <h2><PanelIcon kind="mirrorX" />镜像</h2>
+              <p>配合分光镜提词器时打开</p>
+              <div className="nike-mirror-toggles">
+                <button className="nike-panel-toggle" type="button" title="左右镜像" aria-label="左右镜像" aria-pressed={playerMirrorX} onClick={() => onPlayerMirrorXChange(!playerMirrorX)}><PanelIcon kind="mirrorX" />左右镜像</button>
+                <button className="nike-panel-toggle" type="button" title="上下镜像" aria-label="上下镜像" aria-pressed={playerMirrorY} onClick={() => onPlayerMirrorYChange(!playerMirrorY)}><PanelIcon kind="mirrorY" />上下镜像</button>
+              </div>
+            </section>
+          </div>
+          <section className="nike-psec" data-od-id="voice-assist">
+            <div className="nike-ph">语音辅助</div>
+            <button className="nike-panel-toggle" type="button" aria-pressed={voiceAssistWanted} onClick={onToggleVoiceAssist}>{voiceAssistWanted ? "识别中" : "自动识别"}</button>
+            <div className="nike-voice-status" role="status" aria-live="polite">{voiceAssistStatus}</div>
           </section>
 
           <section className="nike-psec" data-od-id="marker-jump">
@@ -1423,19 +1402,25 @@ function CloseIcon() {
   );
 }
 
+function PanelIcon({kind}: {kind: "position" | "start" | "back" | "forward" | "end" | "speed" | "font" | "mirrorX" | "mirrorY"}) {
+  const paths = {
+    position: "M4 5h16M4 12h16M4 19h16M8 9l3 3-3 3",
+    start: "M5 5v14M18 5l-9 7 9 7Z",
+    back: "m12 5-7 7 7 7m7-14-7 7 7 7",
+    forward: "m5 5 7 7-7 7m7-14 7 7-7 7",
+    end: "M19 5v14M6 5l9 7-9 7Z",
+    speed: "M4 19a9 9 0 1 1 16 0M12 13l5-6M7 17h10",
+    font: "m4 19 6-14 6 14M6 14h8M17 10h5m-2.5 0v9",
+    mirrorX: "M12 3v18M3 6v12l6-6Zm18 0v12l-6-6Z",
+    mirrorY: "M3 12h18M6 3h12l-6 6Zm0 18h12l-6-6Z",
+  };
+  return <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[kind]} /></svg>;
+}
+
 function PlayIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-      <polygon points="5.5,3 14.5,9 5.5,15" fill="var(--nike-canvas)" />
-    </svg>
-  );
+  return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true"><path d="m8 4 12 8-12 8Z" /></svg>;
 }
 
 function PauseIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-      <rect x="4" y="3" width="3" height="12" rx="1.5" fill="var(--nike-canvas)" />
-      <rect x="11" y="3" width="3" height="12" rx="1.5" fill="var(--nike-canvas)" />
-    </svg>
-  );
+  return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true"><path d="M6 4h4v16H6ZM14 4h4v16h-4Z" /></svg>;
 }

@@ -150,16 +150,57 @@ test('point reverse lookup snaps emoji to nearest spoken grapheme with earlier t
   });
 });
 
-test('phase 1 documents the indistinguishable 甲🙂|乙 versus 甲|🙂乙 edge', async () => {
-  const {readingAtY,readingHighlight}=await import('./reading-position');
-  for(const rows of [[0,0,1],[0,1,1]]) withTextDOM('甲🙂乙',rows,({root})=>{
+test('phase 2 distinguishes 甲🙂|乙 from 甲|🙂乙 and keeps old anchors greedy', async () => {
+  const {readingAtY,readingHighlight,readingOffsetForPoint}=await import('./reading-position');
+  for(const rows of [[0,0,1],[0,1,1]]) withTextDOM('甲🙂乙',rows,({root,node})=>{
     const bundle=parseMarkdown('甲🙂乙');
-    const line=readingAtY(root,bundle,10)!;
-    assert.deepEqual([line.textOffset,line.lineEndOffset],[0,1]);
-    const highlight=readingHighlight(root,bundle,0,1)!;
-    assert.equal(highlight.rects.length,2); // approximation includes emoji in both cases
-    assert.equal(highlight.guideY,10); // tie chooses the earlier logical row
+    const first=readingAtY(root,bundle,10)!;
+    const second=readingAtY(root,bundle,40)!;
+    assert.deepEqual([first.textOffset,first.lineEndOffset],[0,1]);
+    assert.deepEqual([first.lineLeadingExtra,first.lineTrailingExtra],[0,rows[1]===0?1:0]);
+    assert.deepEqual([second.lineLeadingExtra,second.lineTrailingExtra],[rows[1]===1?1:0,0]);
+    for (const line of [first,second]) {
+      const high=readingHighlight(root,bundle,line.textOffset,line.lineEndOffset!,line.lineLeadingExtra,line.lineTrailingExtra)!;
+      assert.deepEqual(high.rects.map(r=>r.top),rows.filter(row=>row===(line===first?0:1)).map(row=>row*30));
+    }
+    assert.equal(readingOffsetForPoint(root,bundle,node,1,{x:20,y:rows[1]*30+10}),rows[1]===0?0:1);
+    assert.equal(readingHighlight(root,bundle,0,1)!.rects.length,2);
     assert.equal(readingHighlight(root,bundle,0,3),undefined);
+  });
+});
+
+test('phase 2 excludes previous-line 。 and clicking a leading 。 seeks on its own line', async () => {
+  const {readingAtY,readingHighlight,readingOffsetForPoint}=await import('./reading-position');
+  for (const rows of [[0,0,1,1,1],[0,1,1,1,1]]) withTextDOM('甲。这是加',rows,({root,node})=>{
+    const bundle=parseMarkdown('甲。这是加');
+    const line=readingAtY(root,bundle,40)!;
+    assert.deepEqual([line.textOffset,line.lineEndOffset],[1,4]);
+    assert.deepEqual([line.lineLeadingExtra,line.lineTrailingExtra],[rows[1]===1?1:0,0]);
+    const high=readingHighlight(root,bundle,1,4,line.lineLeadingExtra,line.lineTrailingExtra)!;
+    assert.equal(high.rects.length,rows[1]===1?4:3);
+    assert.ok(high.rects.every(r=>r.top===30));
+    assert.equal(readingHighlight(root,bundle,1,4)!.rects.length,4);
+    assert.equal(readingOffsetForPoint(root,bundle,node,1),rows[1]===1?1:0);
+  });
+});
+
+test('edge counts include spaces and emoji as graphemes, cap at 64, and retain nearest spoken fallback', async () => {
+  const {readingAtY,readingHighlight,readingOffsetForPoint}=await import('./reading-position');
+  withTextDOM(' 🙂甲！ ',[0,0,0,0,0],({root})=>{
+    const bundle=parseMarkdown(' 🙂甲！ ');
+    const line=readingAtY(root,bundle,10)!;
+    assert.deepEqual([line.lineLeadingExtra,line.lineTrailingExtra],[2,2]);
+    assert.equal(readingHighlight(root,bundle,0,1,2,2)!.rects.length,5);
+    assert.equal(readingHighlight(root,bundle,0,1,0,0)!.rects.length,1);
+  });
+  withTextDOM('！'.repeat(65)+'甲'+'🙂'.repeat(65),[],({root})=>{
+    const line=readingAtY(root,parseMarkdown('！'.repeat(65)+'甲'+'🙂'.repeat(65)),10)!;
+    assert.deepEqual([line.lineLeadingExtra,line.lineTrailingExtra],[64,64]);
+  });
+  withTextDOM('甲🙂乙',[0,1,2],({root,node})=>{
+    const bundle=parseMarkdown('甲🙂乙');
+    assert.equal(readingOffsetForPoint(root,bundle,node,1),0);
+    assert.equal(readingAtY(root,bundle,40)?.textOffset,0);
   });
 });
 
@@ -181,7 +222,15 @@ test('server rejects stale revisions, invalid ranges, old sessions and nonfinite
   assert.equal(store.setScrollClock({...input,scrollClock:clock}),null);
   const report={...clock,positionPx:10,currentAnchor:{type:'renderLine' as const,textOffset:0,lineEndOffset:1},reportedAt:Date.now()};
   assert.equal(store.reportPlaybackState({...input,clientSeq:3,playbackState:{...report,currentAnchor:{...report.currentAnchor,lineEndOffset:3}}}),null);
-  assert.ok(store.reportPlaybackState({...input,clientSeq:3,playbackState:report}));
+  assert.equal(store.reportPlaybackState({...input,clientSeq:3,playbackState:{...report,readingReanchorFailed:'yes' as unknown as boolean}}),null);
+  for (const field of ['lineLeadingExtra','lineTrailingExtra'] as const) {
+    for (const extra of [-1,65,1.5,NaN,Infinity,Number.MAX_SAFE_INTEGER+1]) {
+      assert.equal(store.reportPlaybackState({...input,clientSeq:3,playbackState:{...report,currentAnchor:{...report.currentAnchor,[field]:extra}}}),null);
+    }
+    assert.equal(store.setScrollClock({...input,clientSeq:3,scrollClock:{...clock,anchor:{type:'renderLine',textOffset:0,[field]:0}}}),null);
+    assert.equal(store.setScrollClock({...input,clientSeq:3,scrollClock:{...clock,anchor:{type:'paragraph',lineEndOffset:1,[field]:0}}}),null);
+  }
+  assert.equal(store.reportPlaybackState({...input,clientSeq:3,playbackState:{...report,currentAnchor:{...report.currentAnchor,lineLeadingExtra:0,lineTrailingExtra:64},readingReanchorFailed:true}})?.devices[room.deviceId].playbackState?.readingReanchorFailed,true);
   store.setVoiceSource({roomCode:room.roomCode,sourceDeviceId:room.deviceId});
   const transcript={segmentId:'late',sourceDeviceId:room.deviceId,scriptVersionId:clock.scriptVersionId,isFinal:true,text:'甲乙',asrConfidence:1,scrollClockId:'old-clock'};
   assert.equal(store.processVoiceTranscript({roomCode:room.roomCode,transcript}),null);
@@ -217,4 +266,32 @@ test('guide follows the local row with most graphemes, while repeated blocks ret
     assert.equal(readingAtY(root,bundle,10),undefined);
     assert.equal(readingHighlight(root,bundle,0,0),undefined);
   });
+});
+
+
+test('missing Intl.Segmenter falls back to whole code points with UTF-16 indices', async () => {
+  const {readingGraphemes, readingMap} = await import('./reading-position');
+  const original = Intl.Segmenter;
+  try {
+    Object.defineProperty(Intl, 'Segmenter', {value: undefined, configurable: true, writable: true});
+    assert.deepEqual(readingGraphemes('甲🙂𠮷乙'), [
+      {segment:'甲',index:0}, {segment:'🙂',index:1}, {segment:'𠮷',index:3}, {segment:'乙',index:5},
+    ]);
+    withTextDOM('甲🙂𠮷乙', [], ({root}) => {
+      const chars = readingMap(root, parseMarkdown('甲🙂𠮷乙'));
+      assert.equal(chars.length, 4);
+      assert.equal(chars[1], chars[2]);
+      assert.equal(chars[1]?.end, 5);
+    });
+  } finally { Object.defineProperty(Intl, 'Segmenter', {value: original, configurable: true, writable: true}); }
+});
+
+test('revision re-anchor accepts only unique nonempty center-line text', async () => {
+  const {reanchorReadingText} = await import('./reading-position');
+  const line = '今天我们讲一个很多人都好奇的问题';
+  assert.equal(reanchorReadingText(line, parseMarkdown('新增开场。'+line)), 4);
+  assert.equal(reanchorReadingText(line, parseMarkdown(line+'。'+line)), undefined);
+  assert.equal(reanchorReadingText(line, parseMarkdown('正文已经替换')), undefined);
+  assert.equal(reanchorReadingText('太短', parseMarkdown('太短')), 0);
+  assert.equal(reanchorReadingText('', parseMarkdown('新稿')), undefined);
 });

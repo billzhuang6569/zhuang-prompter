@@ -7,6 +7,8 @@ export type PlaybackStatus = "playing" | "paused" | "frozen";
 export type Anchor = {
   textOffset?: number;
   lineEndOffset?: number;
+  lineLeadingExtra?: number;
+  lineTrailingExtra?: number;
   lineFraction?: number;
   anchorId?: string;
   type: "marker" | "heading" | "paragraph" | "speechSegment" | "textHash" | "renderLine";
@@ -43,6 +45,7 @@ export type PlaybackState = {
   centerPositionRatio?: number;
   currentAnchor: Anchor;
   currentAnchorProgress?: number;
+  readingReanchorFailed?: boolean;
   velocityPxPerSecond: number;
   controlMode: ControlMode;
   sourceDeviceId: string;

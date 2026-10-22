@@ -1856,7 +1856,7 @@ input {
 .nike-main {
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 272px;
+  grid-template-columns: minmax(0, 1fr) 336px;
   overflow: hidden;
 }
 
@@ -1897,13 +1897,12 @@ input {
   flex: 1 1 140px;
 }
 
-.nike-shdr .nike-vswitch {
+.nike-script-switches {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-left: auto;
-}
-
-/* 保存按钮在头行内不再自动右推（右侧由切换控件占据）。 */
-.nike-shdr .nike-t-save {
-  margin-left: 0;
+  flex: 0 0 auto;
 }
 
 .nike-editor-tools {
@@ -1984,12 +1983,8 @@ input {
 
 .nike-vtab,
 .nike-tlb,
-.nike-t-save,
 .nike-mde-save,
-.nike-stpb,
 .nike-play-btn,
-.nike-sadjb,
-.nike-srowb,
 .nike-mkb,
 .nike-vib,
 .nike-btn,
@@ -2059,24 +2054,6 @@ input {
   width: 1px;
   height: 16px;
   background: var(--nike-hl);
-}
-
-.nike-t-save {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-left: auto;
-  border: 0;
-  border-radius: var(--nike-pill);
-  background: var(--nike-ink);
-  color: var(--nike-canvas);
-  padding: 6px 20px;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.nike-t-save:hover {
-  opacity: 0.82;
 }
 
 .nike-srw {
@@ -2630,8 +2607,6 @@ input {
 }
 
 .nike-mde-save,
-.nike-sadjb,
-.nike-srowb,
 .nike-mkb,
 .nike-vib,
 .nike-btn {
@@ -2650,19 +2625,11 @@ input {
 }
 
 .nike-mde-save:hover,
-.nike-sadjb:hover,
-.nike-srowb:hover,
 .nike-mkb:hover,
 .nike-vib:hover,
 .nike-btn:hover {
   border-color: var(--nike-ink);
   color: var(--nike-ink);
-}
-
-.nike-srowb[aria-pressed="true"] {
-  border-color: rgb(94 234 212 / 44%);
-  background: rgb(20 184 166 / 12%);
-  color: #5eead4;
 }
 
 .nike-rp {
@@ -2691,115 +2658,305 @@ input {
   text-transform: uppercase;
 }
 
-.nike-pb {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--nike-md);
-  margin-bottom: var(--nike-lg);
-}
-
-.nike-play-btn {
-  width: 56px;
-  height: 56px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: var(--nike-full);
-  background: var(--nike-ink);
-  color: var(--nike-canvas);
-}
-
-.nike-play-btn:hover {
-  opacity: 0.82;
-}
-
-.nike-stpb {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  border: 1px solid var(--nike-hl);
-  border-radius: var(--nike-full);
-  background: transparent;
-  color: var(--nike-mute);
-  font-size: 24px;
-  line-height: 1;
-  transition: all var(--nike-t);
-}
-
-.nike-stpb:hover {
-  border-color: var(--nike-ink);
-  color: var(--nike-ink);
-}
-
-.nike-spdr {
-  display: flex;
-  align-items: center;
-  gap: var(--nike-sm);
-  margin-bottom: var(--nike-sm);
-}
-
-.nike-spd-l {
-  width: 32px;
-  flex: 0 0 auto;
-  color: var(--nike-mute);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.nike-spdr input[type="range"] {
-  flex: 1;
-  height: 1px;
-  appearance: none;
-  outline: none;
-  background: var(--nike-hl);
-}
-
-.nike-spdr input[type="range"]::-webkit-slider-thumb {
-  width: 14px;
-  height: 14px;
-  appearance: none;
-  border-radius: var(--nike-full);
-  background: var(--nike-ink);
-}
-
-.nike-spd-v {
-  width: 48px;
-  flex: 0 0 auto;
-  color: var(--nike-ink);
-  font-family: var(--nike-fm);
-  font-size: 12px;
-  font-weight: 500;
-  text-align: right;
-}
-
-.nike-sadj,
-.nike-srow,
 .nike-qr-acts {
   display: flex;
   gap: var(--nike-sm);
   margin-top: var(--nike-sm);
 }
 
-.nike-control-label {
-  margin-top: var(--nike-lg);
-  color: var(--nike-mute);
-  font-size: 10px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+
+.nike-playback-cards {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+  min-width: 0;
 }
 
-.nike-sadjb,
-.nike-srowb {
-  flex: 1;
-  padding: 6px 0;
-  font-family: var(--nike-fm);
+.nike-playback-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--nike-hl);
+  border-radius: 14px;
+  background: var(--nike-s1);
+}
+
+.nike-playback-card h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--nike-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.nike-playback-card h2 svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.nike-playback-card p {
+  margin: 6px 0 16px;
+  color: var(--nike-ink2);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.nike-card-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nike-card-value {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  color: var(--nike-ink);
+  font-size: 28px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.nike-card-value small {
+  color: var(--nike-ink2);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.nike-card-value input {
+  box-sizing: border-box;
+  width: 116px;
+  padding: 8px;
+  min-height: 44px;
+  border: 1px solid var(--nike-hl);
+  border-radius: 8px;
+  background: var(--nike-canvas);
+  color: inherit;
+  font: inherit;
+  font-size: 24px;
+  text-align: right;
+}
+
+.nike-transport {
+  display: grid;
+  grid-template-columns: minmax(44px, 1fr) minmax(44px, 1fr) 64px minmax(44px, 1fr) minmax(44px, 1fr);
+  align-items: end;
+}
+
+.nike-transport button {
+  display: flex;
+  min-width: 44px;
+  min-height: 64px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 0 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--nike-ink2);
   font-size: 11px;
-  text-align: center;
+  cursor: pointer;
+}
+
+.nike-transport button:hover {
+  color: var(--nike-ink);
+}
+
+.nike-play-disc {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  place-items: center;
+  border-radius: var(--nike-full);
+  background: var(--nike-ink);
+  color: var(--nike-canvas);
+}
+
+.nike-transport .nike-play-btn {
+  color: var(--nike-ink);
+}
+
+.nike-card-slider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.nike-step {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--nike-hl);
+  border-radius: var(--nike-full);
+  background: transparent;
+  color: var(--nike-ink);
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.nike-font-step {
+  font-size: 16px;
+}
+
+.nike-card-slider input {
+  flex: 1;
+  min-width: 0;
+  width: 0;
+  min-height: 44px;
+  margin: 0;
+  accent-color: var(--nike-info);
+  cursor: pointer;
+}
+
+.nike-slider-labels {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 54px;
+  color: var(--nike-ink2);
+  font-size: 12px;
+}
+
+.nike-font-sample {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  color: var(--nike-ink2);
+  font-size: 12px;
+}
+
+.nike-font-sample > span {
+  color: var(--nike-ink);
+  font-size: 28px;
+}
+
+.nike-mirror-toggles {
+  display: flex;
+  gap: 8px;
+}
+
+.nike-panel-toggle {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--nike-hl);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--nike-ink2);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.nike-mirror-toggles button {
+  flex: 1;
+  min-width: 0;
+}
+
+.nike-panel-toggle[aria-pressed="true"] {
+  border-color: var(--nike-info);
+  color: var(--nike-info);
+}
+
+.nike-panel-toggle[aria-pressed="true"]::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--nike-info);
+  opacity: 0.12;
+  content: "";
+}
+
+.nike-edit-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.nike-mode-toggle .nike-vswitch-seg {
+  min-height: 44px;
+}
+
+.nike-edit-status {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--nike-ink2);
+  font-size: 12px;
+}
+
+.nike-selection-seek {
+  min-height: 44px;
+  padding: 4px 8px;
+  border: 1px solid var(--nike-hl);
+  border-radius: var(--nike-pill);
+  background: transparent;
+  color: var(--nike-ink2);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+
+@media (min-width: 1280px) {
+  .nike-shdr,
+  .nike-shdr .nike-editor-tools,
+  .nike-edit-controls {
+    flex-wrap: nowrap;
+  }
+
+  .nike-shdr {
+    gap: 6px;
+    padding-inline: 16px;
+  }
+
+  .nike-shdr .nike-title-input {
+    min-width: 60px;
+    flex-basis: 80px;
+  }
+
+  .nike-shdr .nike-editor-tools {
+    flex: 0 0 auto;
+    gap: 4px;
+  }
+
+  .nike-shdr .nike-tlb {
+    padding-inline: 8px;
+    white-space: nowrap;
+  }
+
+  .nike-edit-controls {
+    min-width: 0;
+    flex: 0 1 auto;
+    gap: 4px;
+  }
+
+  .nike-edit-status {
+    max-width: 120px;
+  }
+
+  .nike-selection-seek {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding-inline: 6px;
+  }
+
+  .nike-script-switches .nike-vswitch-seg {
+    padding-inline: 10px;
+  }
 }
 
 .nike-voice-status {

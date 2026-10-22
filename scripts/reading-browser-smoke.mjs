@@ -101,13 +101,44 @@ try {
   const observedClocks=[];
   socket.on('message',data=>{const event=JSON.parse(String(data));if(event.state) {state=event.state; const clock=state.scrollClock;if(clock && observedClocks.at(-1)?.scrollClockId!==clock.scrollClockId)observedClocks.push(clock);}});
   let seq=0;
+  let heartbeat;
+  socket.on('close', () => clearInterval(heartbeat));
   const send=(type,payload)=>socket.send(JSON.stringify({type,payload,eventId:crypto.randomUUID(),roomId:room.roomId,deviceId:joined.deviceId,sessionId:'voice-test',clientSeq:++seq,baseRoomRevision:0,sentAt:Date.now()}));
   const waitState=predicate=>new Promise((resolve,reject)=>{const started=Date.now();const timer=setInterval(()=>{if(predicate(state)){clearInterval(timer);resolve();}else if(Date.now()-started>8000){clearInterval(timer);reject(new Error('Voice state timeout: '+JSON.stringify(state?.scrollClock)));}},25);});
   send('client.hello',{role:'control'});
+  heartbeat=setInterval(()=>send('presence.heartbeat',{}),10000);
+  heartbeat.unref();
   await waitState(s=>Boolean(s));
   await control.locator('.nike-play-btn').click();
   await waitState(s=>s?.scrollClock?.state==='playing');
-  const runningClock={...state.scrollClock,scrollClockId:crypto.randomUUID(),state:'playing',velocityPxPerSecond:37,controlMode:'manual',anchor:{type:'renderLine',textOffset:85},issuedAt:Date.now(),sourceDeviceId:joined.deviceId};
+  await control.getByRole('slider', {name:'播放端字号',exact:true}).evaluate(input => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'130');
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+  });
+  await waitState(s=>s?.settings?.playerFontScale===1.3);
+  await new Promise(resolve=>setTimeout(resolve,600));
+  assert.equal(state.scrollClock.state,'playing');
+  assert.equal(state.settings.playerFontScale,1.3,'controller font scale persists during 10Hz playback reports');
+  assert.equal(await control.getByRole('slider', {name:'播放端字号',exact:true}).inputValue(),'130');
+  await control.getByRole('group',{name:'编辑模式'}).getByRole('button',{name:'编辑',exact:true}).click();
+  await control.getByRole('tab',{name:'原文',exact:true}).click();
+  await control.getByLabel('Markdown 原文编辑').fill(markdown+'\n\n尚未保存的本地修改');
+  const roomRevision=state.scriptDraft.draftRevision;
+  await control.locator('.nike-play-btn').click();
+  await waitState(s=>s?.scrollClock?.state==='paused');
+  assert.equal(state.scrollClock.draftRevision,roomRevision);
+  await control.locator('.nike-play-btn').click();
+  await waitState(s=>s?.scrollClock?.state==='playing');
+  assert.equal(state.scrollClock.draftRevision,roomRevision);
+  assert.equal(state.scriptDraft.markdown,markdown,'transport does not save local edits');
+  await control.getByLabel('Markdown 原文编辑').fill(markdown);
+  await control.getByRole('group',{name:'编辑模式'}).getByRole('button',{name:'完成',exact:true}).click();
+  await control.waitForFunction(()=>document.querySelector('.nike-mode-toggle button:last-child')?.getAttribute('aria-pressed')==='true');
+  await control.getByRole('tab',{name:'预览',exact:true}).click();
+  // Finishing may save (new revision) and clear the clock; build the injected clock from the settled draft.
+  await new Promise(resolve=>setTimeout(resolve,500));
+  const settledRevision=state.scriptDraft.draftRevision;
+  const runningClock={scrollClockId:crypto.randomUUID(),scriptVersionId:state.currentScriptVersionId ?? `draft:${settledRevision}`,draftRevision:settledRevision,state:'playing',velocityPxPerSecond:37,controlMode:'manual',anchor:{type:'renderLine',textOffset:85},offsetPx:0,issuedAt:Date.now(),sourceDeviceId:joined.deviceId};
   send('playback.setScrollClock',{scrollClock:runningClock});
   await waitState(s=>s?.scrollClock?.scrollClockId===runningClock.scrollClockId);
   const observedStart=observedClocks.length;
@@ -208,16 +239,17 @@ try {
       const y=units[0].top+20,bundle=ReadingTest.parseMarkdown('甲🙂乙');
       const range=ReadingTest.readingAtY(root,bundle,y);
       const expected=units.filter(u=>u.top===units[0].top).map(u=>u.text).join('');
-      const actual=ReadingTest.readingHighlight(root,bundle,range.textOffset,range.lineEndOffset);
-      samples.push({html,expected,reported:[range.textOffset,range.lineEndOffset],highlightedGraphemes:actual.rects.length,exact:expected.length===3});
+      const actual=ReadingTest.readingHighlight(root,bundle,range.textOffset,range.lineEndOffset,range.lineLeadingExtra,range.lineTrailingExtra);
+      samples.push({html,expected,reported:[range.textOffset,range.lineEndOffset,range.lineLeadingExtra,range.lineTrailingExtra],highlightedGraphemes:actual.rects.length,exact:actual.rects.length===Array.from(new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(expected)).length});
       ReadingTest.releaseReadingMap(root);
     }
     root.remove();return samples;
   });
-  assert.deepEqual(edgeEvidence.map(s=>s.reported),[[0,1],[0,1]]);
-  assert.deepEqual(edgeEvidence.map(s=>s.highlightedGraphemes),[2,2]);
+  assert.deepEqual(edgeEvidence.map(s=>s.reported),[[0,1,0,1],[0,1,0,0]]);
+  assert.deepEqual(edgeEvidence.map(s=>s.highlightedGraphemes),[2,1]);
+  assert.ok(edgeEvidence.every(s=>s.exact),'edge counts make wrapped edge emoji exact');
   assert.deepEqual(edgeEvidence.map(s=>s.expected),['甲🙂','甲']);
-  console.log('PHASE_1_EDGE_LIMIT '+JSON.stringify(edgeEvidence));
+  console.log('EDGE_BOUNDARIES '+JSON.stringify(edgeEvidence));
   await player.screenshot({path:join(dir,'player.png')});
   await control.screenshot({path:join(dir,'control.png')});
   await player.goto(`${base}/join`);
@@ -228,5 +260,5 @@ try {
   await player.getByRole('button',{name:'进入展示'}).click();
   await player.waitForURL(`**/room/${room.roomCode}/player`);
   assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({ok:true,cases:cases.length,join:true,phase1ExactCorrespondence:false,screenshots:dir},null,2));
+  console.log(JSON.stringify({ok:true,cases:cases.length,join:true,exactEdgeCorrespondence:true,screenshots:dir},null,2));
 } finally { await browser.close(); }
