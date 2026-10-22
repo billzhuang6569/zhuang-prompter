@@ -180,7 +180,7 @@ ls -d node_modules/@next/swc-darwin-arm64 node_modules/@next/swc-darwin-x64 \
       node_modules/@next/swc-win32-arm64-msvc node_modules/@next/swc-win32-x64-msvc
 ```
 The afterPack hard gates cover problems #2 and #3 automatically, but confirm the
-packaged app after building (see `docs/RELEASE.md` step 4 for the DMG-mount
+packaged app after building (see the local release runbook for the DMG-mount
 check). For the closure (all platforms):
 ```bash
 APP="<mounted-or-built>/庄Sir的提词器.app/Contents/Resources/app/node_modules"
@@ -216,7 +216,7 @@ none is needed:
 - The Intel DMG that reaches the 编导/director MUST be byte-identical to what the
   server and website serve. Do not hand out a locally-rebuilt DMG: take the exact
   artifact from the tagged CI run (`gh run download … desktop-mac-x64`), pass it
-  through `scripts/prepare-public-release.mjs` + `SHA256SUMS`, and share **that**
+  with a verified `SHA256SUMS` manifest, and share **that**
   file with its `shasum -a 256`. The website's `macos-x64.dmg` download alias is
   a hardlink to the same file, so the hashes match by construction.
 - Cross-built Intel binaries cannot be launch-tested on an arm64 CI host or an

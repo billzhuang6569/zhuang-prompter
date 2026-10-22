@@ -37,8 +37,13 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
-# Deploy secrets (server SSH credentials). NEVER commit. See docs/RELEASE.md for the read location.
-/deploy/secrets/
+# Website and server operations are managed locally, outside the public repository.
+/deploy/
+/scripts/deploy-*.sh
+/scripts/prepare-public-release.mjs
+/scripts/download-stats*.py
+/scripts/__pycache__/
+/docs/RELEASE.md
 
 # Local working plans — never committed (see docs/WORKSPACE.md §1).
 /docs/plans/

@@ -1,6 +1,6 @@
 # 工作区规则（所有 thread 必读）
 
-本文件定义本工作区的**协作与文档规则**。任何 thread（人或 AI）在本仓库做优化、修复、发布前，先读本文件与 [`docs/RELEASE.md`](./RELEASE.md)。
+本文件定义本工作区的**协作与文档规则**。任何 thread（人或 AI）在本仓库做优化、修复、发布前，先读本文件；维护者另读本地忽略的 `docs/RELEASE.md`。
 
 ## 0. 工作区位置（重要）
 
@@ -12,7 +12,7 @@
 
 1. **不要替换 `/Applications` 里的已安装版本**——那是用户现场使用/回退用的稳定版。本地构建产物只放在 `release/`（已 gitignore）。
 2. **保护 `rooms.json`**（用户数据）。不要删除、覆盖或提交它。App 更新前会自动备份为 `rooms.json.before-update.bak`。
-3. **机密永不进仓库**。服务器 SSH 凭据只存在 `deploy/secrets/`（已 gitignore）。见 §4。
+3. **官网和服务器运维内容仅在本地管理**。官网、部署配置和脚本、下载统计、内部发布手册及凭据不进入公开 Git 仓库；不得强制添加被忽略的文件。
 4. **`main` 与线上版本保持一致**。日常改动在 `feat/*` 分支；发布通过打 `v*.*.*` tag 触发 CI（见 `docs/RELEASE.md`）。**一旦 App 被正式发布到 SERVER（`channels/stable` 已切到新版并线上验证通过），就把该版本对应的最新代码同步到 `main`**（干净时快进，否则合并），使 **SERVER 更新源 / 下载地址 / GitHub Releases / GitHub 源码四者版本一致**。发布完成前不要把未发布代码推到 `main`。
 5. **不提交 `docs/plans/`**（本地工作计划，已按约定不纳入版本库）。
 6. **验收不等于编译通过**。合入前跑完整闸门：`npx tsc --noEmit`、`pnpm lint`、`pnpm test:contracts`（见 §3）。
@@ -22,20 +22,20 @@
 | 路径 | 作用 | 是否提交 |
 |---|---|---|
 | `docs/WORKSPACE.md` | 本文件：工作区规则（本文件是规则的唯一来源） | 是 |
-| `docs/RELEASE.md` | 发布/更新链路 runbook（构建→CI→上传→切换→验证→App 内更新测试）。目标输出格式=四平台：mac arm64 + mac x64(Intel) + win x64 + win arm64 | 是 |
+| `docs/RELEASE.md` | 发布/更新链路 runbook（构建→CI→上传→切换→验证→App 内更新测试）。目标输出格式=四平台：mac arm64 + mac x64(Intel) + win x64 + win arm64 | 否（仅本地） |
 | `docs/CHANGELOG.md` | 每次发布的版本记录 | 是 |
 | `docs/release-packaging.md` | electron-builder 打包细节参考（含 pnpm 依赖收集陷阱 + afterPack 修复 + Intel 打包实践） | 是 |
 | `scripts/ensure-app-deps.cjs` | **`build.afterPack` 钩子**：按源码依赖树补齐安装包内被 electron-builder 收集器漏掉的传递依赖（含嵌套版本），并强制校验关键运行时依赖（`ms`/`next`/`react` 等），缺失即让构建失败。**架构感知**：交叉构建时只保留目标架构的原生库（`@next/swc-*`/`@img/sharp-*`）、剥离错误架构，并硬校验目标架构 swc `.node` 存在（0.1.12 修 Intel/ARM64-Win 启动失败）。这是 `Cannot find module 'ms'` 与 "server did not start in time" 的最终修复，勿删。见 release-packaging.md | 是 |
 | `pnpm-workspace.yaml` | **`nodeLinker: hoisted`（CI 的 pnpm 11 认这个，是收全传递依赖的必要条件——但不充分，收集器仍会非确定性漏包，靠上面的 afterPack 钩子兜底）** + **`supportedArchitectures`（装齐 darwin+win32 × x64+arm64 原生库，交叉构建包才有正确架构，勿删）** + 构建脚本审批 `allowBuilds`/`ignoredBuiltDependencies`。勿删 nodeLinker、勿删审批。见 release-packaging.md | 是 |
 | `.npmrc` | `node-linker=hoisted`（仅本机 pnpm 10 认；pnpm 11 忽略）。保留但不决定线上产物 | 是 |
-| `docs/landing-page/` | 官网（独立 Vercel 部署，不属于 App 发布链路） | 否（gitignore） |
+| `landing-page/`、`docs/landing-page/` | 官网（独立 Vercel 部署，不属于 App 发布链路） | 否（gitignore） |
 | `docs/plans/` | 本地工作计划草稿 | 否（gitignore） |
-| `deploy/prompter.locations.conf` | 服务器 nginx location 映射（真实来源）；下载短链路由 `/prompter/download/{macos-arm64,macos-x64,windows-x64,windows-arm64}` | 是 |
-| `scripts/deploy-nginx-conf.sh` | 部署 `deploy/prompter.locations.conf` 到服务器 nginx snippet（备份→测试→reload→校验），改下载/更新 API 后用它 | 是 |
-| `deploy/lib/*.exp` | 密码认证的 ssh/scp expect 助手 | 是 |
+| `deploy/prompter.locations.conf` | 服务器 nginx location 映射（真实来源）；下载短链路由 `/prompter/download/{macos-arm64,macos-x64,windows-x64,windows-arm64}` | 否（仅本地） |
+| `scripts/deploy-nginx-conf.sh` | 部署 `deploy/prompter.locations.conf` 到服务器 nginx snippet（备份→测试→reload→校验），改下载/更新 API 后用它 | 否（仅本地） |
+| `deploy/lib/*.exp` | 密码认证的 ssh/scp expect 助手 | 否（仅本地） |
 | `deploy/secrets/` | 服务器凭据（机密） | **否（gitignore）** |
-| `scripts/prepare-public-release.mjs` | 打发布包 `release/public/<version>/` | 是 |
-| `scripts/deploy-release.sh` | 发布"最后一公里"：上传 + 原子切换指针 | 是 |
+| `scripts/prepare-public-release.mjs` | 打发布包 `release/public/<version>/` | 否（仅本地） |
+| `scripts/deploy-release.sh` | 发布"最后一公里"：上传 + 原子切换指针 | 否（仅本地） |
 | `release/` | 本地构建产物 | 否（gitignore） |
 
 ## 3. 验收闸门（改代码后必跑）
@@ -56,13 +56,9 @@ ls -d node_modules/ms node_modules/debug         # 真实目录，非 .pnpm syml
 ```
 **两层根因**（0.1.8/0.1.9/0.1.10 均启动即崩 `Cannot find module 'ms'`）：①源码 `node_modules` 必须扁平化（上面这步保证）；②即便扁平，electron-builder 收集器仍会在打包阶段**非确定性漏掉**闭包成员（本地复现不出，CI 会漏 `ms` 等 50+ 个），由 `scripts/ensure-app-deps.cjs`（`afterPack`）按源码树补齐并强制校验兜底。详见 `docs/release-packaging.md`。
 
-## 4. 服务器凭据的读取位置
+## 4. 本地运维资料
 
-- 文件：`deploy/secrets/server-ssh.env`（已 gitignore，切勿提交/打印到日志）。
-- 读取：`set -a; source deploy/secrets/server-ssh.env; set +a`
-- 提供：`DEPLOY_SSH_HOST` / `DEPLOY_SSH_USER` / `DEPLOY_SSH_PASSWORD` / `DEPLOY_SSH_PORT` / `DEPLOY_REMOTE_ROOT`
-- 该服务器是 `bill-api.whatonearth.work` 的源站，磁盘根 `/mnt/pictshare/zhuang-prompter/`。
-- 若本机 DNS 把 `bill-api.whatonearth.work` 解析到 `198.18.x.x` 等假 IP，那是本机代理的 fake-IP，不影响；源站以 `DEPLOY_SSH_HOST` 为准。
+官网与服务器部署由本地忽略的文件管理。内部发布流程见本地 `docs/RELEASE.md`；凭据不得打印或提交。公开仓库只保留 App 源码及其构建、测试流程。
 
 ## 5. 每个 thread 的工作流程
 
@@ -71,5 +67,5 @@ ls -d node_modules/ms node_modules/debug         # 真实目录，非 .pnpm syml
 3. 跑 §3 闸门。
 4. 需发布时：按 `docs/RELEASE.md` 打 tag→CI→下载→打包→部署→验证→App 内更新测试。
 5. **发布并线上验证通过后**：把该版本的最新代码同步到 `main`（见 §1.4），保证四端版本一致。
-6. 若发布链路本身有变化：**同步更新 `docs/RELEASE.md`**，并在 `docs/CHANGELOG.md` 记录版本。
+6. 若发布链路本身有变化：更新本地 `docs/RELEASE.md`；公开 `docs/CHANGELOG.md` 只记录 App 版本变化，不记录内部部署细节。
 7. 机密只从 `deploy/secrets/` 读，绝不写入代码/文档/日志/提交。
