@@ -6,6 +6,7 @@ export type PlaybackStatus = "playing" | "paused" | "frozen";
 
 export type Anchor = {
   textOffset?: number;
+  lineEndOffset?: number;
   lineFraction?: number;
   anchorId?: string;
   type: "marker" | "heading" | "paragraph" | "speechSegment" | "textHash" | "renderLine";
@@ -19,6 +20,7 @@ export type Anchor = {
 };
 
 export type ScrollClock = {
+  draftRevision: number;
   scrollClockId: string;
   scriptVersionId: string;
   state: PlaybackStatus;
@@ -32,6 +34,7 @@ export type ScrollClock = {
 };
 
 export type PlaybackState = {
+  draftRevision: number;
   scriptVersionId: string;
   state: PlaybackStatus;
   positionPx: number;
@@ -79,6 +82,7 @@ export type ScriptVersion = {
 export type VoiceMatchLevel = "locked" | "probable" | "uncertain" | "lost";
 
 export type VoiceTranscript = {
+  scrollClockId?: string;
   segmentId: string;
   sourceDeviceId: string;
   scriptVersionId: string;

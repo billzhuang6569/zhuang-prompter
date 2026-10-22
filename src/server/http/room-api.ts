@@ -126,6 +126,9 @@ export async function handleRoomApi(
   const settingsMatch = url.pathname.match(/^\/api\/rooms\/([^/]+)\/settings$/);
   if (request.method === "POST" && settingsMatch) {
     const body = await readJson(request);
+    if (body.playerFontScale !== undefined && (typeof body.playerFontScale !== "number" || !Number.isFinite(body.playerFontScale) || body.playerFontScale < 0.75)) {
+      writeJson(response,400,{message:"Invalid player font scale."}); return true;
+    }
     const state = updateRoomSettings({
       roomCode: settingsMatch[1],
       settings: {

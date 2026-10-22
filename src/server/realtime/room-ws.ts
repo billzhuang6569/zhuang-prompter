@@ -92,8 +92,8 @@ function handleClientEvent(socket: WebSocket, roomCode: string, raw: Buffer) {
 
   if (isUpdateLocked()) { nack(socket, event.eventId, "应用正在准备更新"); return; }
 
-  if (!event.type || !event.eventId || !event.deviceId || !event.sessionId) {
-    nack(socket, event.eventId ?? makeEventId("bad_event"), "Event envelope is incomplete.");
+  if (!event || !event.type || !event.eventId || !event.deviceId || !event.sessionId || !Number.isSafeInteger(event.clientSeq) || event.clientSeq < 1) {
+    nack(socket, event?.eventId ?? makeEventId("bad_event"), "Event envelope is incomplete.");
     return;
   }
 
@@ -140,6 +140,12 @@ function handleClientEvent(socket: WebSocket, roomCode: string, raw: Buffer) {
       state,
     });
     return;
+  }
+
+  const registered = clients.get(socket);
+  const currentDevice = getRoomState(roomCode)?.devices[event.deviceId];
+  if (!registered || registered.deviceId !== event.deviceId || registered.sessionId !== event.sessionId || currentDevice?.sessionId !== event.sessionId || !Number.isSafeInteger(event.clientSeq) || event.clientSeq <= (currentDevice?.lastClientSeq ?? 0)) {
+    nack(socket,event.eventId,"Stale session or sequence."); return;
   }
 
   if (event.type === "role.set") {

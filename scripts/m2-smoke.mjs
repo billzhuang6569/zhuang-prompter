@@ -68,7 +68,8 @@ async function main() {
 
   const scrollClock = {
     scrollClockId: `clk_${crypto.randomUUID()}`,
-    scriptVersionId: "fixture_m1",
+    scriptVersionId: created.roomState.currentScriptVersionId ?? `draft:${created.roomState.scriptDraft.draftRevision}`,
+    draftRevision: created.roomState.scriptDraft.draftRevision,
     state: "playing",
     controlMode: "fixedSpeed",
     anchor: { type: "marker", markerId: "M001" },
@@ -86,7 +87,8 @@ async function main() {
   playerSocket.send(
     makeEvent("playback.reportState", joined.deviceId, "sess_player", 2, 0, {
       playbackState: {
-        scriptVersionId: "fixture_m1",
+        scriptVersionId: created.roomState.currentScriptVersionId ?? `draft:${created.roomState.scriptDraft.draftRevision}`,
+    draftRevision: created.roomState.scriptDraft.draftRevision,
         state: "playing",
         positionPx: 42,
         currentAnchor: { type: "marker", markerId: "M001" },

@@ -9,7 +9,6 @@ import {
   useState,
   type Dispatch,
   type MouseEvent,
-  type PointerEvent as ReactPointerEvent,
   type RefObject,
   type SetStateAction,
 } from "react";
@@ -26,7 +25,7 @@ import {
 import type { RenderBundle } from "@/modules/script-engine/types";
 import { makeRandomId } from "@/shared/id";
 import { copyTextToClipboard } from "@/shared/clipboard";
-import { readingAtY, readingY } from "@/modules/playback-engine/reading-position";
+import { readingHighlight, readingOffsetForPoint, releaseReadingMap } from "@/modules/playback-engine/reading-position";
 import { RichMarkdownEditor } from "./rich-markdown-editor";
 
 type VersionSummary = {
@@ -83,7 +82,7 @@ type ControlConsoleProps = {
   setVersionMessage: (value: string) => void;
   bundle?: RenderBundle;
   versions: VersionSummary[];
-  playbackCenterRatio?: number;
+  roomMarkdown?: string;
   readingAnchor?: Anchor;
   speed: number;
   isPlaying: boolean;
@@ -100,7 +99,7 @@ type ControlConsoleProps = {
   markdownEditorRef: RefObject<HTMLTextAreaElement | null>;
   onInvite: () => void;
   onOpenQr: (link: PlayerLink) => void;
-  onSaveDraft: () => void;
+  onSaveDraft: (markdown?: string) => Promise<boolean>;
   onSaveVersion: () => void;
   onRestoreVersion: (versionId: string) => void;
   onTogglePlay: () => void;
@@ -113,7 +112,7 @@ type ControlConsoleProps = {
   onPlayerMirrorXChange: (enabled: boolean) => void;
   onPlayerMirrorYChange: (enabled: boolean) => void;
   onToggleVoiceAssist: () => void;
-  onGuideSeekRatio: (ratio: number, anchor?: Anchor) => void;
+  onSeekAnchor: (anchor: Anchor) => void;
   onBeginMarkerEdit: (target?: EditorInsertionTarget) => void;
   onBeginCommentEdit: (target?: EditorInsertionTarget) => void;
   pendingEditorAction: PendingEditorAction | null;
@@ -139,7 +138,7 @@ export function ControlConsole({
   setVersionMessage,
   bundle,
   versions,
-  playbackCenterRatio,
+  roomMarkdown,
   readingAnchor,
   speed,
   isPlaying,
@@ -169,7 +168,7 @@ export function ControlConsole({
   onPlayerMirrorXChange,
   onPlayerMirrorYChange,
   onToggleVoiceAssist,
-  onGuideSeekRatio,
+  onSeekAnchor,
   onBeginMarkerEdit,
   onBeginCommentEdit,
   pendingEditorAction,
@@ -182,13 +181,21 @@ export function ControlConsole({
   const richEditorRef = useRef<MDXEditorMethods | null>(null);
   const scriptSurfaceRef = useRef<HTMLDivElement | null>(null);
   const richContentWrapRef = useRef<HTMLDivElement | null>(null);
-  const pendingReadingAnchorRef = useRef<Anchor | undefined>(undefined);
+  const readingRootRef = useRef<HTMLElement | null>(null);
+  const highlightRef = useRef<HTMLDivElement | null>(null);
   const guideLineRef = useRef<HTMLDivElement | null>(null);
-  const guideHoverTimerRef = useRef<number | undefined>(undefined);
   const copyStatusTimerRef = useRef<number | undefined>(undefined);
-  const guideDraggingRef = useRef(false);
-  const pendingGuideRatioRef = useRef<number | null>(null);
-  const lastGuideSeekAtRef = useRef(0);
+  const modeInitializedRef = useRef(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [hasHighlight, setHasHighlight] = useState(false);
+  const savingRef = useRef(false);
+  const composingRef = useRef(false);
+  const finishRequestedRef = useRef(false);
+  const latestMarkdownRef = useRef(markdown);
+  useLayoutEffect(() => { latestMarkdownRef.current = markdown; }, [markdown]);
+  const pointerStartRef = useRef<{x:number;y:number;scroll:number;moved:boolean} | null>(null);
+  const synchronized = roomMarkdown !== undefined && markdown === roomMarkdown && typeof readingAnchor?.lineEndOffset === "number";
   const previousMarkdownRef = useRef(markdown);
   const undoStackRef = useRef<string[]>([]);
   const redoStackRef = useRef<string[]>([]);
@@ -197,9 +204,6 @@ export function ControlConsole({
   const [richPendingEditorAction, setRichPendingEditorAction] = useState<PendingEditorAction | null>(null);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
-  const [guideMetrics, setGuideMetrics] = useState({ height: 0, offsetTop: 0 });
-  const [guideDragReady, setGuideDragReady] = useState(false);
-  const [guideDragging, setGuideDragging] = useState(false);
   const [exportStatus, setExportStatus] = useState("");
   const [copyStatus, setCopyStatus] = useState<"idle" | "copied" | "failed">("idle");
   // §3.3：原文视图存在非空选区时，"增加"改为"改为"，反映即将发生的真正转换。
@@ -278,202 +282,95 @@ export function ControlConsole({
   }, [view]);
 
   useEffect(() => {
-    if (view !== "render") {
-      return;
-    }
-
-    const updateGuideMetrics = () => {
-      const scrollElement = previewScrollRef.current;
-      const contentElement =
-        richContentWrapRef.current?.querySelector<HTMLElement>(".nike-rich-editor-content") ?? richContentWrapRef.current;
-      if (!scrollElement || !contentElement) {
-        return;
-      }
-      const scrollRect = scrollElement.getBoundingClientRect();
-      const contentRect = contentElement.getBoundingClientRect();
-      setGuideMetrics({
-        height: Math.max(1, contentElement.scrollHeight),
-        offsetTop: scrollElement.scrollTop + contentRect.top - scrollRect.top,
-      });
-    };
-
-    updateGuideMetrics();
-    const observer = new ResizeObserver(updateGuideMetrics);
-    if (richContentWrapRef.current) {
-      observer.observe(richContentWrapRef.current);
-    }
-    window.addEventListener("resize", updateGuideMetrics);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("resize", updateGuideMetrics);
-    };
-  }, [markdown, previewScrollRef, view]);
+    if (modeInitializedRef.current || roomMarkdown === undefined) return;
+    modeInitializedRef.current = true;
+    const frame = requestAnimationFrame(() => setEditing(!roomMarkdown.trim()));
+    return () => cancelAnimationFrame(frame);
+  }, [roomMarkdown]);
 
   useLayoutEffect(() => {
-    const guideLine = guideLineRef.current;
-    const scrollElement = previewScrollRef.current;
-    if (!guideLine || !scrollElement || view !== "render" || guideDraggingRef.current) {
-      return;
-    }
-    const ratio = Math.max(0, Math.min(1, playbackCenterRatio ?? 0));
-    const content = richContentWrapRef.current?.querySelector<HTMLElement>(".nike-rich-editor-content");
-    const y = content && bundle && typeof readingAnchor?.textOffset === "number"
-      ? readingY(content, bundle, { textOffset: readingAnchor.textOffset, lineFraction: readingAnchor.lineFraction }) : undefined;
-    const top = y === undefined ? guideMetrics.offsetTop + ratio * guideMetrics.height
-      : scrollElement.scrollTop + y - scrollElement.getBoundingClientRect().top;
-    guideLine.style.top = `${top}px`;
-    const diff = scrollElement.scrollTop + scrollElement.clientHeight / 2 - top;
-    if (Math.abs(diff) > 72) {
-      scrollElement.scrollTop = Math.max(0, top - scrollElement.clientHeight / 2);
-    }
-  }, [bundle, readingAnchor, guideDragging, guideMetrics, playbackCenterRatio, previewScrollRef, view]);
-
-  useEffect(() => {
-    const releaseGuideDrag = () => {
-      if (!guideDraggingRef.current) {
-        return;
+    const scroll = previewScrollRef.current;
+    const wrap = richContentWrapRef.current;
+    const overlay = highlightRef.current, guide = guideLineRef.current;
+    if (!scroll || !wrap || !overlay || !guide) return;
+    let frame = 0;
+    const draw = () => {
+      overlay.replaceChildren();
+      guide.hidden = true;
+      setHasHighlight(false);
+      const content = wrap.querySelector<HTMLElement>(".nike-rich-editor-content");
+      if (readingRootRef.current !== content) {
+        if (readingRootRef.current) releaseReadingMap(readingRootRef.current);
+        readingRootRef.current = content;
       }
-      const pendingRatio = pendingGuideRatioRef.current;
-      guideDraggingRef.current = false;
-      pendingGuideRatioRef.current = null;
-      setGuideDragging(false);
-      setGuideDragReady(false);
-      if (typeof pendingRatio === "number") {
-        onGuideSeekRatio(pendingRatio, pendingReadingAnchorRef.current);
+      if (!content || !bundle || !synchronized || view !== "render" || readingAnchor?.textOffset === undefined || readingAnchor.lineEndOffset === undefined) return;
+      const highlight = readingHighlight(content,bundle,readingAnchor.textOffset,readingAnchor.lineEndOffset);
+      if (!highlight) return;
+      setHasHighlight(true);
+      const origin = scroll.getBoundingClientRect();
+      for (const rect of highlight.rects) {
+        const span = document.createElement("span");
+        Object.assign(span.style, { position:"absolute", left:`${rect.left-origin.left+scroll.scrollLeft}px`, top:`${rect.top-origin.top+scroll.scrollTop}px`, width:`${rect.width}px`, height:`${rect.height}px` });
+        overlay.append(span);
       }
+      const top = highlight.guideY-origin.top+scroll.scrollTop;
+      guide.style.top = `${top}px`;
+      guide.hidden = false;
+      if (!editing && !window.getSelection()?.toString() && Math.abs(scroll.scrollTop+scroll.clientHeight/2-top)>72) scroll.scrollTop = Math.max(0,top-scroll.clientHeight/2);
     };
-    window.addEventListener("pointerup", releaseGuideDrag);
-    window.addEventListener("pointercancel", releaseGuideDrag);
-    window.addEventListener("blur", releaseGuideDrag);
+    const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(draw); };
+    schedule();
+    const resize = new ResizeObserver(schedule);
+    resize.observe(wrap);
+    const mutations = new MutationObserver(schedule);
+    mutations.observe(wrap,{subtree:true,childList:true,characterData:true});
+    scroll.addEventListener("scroll",schedule);
+    window.addEventListener("resize",schedule);
+    document.fonts?.addEventListener("loadingdone",schedule);
     return () => {
-      window.removeEventListener("pointerup", releaseGuideDrag);
-      window.removeEventListener("pointercancel", releaseGuideDrag);
-      window.removeEventListener("blur", releaseGuideDrag);
+      cancelAnimationFrame(frame); resize.disconnect(); mutations.disconnect();
+      scroll.removeEventListener("scroll",schedule); window.removeEventListener("resize",schedule);
+      document.fonts?.removeEventListener("loadingdone",schedule);
     };
-  }, [onGuideSeekRatio]);
+  }, [bundle, readingAnchor, synchronized, editing, view, previewScrollRef]);
 
-  useEffect(() => {
-    return () => {
-      if (guideHoverTimerRef.current) {
-        window.clearTimeout(guideHoverTimerRef.current);
-      }
-    };
+  useEffect(() => () => {
+    if (readingRootRef.current) releaseReadingMap(readingRootRef.current);
   }, []);
 
-  const seekFromGuidePointer = useCallback(
-    (clientY: number) => {
-      const scrollElement = previewScrollRef.current;
-      if (!scrollElement || guideMetrics.height <= 0) {
-        return null;
-      }
-      const scrollRect = scrollElement.getBoundingClientRect();
-      if (clientY > scrollRect.bottom - 48) {
-        scrollElement.scrollTop += 18;
-      } else if (clientY < scrollRect.top + 48) {
-        scrollElement.scrollTop = Math.max(0, scrollElement.scrollTop - 18);
-      }
-      const contentY = scrollElement.scrollTop + clientY - scrollRect.top;
-      const ratio = Math.max(0, Math.min(1, (contentY - guideMetrics.offsetTop) / guideMetrics.height));
-      const top = guideMetrics.offsetTop + ratio * guideMetrics.height;
-      if (guideLineRef.current) {
-        guideLineRef.current.style.top = `${top}px`;
-      }
-      const content = richContentWrapRef.current?.querySelector<HTMLElement>(".nike-rich-editor-content");
-      const position = content && bundle ? readingAtY(content, bundle, clientY) : undefined;
-      pendingReadingAnchorRef.current = position ? { type: "renderLine", ...position } : undefined;
-      pendingGuideRatioRef.current = ratio;
-      return ratio;
-    },
-    [bundle, guideMetrics, previewScrollRef],
-  );
-
-  function beginGuideHover() {
-    if (guideHoverTimerRef.current) {
-      window.clearTimeout(guideHoverTimerRef.current);
-    }
-    guideHoverTimerRef.current = window.setTimeout(() => setGuideDragReady(true), 500);
-  }
-
-  function endGuideHover() {
-    if (guideHoverTimerRef.current) {
-      window.clearTimeout(guideHoverTimerRef.current);
-      guideHoverTimerRef.current = undefined;
-    }
-    if (!guideDraggingRef.current) {
-      setGuideDragReady(false);
-    }
-  }
-
-  function beginGuideDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    event.preventDefault();
-    event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    guideDraggingRef.current = true;
-    pendingGuideRatioRef.current = null;
-    lastGuideSeekAtRef.current = performance.now();
-    setGuideDragReady(true);
-    setGuideDragging(true);
-    const ratio = seekFromGuidePointer(event.clientY);
-    if (typeof ratio === "number") {
-      onGuideSeekRatio(ratio, pendingReadingAnchorRef.current);
-    }
-  }
-
-  function beginGuideRailDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    const guideLine = guideLineRef.current;
-    if (!guideLine || guideDraggingRef.current) {
+  async function finishEditing() {
+    if (savingRef.current) return;
+    if (composingRef.current) {
+      finishRequestedRef.current = true;
+      (document.activeElement as HTMLElement | null)?.blur();
       return;
     }
-    const guideRect = guideLine.getBoundingClientRect();
-    const guideCenterY = guideRect.top + guideRect.height / 2;
-    if (Math.abs(event.clientY - guideCenterY) > 16) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    guideDraggingRef.current = true;
-    pendingGuideRatioRef.current = null;
-    lastGuideSeekAtRef.current = performance.now();
-    setGuideDragReady(true);
-    setGuideDragging(true);
-    const ratio = seekFromGuidePointer(event.clientY);
-    if (typeof ratio === "number") {
-      onGuideSeekRatio(ratio, pendingReadingAnchorRef.current);
-    }
-  }
-
-  function moveGuideDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!guideDraggingRef.current) {
-      return;
-    }
-    event.preventDefault();
-    const ratio = seekFromGuidePointer(event.clientY);
-    const now = performance.now();
-    if (typeof ratio === "number" && now - lastGuideSeekAtRef.current > 80) {
-      lastGuideSeekAtRef.current = now;
-      onGuideSeekRatio(ratio, pendingReadingAnchorRef.current);
-    }
-  }
-
-  function endGuideDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!guideDraggingRef.current) {
-      return;
-    }
-    event.preventDefault();
+    savingRef.current = true;
+    setSaving(true);
     try {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    } catch {
-      // Pointer capture may already be released by the browser.
-    }
-    const pendingRatio = pendingGuideRatioRef.current;
-    guideDraggingRef.current = false;
-    pendingGuideRatioRef.current = null;
-    setGuideDragging(false);
-    setGuideDragReady(false);
-    if (typeof pendingRatio === "number") {
-      onGuideSeekRatio(pendingRatio, pendingReadingAnchorRef.current);
-    }
+      if (activePendingEditorAction) confirmFloatingEditorAction();
+      await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+      if (await onSaveDraft(latestMarkdownRef.current)) { setView("render"); setEditing(false); }
+    } finally { savingRef.current = false; setSaving(false); }
+  }
+
+  function seekPoint(node: Node, offset: number, point?: {x:number;y:number}) {
+    const content = richContentWrapRef.current?.querySelector<HTMLElement>(".nike-rich-editor-content");
+    if (!content || !bundle || !synchronized) return;
+    const textOffset = readingOffsetForPoint(content,bundle,node,offset,point);
+    if (textOffset !== undefined) onSeekAnchor({type:"renderLine",textOffset});
+  }
+  function clickToSeek(event: MouseEvent<HTMLDivElement>) {
+    if (editing) { beginExistingDirectiveEdit(event); return; }
+    event.preventDefault();
+    const down = pointerStartRef.current;
+    if (!down || down.moved || Math.hypot(event.clientX-down.x,event.clientY-down.y)>5 || Math.abs((previewScrollRef.current?.scrollTop ?? 0)-down.scroll)>2 || window.getSelection()?.toString()) return;
+    const doc = document as Document & {caretPositionFromPoint?: (x:number,y:number)=>{offsetNode:Node;offset:number} | null};
+    const caret = doc.caretRangeFromPoint?.(event.clientX,event.clientY);
+    const position = !caret ? doc.caretPositionFromPoint?.(event.clientX,event.clientY) : null;
+    const node = caret?.startContainer ?? position?.offsetNode, offset = caret?.startOffset ?? position?.offset;
+    if (!node || offset === undefined || node.nodeType !== Node.TEXT_NODE) return;
+    seekPoint(node,offset,{x:event.clientX,y:event.clientY});
   }
 
   useEffect(() => {
@@ -533,7 +430,7 @@ export function ControlConsole({
   useEffect(() => {
     function handleKeyboardHistory(event: KeyboardEvent) {
       const isHistoryKey = event.key.toLowerCase() === "z" && (event.metaKey || event.ctrlKey);
-      if (!isHistoryKey || event.altKey || event.isComposing) {
+      if (!editing || saving || !isHistoryKey || event.altKey || event.isComposing) {
         return;
       }
       // 富文本（MDXEditor / Lexical）contentEditable 内的 Cmd/Ctrl+Z 交由其原生撤销栈处理，
@@ -559,7 +456,7 @@ export function ControlConsole({
 
     window.addEventListener("keydown", handleKeyboardHistory, { capture: true });
     return () => window.removeEventListener("keydown", handleKeyboardHistory, { capture: true });
-  }, [canRedo, canUndo, redoMarkdown, undoMarkdown]);
+  }, [canRedo, canUndo, redoMarkdown, undoMarkdown, editing, saving]);
 
   function runInRawEditor(action: () => void) {
     if (view !== "raw") {
@@ -602,6 +499,7 @@ export function ControlConsole({
   }
 
   function beginInlineMarkerEdit() {
+    if (!editing || saving) return;
     if (view === "render") {
       if (!richEditorRef.current) {
         return;
@@ -635,6 +533,7 @@ export function ControlConsole({
   }
 
   function beginInlineCommentEdit() {
+    if (!editing || saving) return;
     if (view === "render") {
       if (!richEditorRef.current) {
         return;
@@ -759,7 +658,7 @@ export function ControlConsole({
       if (!target) {
         return;
       }
-      if (target.closest(".nike-floating-editor") || target.closest(".nike-mdx-directive")) {
+      if (target.closest(".nike-floating-editor") || target.closest(".nike-mdx-directive") || target.closest(".nike-mode-toggle")) {
         return;
       }
       cancelFloatingEditorAction();
@@ -815,6 +714,7 @@ export function ControlConsole({
   }
 
   function beginExistingDirectiveEdit(event: MouseEvent<HTMLDivElement>) {
+    if (!editing || saving) return;
     const target = event.target instanceof Element ? event.target.closest<HTMLElement>(".nike-mdx-directive") : null;
     if (!target || !scriptSurfaceRef.current?.contains(target)) {
       return;
@@ -852,6 +752,7 @@ export function ControlConsole({
   }
 
   function placeCaretAfterDirective(event: MouseEvent<HTMLDivElement>) {
+    if (!editing || saving) return;
     if (event.button !== 0) {
       return;
     }
@@ -930,6 +831,7 @@ export function ControlConsole({
             <div className="nike-editor-tools" data-od-id="toolbar">
               <button
                 className="nike-tlb"
+                disabled={!editing || saving}
                 type="button"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={beginInlineMarkerEdit}
@@ -939,6 +841,7 @@ export function ControlConsole({
               </button>
               <button
                 className="nike-tlb"
+                disabled={!editing || saving}
                 type="button"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={beginInlineCommentEdit}
@@ -978,6 +881,7 @@ export function ControlConsole({
                 type="button"
                 role="tab"
                 aria-selected={view === "raw"}
+                disabled={!editing || saving}
                 onClick={() => setView("raw")}
               >
                 原文
@@ -985,7 +889,10 @@ export function ControlConsole({
             </div>
           </div>
 
-          <div className={`nike-srw ${isPlaying ? "playing" : ""}`} data-od-id="script-render-wrapper" ref={scriptSurfaceRef}>
+          <div className={`nike-srw ${isPlaying ? "playing" : ""} ${!editing || saving ? "is-done" : ""}`} data-od-id="script-render-wrapper" ref={scriptSurfaceRef}
+            onCompositionStart={() => { composingRef.current = true; }}
+            onCompositionEnd={() => { composingRef.current = false; if (finishRequestedRef.current) { finishRequestedRef.current = false; void finishEditing(); } }}
+            >
             {activePendingEditorAction && floatingEditorPosition && (
               <div className="nike-floating-editor" style={{ left: floatingEditorPosition.left, top: floatingEditorPosition.top }}>
                 <span>
@@ -1022,46 +929,28 @@ export function ControlConsole({
               </div>
             )}
 
-            {view === "render" ? (
+            {(
+
               <div
                 className="nike-sr"
+                style={{display:view === "render" ? undefined : "none"}}
                 ref={previewScrollRef}
                 data-od-id="script-render"
                 onMouseDown={placeCaretAfterDirective}
-                onClick={beginExistingDirectiveEdit}
+                onClick={clickToSeek}
                 onScroll={(event) => onPreviewScroll(event.currentTarget.scrollTop)}
-                onPointerDown={beginGuideRailDrag}
-                onPointerMove={moveGuideDrag}
-                onPointerUp={endGuideDrag}
-                onPointerCancel={endGuideDrag}
+                onPointerDown={(event) => { pointerStartRef.current = {x:event.clientX,y:event.clientY,scroll:event.currentTarget.scrollTop,moved:false}; }}
+                onPointerMove={(event) => { const down = pointerStartRef.current; if (down && Math.hypot(event.clientX-down.x,event.clientY-down.y)>5) down.moved = true; }}
+                onPointerCancel={() => { pointerStartRef.current = null; }}
               >
-                <div
-                  className={`nike-iline ${guideDragReady ? "is-guide-ready" : ""} ${guideDragging ? "is-guide-dragging" : ""}`}
-                  ref={guideLineRef}
-                  role="slider"
-                  aria-label="拖拽控制播放端位置"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.round(Math.max(0, Math.min(1, playbackCenterRatio ?? 0)) * 100)}
-                  tabIndex={0}
-                  onPointerEnter={beginGuideHover}
-                  onPointerLeave={endGuideHover}
-                  onPointerDown={beginGuideDrag}
-                  onPointerMove={moveGuideDrag}
-                  onPointerUp={endGuideDrag}
-                  onPointerCancel={endGuideDrag}
-                  onMouseDown={(event) => {
-                    if (guideDragReady) {
-                      event.preventDefault();
-                      event.stopPropagation();
-                    }
-                  }}
-                />
+                <div className="nike-reading-highlight" ref={highlightRef} aria-hidden="true" />
+                <div className="nike-iline" ref={guideLineRef} hidden aria-hidden="true" />
                 <div className="nike-sc nike-rich-editor-wrap" ref={richContentWrapRef}>
                   <RichMarkdownEditor
                     ref={richEditorRef}
                     className="nike-rich-editor"
                     contentEditableClassName="nike-rich-editor-content"
+                    readOnly={!editing || saving}
                     markdown={markdown}
                     onChange={setMarkdown}
                     spellCheck={false}
@@ -1069,13 +958,15 @@ export function ControlConsole({
                   <div className="nike-bottom-space" />
                 </div>
               </div>
-            ) : (
-              <div className="nike-sr" data-od-id="script-raw">
+            )}
+            {(
+              <div className="nike-sr" style={{display:view === "raw" ? undefined : "none"}} data-od-id="script-raw">
                 <textarea
                   ref={markdownEditorRef}
                   className="nike-raw-editor"
                   aria-label="Markdown 原文编辑"
                   spellCheck={false}
+                  readOnly={!editing || saving}
                   value={markdown}
                   onChange={(event) => {
                     setMarkdown(event.target.value);
@@ -1101,9 +992,14 @@ export function ControlConsole({
                   onChange={(event) => setVersionMessage(event.target.value)}
                   placeholder="版本备注，如「现场保存」..."
                 />
-                <button className="nike-mde-save" type="button" onClick={onSaveDraft}>
-                  保存草稿
+                <button className="nike-mde-save nike-mode-toggle" type="button" disabled={saving} onClick={() => editing ? void finishEditing() : setEditing(true)}>
+                  {saving ? "正在保存" : editing ? "完成" : "编辑"}
                 </button>
+                <span role="status">{saveStatus} {!synchronized || !hasHighlight ? "未同步" : ""}</span>
+                {!editing && <button type="button" onMouseDown={event=>event.preventDefault()} onClick={() => {
+                  const selection = window.getSelection();
+                  if (selection?.anchorNode) seekPoint(selection.anchorNode,selection.anchorOffset);
+                }}>定位到选区</button>}
               </div>
             </div>
           </div>
@@ -1156,7 +1052,7 @@ export function ControlConsole({
               <input
                 type="range"
                 min="75"
-                max="200"
+                max={Math.max(500,Math.round(playerFontScale*100))}
                 value={Math.round(playerFontScale * 100)}
                 onChange={(event) => onPlayerFontScaleChange(Number(event.target.value) / 100)}
               />

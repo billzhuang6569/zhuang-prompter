@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type {
+  Anchor,
   DevicePresence,
   DeviceRole,
   PlaybackState,
@@ -12,7 +13,7 @@ import type {
   ScrollClock,
   VoiceTranscript,
 } from "../../domain/room/types";
-import { effectivePrimary } from "../playback-engine/reading-position";
+import { effectivePrimary, readingBlocks } from "../playback-engine/reading-position";
 import { matchVoice } from "../voice-follow/match";
 import { extensionSpecFixture, parseMarkdown } from "../script-engine";
 
@@ -186,6 +187,7 @@ function bumpRoomFact(record: RoomRecord, at = now()) {
 }
 
 function markExpiredDevices(record: RoomRecord, at = now()) {
+  const previousPrimary = effectivePrimary(record.state.devices,record.state.settings.primaryPlayerDeviceId)?.deviceId;
   let changed = false;
   for (const device of Object.values(record.state.devices)) {
     if (device.online && at - device.lastSeenAt > OFFLINE_AFTER_MS) {
@@ -197,6 +199,9 @@ function markExpiredDevices(record: RoomRecord, at = now()) {
   }
 
   if (changed) {
+    if (previousPrimary !== effectivePrimary(record.state.devices,record.state.settings.primaryPlayerDeviceId)?.deviceId) {
+      for (const player of Object.values(record.state.devices)) delete player.playbackState;
+    }
     bumpRoomFact(record, at);
   }
 }
@@ -324,12 +329,18 @@ export function updateRoomSettings(input: {
   if (input.settings.playbackSpeedPxPerSecond !== undefined) {
     nextSettings.playbackSpeedPxPerSecond = input.settings.playbackSpeedPxPerSecond;
   }
-  if (input.settings.playerFontScale !== undefined) nextSettings.playerFontScale = input.settings.playerFontScale;
+  if (input.settings.playerFontScale !== undefined) {
+    if (!Number.isFinite(input.settings.playerFontScale) || input.settings.playerFontScale < 0.75) return null;
+    nextSettings.playerFontScale = input.settings.playerFontScale;
+  }
   if (input.settings.playerMirrorX !== undefined) nextSettings.playerMirrorX = input.settings.playerMirrorX;
   if (input.settings.playerMirrorY !== undefined) nextSettings.playerMirrorY = input.settings.playerMirrorY;
   if (input.settings.playerMarkersVisible !== undefined) nextSettings.playerMarkersVisible = input.settings.playerMarkersVisible;
   if (input.settings.primaryPlayerDeviceId !== undefined) {
     nextSettings.primaryPlayerDeviceId = input.settings.primaryPlayerDeviceId;
+  }
+  if (nextSettings.primaryPlayerDeviceId !== record.state.settings.primaryPlayerDeviceId) {
+    for (const device of Object.values(record.state.devices)) delete device.playbackState;
   }
   record.state.settings = withDefaultSettings(nextSettings);
   bumpRoomFact(record);
@@ -476,7 +487,8 @@ export function registerSession(input: {
   existing.online = true;
   existing.connectionState = "online";
   existing.lastSeenAt = at;
-  existing.lastClientSeq = Math.max(existing.lastClientSeq, input.clientSeq);
+  existing.lastClientSeq = previous.sessionId === input.sessionId ? Math.max(existing.lastClientSeq,input.clientSeq) : input.clientSeq;
+  delete existing.playbackState;
   if (input.role) {
     existing.role = input.role;
     if (input.role === "player" && !record.state.settings.primaryPlayerDeviceId) {
@@ -561,6 +573,25 @@ export function heartbeat(input: {
   return cloneState(record.state);
 }
 
+const draftLengths = new WeakMap<ScriptDraft, number>();
+function validReadingFields(state: RoomState, value: ScrollClock | PlaybackState, anchor: Anchor, report: boolean) {
+  if (!value || !anchor || !Number.isSafeInteger(value.draftRevision) || value.draftRevision !== state.scriptDraft.draftRevision) return false;
+  const version = state.currentScriptVersionId ?? `draft:${state.scriptDraft.draftRevision}`;
+  if (!['marker','heading','paragraph','speechSegment','textHash','renderLine'].includes(anchor.type)) return false;
+  if (value.scriptVersionId !== version || !['playing','paused','frozen'].includes(value.state) || !['fixedSpeed','manual','voiceFollow'].includes(value.controlMode) || !Number.isFinite(value.velocityPxPerSecond)) return false;
+  let length = draftLengths.get(state.scriptDraft);
+  if (length === undefined) { length = readingBlocks(parseMarkdown(state.scriptDraft.markdown)).reduce((n,b)=>n+b.text.length,0); draftLengths.set(state.scriptDraft,length); }
+  const start = anchor.textOffset, end = anchor.lineEndOffset;
+  if (start !== undefined && (!Number.isSafeInteger(start) || start < 0 || start >= Math.max(1,length))) return false;
+  if (end !== undefined && (start === undefined || !Number.isSafeInteger(end) || end < start || end > length)) return false;
+  if (report && anchor.type === 'renderLine' && (start === undefined || end === undefined || (length > 0 && end <= start))) return false;
+  return true;
+}
+function validPlaybackSource(state: RoomState, input: {deviceId:string;sessionId:string;clientSeq:number}, source: string) {
+  const device = state.devices[input.deviceId];
+  return device && device.sessionId === input.sessionId && source === input.deviceId && Number.isSafeInteger(input.clientSeq) && input.clientSeq > device.lastClientSeq;
+}
+
 export function setScrollClock(input: {
   roomCode: string;
   deviceId: string;
@@ -573,6 +604,10 @@ export function setScrollClock(input: {
     return null;
   }
 
+  if (!validPlaybackSource(record.state,input,input.scrollClock?.sourceDeviceId) || !validReadingFields(record.state,input.scrollClock as ScrollClock,input.scrollClock?.anchor,false) || !Number.isFinite(input.scrollClock.offsetPx) || input.scrollClock.offsetPx < 0) return null;
+  if (input.scrollClock.anchor.type === "marker" || input.scrollClock.anchor.textOffset !== undefined || input.scrollClock.anchor.type === "renderLine") {
+    record.state.voiceState = { ...record.state.voiceState, match: undefined, transcript: undefined };
+  }
   const at = now();
   const device = record.state.devices[input.deviceId] ?? createDevicePresence(input.deviceId, at);
   device.sessionId = input.sessionId;
@@ -604,6 +639,7 @@ export function reportPlaybackState(input: {
     return null;
   }
 
+  if (!validPlaybackSource(record.state,input,input.playbackState?.sourceDeviceId) || !validReadingFields(record.state,input.playbackState,input.playbackState?.currentAnchor,true) || !Number.isFinite(input.playbackState.positionPx) || input.playbackState.positionPx < 0 || input.playbackState.scrollClockId !== record.state.scrollClock?.scrollClockId) return null;
   const at = now();
   const device = record.state.devices[input.deviceId] ?? createDevicePresence(input.deviceId, at);
   device.sessionId = input.sessionId;
@@ -653,6 +689,7 @@ export function processVoiceTranscript(input: {
     return null;
   }
 
+  if (input.transcript.scrollClockId !== undefined && input.transcript.scrollClockId !== record.state.scrollClock?.scrollClockId) return null;
   const at = now();
   const normalizedText = input.transcript.text.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
   const transcript: VoiceTranscript = {
@@ -664,7 +701,7 @@ export function processVoiceTranscript(input: {
     scriptVersionId: record.state.currentScriptVersionId ?? "draft",
   });
   const primary = effectivePrimary(record.state.devices, record.state.settings.primaryPlayerDeviceId);
-  const currentOffset = primary?.playbackState?.currentAnchor.textOffset ?? record.state.voiceState.match?.targetTextOffset ?? 0;
+  const currentOffset = (primary?.playbackState?.scrollClockId === record.state.scrollClock?.scrollClockId ? primary?.playbackState?.currentAnchor.textOffset : record.state.scrollClock?.anchor.textOffset) ?? 0;
   const candidate = matchVoice(normalizedText, bundle, currentOffset, input.transcript.asrConfidence);
   const confidence = candidate?.confidence ?? 0;
   const match = {
@@ -704,7 +741,10 @@ export function disconnectSession(input: { roomCode: string; deviceId: string; s
   }
 
   const at = now();
+  const wasPrimary = effectivePrimary(record.state.devices,record.state.settings.primaryPlayerDeviceId)?.deviceId === device.deviceId;
   device.online = false;
+  delete device.playbackState;
+  if (wasPrimary) for (const player of Object.values(record.state.devices)) delete player.playbackState;
   device.connectionState = "offline";
   device.sessionId = null;
   device.lastSeenAt = at;

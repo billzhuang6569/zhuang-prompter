@@ -16,7 +16,7 @@ import { parseMarkdown } from "@/modules/script-engine";
 import { buildConvertedDirective, escapeDirectiveAttr, renumberMarkerDirectives } from "@/modules/script-engine/editing";
 import { makeRandomId } from "@/shared/id";
 import { copyTextToClipboard } from "@/shared/clipboard";
-import { effectivePrimary, readingAtY, readingY, offsetForReadingY } from "@/modules/playback-engine/reading-position";
+import { effectivePrimary, readingAtY, readingY, offsetForReadingY, releaseReadingMap } from "@/modules/playback-engine/reading-position";
 import { followVelocity } from "@/modules/voice-follow/match";
 import { ControlConsole } from "./control-console";
 import { RenderBundleView } from "./render-bundle-view";
@@ -52,8 +52,6 @@ function preferredRole(mode: RoomClientProps["mode"]): DeviceRole | null {
 
 const DEFAULT_SPEED = 68;
 const MIN_PLAYER_FONT_SCALE = 0.75;
-const MAX_PLAYER_FONT_SCALE = 2;
-const SCRIPT_VERSION_ID = "fixture_m1";
 
 function currentTime() {
   return Date.now();
@@ -104,7 +102,7 @@ function currentPlayerCenterAnchor(bundle?: RenderBundle): { anchor: Anchor; pro
   return position ? { anchor: { type: "renderLine", ...position }, progress: 0.5 } : undefined;
 }
 
-function playerOffsetForMarker(markerId: string) {
+function playerOffsetForMarker(markerId: string, offset: number, mirrorY: boolean) {
   const content = document.querySelector<HTMLElement>(".player-stage .teleprompter-content");
   if (!content) {
     return undefined;
@@ -115,7 +113,8 @@ function playerOffsetForMarker(markerId: string) {
   if (!markerElement) {
     return undefined;
   }
-  return Math.max(0, markerElement.offsetTop + markerElement.offsetHeight / 2 - window.innerHeight / 2);
+  const rect = markerElement.getBoundingClientRect();
+  return offsetForReadingY(offset, rect.top + rect.height / 2, window.innerHeight, mirrorY);
 }
 
 type VersionSummary = {
@@ -328,25 +327,19 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     }
     return parseMarkdown(markdown, { scriptVersionId: roomState?.currentScriptVersionId ?? "draft" });
   }, [markdown, roomState?.currentScriptVersionId]);
+  const renderedRevision = markdown === normalizeEditableDirectives(scriptDraft?.markdown ?? "") ? scriptDraft?.draftRevision ?? -1 : -1;
+  const scriptVersionId = roomState?.currentScriptVersionId ?? `draft:${renderedRevision}`;
+  const appliedClockRef = useRef("");
   const activeScrollClock = roomState?.scrollClock ?? null;
   const activeScrollClockKey = scrollClockRuntimeKey(activeScrollClock);
   const primaryPlayerDeviceId = roomState?.settings.primaryPlayerDeviceId ?? null;
   const primaryPlayerDevice = effectivePrimary(roomState?.devices ?? {}, primaryPlayerDeviceId);
-  const primaryPlaybackState = primaryPlayerDevice?.playbackState;
-  const latestRoomRef = useRef({ roomState, primaryPlaybackState });
-  useLayoutEffect(() => { latestRoomRef.current = { roomState, primaryPlaybackState }; }, [roomState, primaryPlaybackState]);
+  const primaryReport = primaryPlayerDevice?.playbackState;
+  const primaryPlaybackState = primaryReport?.draftRevision === scriptDraft?.draftRevision && primaryReport?.scrollClockId === roomState?.scrollClock?.scrollClockId
+    ? primaryReport : undefined;
+  const latestRoomRef = useRef({ roomState, primaryPlaybackState, renderedRevision, scriptVersionId });
+  useLayoutEffect(() => { latestRoomRef.current = { roomState, primaryPlaybackState, renderedRevision, scriptVersionId }; }, [roomState, primaryPlaybackState, renderedRevision, scriptVersionId]);
   const isPrimaryPlayer = mode === "player" && Boolean(joinResult?.deviceId && joinResult.deviceId === primaryPlayerDevice?.deviceId);
-  const primaryPlayerReportedPosition = primaryPlaybackState?.positionPx;
-  const hasPlayerSyncRatio = typeof primaryPlaybackState?.centerPositionRatio === "number";
-  const playbackCenterRatio =
-    typeof primaryPlaybackState?.centerPositionRatio === "number"
-      ? Math.max(0, Math.min(1, primaryPlaybackState.centerPositionRatio))
-      : typeof primaryPlaybackState?.positionPx === "number" &&
-          typeof primaryPlaybackState.viewportHeightPx === "number" &&
-          typeof primaryPlaybackState.contentHeightPx === "number" &&
-          primaryPlaybackState.contentHeightPx > primaryPlaybackState.viewportHeightPx
-        ? Math.max(0, Math.min(1, primaryPlaybackState.positionPx / (primaryPlaybackState.contentHeightPx - primaryPlaybackState.viewportHeightPx)))
-        : 0;
   const playerEntryLink = roomLinks.find((link) => link.kind === "lan") ?? roomLinks[0];
   // 记忆型入口：优先 .local 主机（好记），否则退回可扫码的局域网 IP。用于展示短链。
   const memorablePlayerLink = roomLinks.find((link) => link.kind === "mdns") ?? playerEntryLink;
@@ -567,7 +560,8 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     return () => window.clearTimeout(timer);
   }, [mode, scriptDraft, setMarkdown]);
 
-  async function saveDraft() {
+  async function saveDraft(finalMarkdown = markdown) {
+    if (finalMarkdown === normalizeEditableDirectives(scriptDraft?.markdown ?? "")) return true;
     if (!joinResult) {
       setSaveStatus("连接后再保存");
       return false;
@@ -577,7 +571,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       const response = await fetch(`/api/rooms/${roomCode}/script/draft`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ deviceId: joinResult.deviceId, markdown }),
+        body: JSON.stringify({ deviceId: joinResult.deviceId, markdown: finalMarkdown }),
       });
       if (!response.ok) {
         setSaveStatus("保存失败");
@@ -585,7 +579,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       }
       const data = (await response.json()) as { roomState: RoomState };
       setRoomState(data.roomState);
-      setSaveStatus("草稿已保存");
+      setSaveStatus("草稿已保存，请重新定位");
       return true;
     } catch {
       setSaveStatus("保存失败，请刷新重试");
@@ -757,12 +751,14 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     anchor = defaultAnchor,
     controlMode: ScrollClock["controlMode"] = "fixedSpeed",
   ) {
-    if (!joinResult) {
+    const rendered = latestRoomRef.current;
+    if (!joinResult || rendered.renderedRevision < 0) {
       return;
     }
     const scrollClock: Omit<ScrollClock, "roomRevision"> = {
       scrollClockId: makeRandomId("clk"),
-      scriptVersionId: SCRIPT_VERSION_ID,
+      scriptVersionId: rendered.scriptVersionId,
+      draftRevision: rendered.renderedRevision,
       state,
       controlMode,
       anchor,
@@ -859,7 +855,8 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     setVoiceAssistWanted(true);
     if (!restarting && mode === "control") {
       setVoiceAssistStatus("正在保存稿件");
-      await saveDraft();
+      if (!(await saveDraft())) { stopVoiceAssist("草稿保存失败"); return; }
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
     }
     if (!voiceAssistWantedRef.current) return;
     setVoiceAssistStatus("正在请求麦克风");
@@ -902,7 +899,8 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
         transcript: {
           segmentId: makeRandomId("seg"),
           sourceDeviceId: joinResult.deviceId,
-          scriptVersionId: roomState?.currentScriptVersionId ?? SCRIPT_VERSION_ID,
+          scriptVersionId: latestRoomRef.current.roomState?.currentScriptVersionId ?? `draft:${latestRoomRef.current.roomState?.scriptDraft.draftRevision}`,
+          scrollClockId: scrollClockRef.current?.scrollClockId,
           isFinal,
           text: transcriptText,
           asrConfidence: confidence || (isFinal ? 0.9 : 0.62),
@@ -941,6 +939,13 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     }
   }
 
+  useEffect(() => {
+    const clock = activeScrollClock;
+    if (clock && (clock.anchor.type === "renderLine" || clock.anchor.type === "marker") && speechRecognitionRef.current && voiceAssistWantedRef.current) void startVoiceAssist(true);
+    // A restart discards the recognition instance's queued pre-jump results.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeScrollClock?.scrollClockId]);
+
   function toggleVoiceAssist() {
     if (voiceAssistWantedRef.current) {
       stopVoiceAssist();
@@ -949,11 +954,15 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     void startVoiceAssist();
   }
 
-  function nudgePlayback(deltaPx: number) {
-    const offset = Math.max(0, currentControlOffset() + deltaPx);
+  function jumpPlayback(offset: number, anchor: Anchor = { type: "renderLine" }) {
+    const clock = latestRoomRef.current.roomState?.scrollClock;
     setPlaybackPositionPx(offset);
     playbackPositionRef.current = offset;
-    sendScrollClock("paused", offset, 0);
+    sendScrollClock(clock?.state ?? "paused", offset, clock?.velocityPxPerSecond ?? 0, anchor, clock?.controlMode ?? "fixedSpeed");
+  }
+
+  function nudgePlayback(deltaPx: number) {
+    jumpPlayback(Math.max(0, currentControlOffset() + deltaPx));
   }
 
   function endPlaybackOffset() {
@@ -980,51 +989,12 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     return Math.max(0, estimatedSegments * 360);
   }
 
-  function jumpToStart() {
-    setPlaybackPositionPx(0);
-    playbackPositionRef.current = 0;
-    sendScrollClock("paused", 0, 0, { type: "paragraph", paragraphIndex: 0 });
-  }
-
-  function jumpToEnd() {
-    const offset = endPlaybackOffset();
-    setPlaybackPositionPx(offset);
-    playbackPositionRef.current = offset;
-    sendScrollClock("paused", offset, 0);
-  }
-
-  function seekPlaybackByRatio(ratio: number, anchor?: Anchor) {
-    const boundedRatio = Math.max(0, Math.min(1, ratio));
-    const reportedState = primaryPlaybackState;
-    const maxOffset =
-      typeof reportedState?.contentHeightPx === "number" &&
-      typeof reportedState.viewportHeightPx === "number" &&
-      reportedState.contentHeightPx > reportedState.viewportHeightPx
-        ? reportedState.contentHeightPx - reportedState.viewportHeightPx
-        : endPlaybackOffset();
-    const offset = Math.max(0, Math.round(boundedRatio * maxOffset));
-    setPlaybackPositionPx(offset);
-    playbackPositionRef.current = offset;
-    sendScrollClock("paused", offset, 0, anchor);
-  }
-
-  function manuallyAdjustPlayer(deltaPx: number) {
-    const offset = Math.max(0, playbackPositionRef.current + deltaPx);
-    setPlaybackPositionPx(offset);
-    playbackPositionRef.current = offset;
-    sendScrollClock("paused", offset, 0);
-  }
-
+  function jumpToStart() { jumpPlayback(0); }
+  function jumpToEnd() { jumpPlayback(endPlaybackOffset()); }
+  function manuallyAdjustPlayer(deltaPx: number) { jumpPlayback(Math.max(0, playbackPositionRef.current + deltaPx)); }
   function jumpToMarker(markerId: string) {
-    const marker = bundle?.markerIndex.find((item) => item.markerId === markerId);
-    if (!marker) {
-      return;
-    }
-    const markerOrder = bundle?.markerIndex.findIndex((item) => item.markerId === markerId) ?? 0;
-    const targetOffset = Math.max(0, markerOrder * 420);
-    setPlaybackPositionPx(targetOffset);
-    playbackPositionRef.current = targetOffset;
-    sendScrollClock("paused", targetOffset, 0, { type: "marker", markerId, textHash: marker.textHash });
+    const marker = bundle?.markerIndex.find(item => item.markerId === markerId);
+    if (marker) jumpPlayback(currentControlOffset(), { type: "marker", markerId, textHash: marker.textHash });
   }
 
   function nextMarkerId() {
@@ -1252,168 +1222,72 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }, [mode]);
 
   const reportPlayerState = useCallback(
-    (clock: ScrollClock, positionPx: number) => {
-      if (!joinResult) {
+    (clock: ScrollClock | null, positionPx: number) => {
+      if (!joinResult || renderedRevision < 0) {
         return;
       }
       document.querySelector<HTMLElement>(".player-stage .teleprompter-content")?.style.setProperty("--playback-offset", `${positionPx}px`);
       const { currentAnchor, ...metrics } = playerDisplayMetrics(positionPx, bundle);
       lastReadingAnchorRef.current = currentAnchor;
       const playbackState: PlaybackState = {
-        scriptVersionId: clock.scriptVersionId,
-        state: clock.state,
+        scriptVersionId,
+        draftRevision: renderedRevision,
+        state: clock?.state ?? "paused",
         positionPx,
         ...metrics,
-        currentAnchor: currentAnchor ?? clock.anchor,
-        velocityPxPerSecond: clock.velocityPxPerSecond,
-        controlMode: clock.controlMode,
+        currentAnchor: currentAnchor ?? clock?.anchor ?? defaultAnchor,
+        velocityPxPerSecond: clock?.velocityPxPerSecond ?? 0,
+        controlMode: clock?.controlMode ?? "fixedSpeed",
         sourceDeviceId: joinResult.deviceId,
-        scrollClockId: clock.scrollClockId,
+        scrollClockId: clock?.scrollClockId,
         reportedAt: currentTime(),
       };
       const payload: PlaybackReportPayload = { playbackState };
       sendEvent("playback.reportState", payload);
     },
-    [bundle, joinResult, sendEvent],
+    [bundle, joinResult, sendEvent, renderedRevision, scriptVersionId, defaultAnchor],
   );
 
   useEffect(() => {
-    if (mode !== "player" || !joinResult || !bundle || activeScrollClockKey) {
-      return;
-    }
-
-    const animationFrame = window.requestAnimationFrame(() => {
-      const positionPx = playbackPositionRef.current;
-      document.querySelector<HTMLElement>(".player-stage .teleprompter-content")?.style.setProperty("--playback-offset", `${positionPx}px`);
-      const { currentAnchor, ...metrics } = playerDisplayMetrics(positionPx, bundle);
-      const playbackState: PlaybackState = {
-        scriptVersionId: roomState?.currentScriptVersionId ?? SCRIPT_VERSION_ID,
-        state: "paused",
-        positionPx,
-        ...metrics,
-        currentAnchor: currentAnchor ?? defaultAnchor,
-        velocityPxPerSecond: 0,
-        controlMode: "fixedSpeed",
-        sourceDeviceId: joinResult.deviceId,
-        reportedAt: currentTime(),
-      };
-      const payload: PlaybackReportPayload = { playbackState };
-      sendEvent("playback.reportState", payload);
-    });
-
-    return () => window.cancelAnimationFrame(animationFrame);
-  }, [
-    activeScrollClockKey,
-    bundle,
-    defaultAnchor,
-    joinResult,
-    mode,
-    playerFontScale,
-    playerMarkersVisible,
-    roomState?.currentScriptVersionId,
-    sendEvent,
-  ]);
-
-  useEffect(() => {
-    if (mode !== "player" || !activeScrollClockKey || !joinResult) {
-      return;
-    }
-
+    if (mode !== "player" || !joinResult || !bundle || renderedRevision < 0) return;
     const clock = scrollClockRef.current;
-    if (!clock) {
-      return;
-    }
-
-    if (clock.state === "paused") {
-      const frame = window.requestAnimationFrame(() => {
-        const markerOffset =
-          clock.anchor.type === "marker" && clock.anchor.markerId ? playerOffsetForMarker(clock.anchor.markerId) : undefined;
-        const content = document.querySelector<HTMLElement>(".player-stage .teleprompter-content");
-        const y = content && bundle && typeof clock.anchor.textOffset === "number"
-          ? readingY(content, bundle, { textOffset: clock.anchor.textOffset, lineFraction: (clock.anchor.lineFraction ?? 0) * (playerMirrorY ? -1 : 1) }) : undefined;
-        const nextOffset = y !== undefined ? offsetForReadingY(playbackPositionRef.current, y, window.innerHeight, playerMirrorY)
-          : typeof markerOffset === "number" ? markerOffset : clock.offsetPx;
-        setPlaybackPositionPx(nextOffset);
-        playbackPositionRef.current = nextOffset;
-        reportPlayerState(clock, nextOffset);
-      });
-      return () => window.cancelAnimationFrame(frame);
-    }
-
-    if (clock.state !== "playing") {
-      return;
-    }
-
+    if (clock && clock.draftRevision !== renderedRevision) return;
     let animationFrame = 0;
-    let lastReportedAt = 0;
+    let lastReportedAt = 0, lastLine = "";
     const tick = () => {
-      const position = positionFromScrollClock(clock);
+      const content = document.querySelector<HTMLElement>(".player-stage .teleprompter-content");
+      if (clock && appliedClockRef.current !== clock.scrollClockId) {
+        const markerOffset = clock.anchor.type === "marker" && clock.anchor.markerId ? playerOffsetForMarker(clock.anchor.markerId, playbackPositionRef.current, playerMirrorY) : undefined;
+        const y = content && bundle && typeof clock.anchor.textOffset === "number"
+          ? readingY(content, bundle, { textOffset: clock.anchor.textOffset }) : undefined;
+        const offset = y !== undefined ? offsetForReadingY(playbackPositionRef.current, y, window.innerHeight, playerMirrorY) : markerOffset ?? clock.offsetPx;
+        playbackPositionRef.current = offset;
+        scrollClockTimingRef.current = { key: activeScrollClockKey, offsetPx: offset, receivedAt: monotonicTime(), velocityPxPerSecond: clock.velocityPxPerSecond };
+        appliedClockRef.current = clock.scrollClockId;
+      }
+      const timing = scrollClockTimingRef.current;
+      const position = clock?.state === "playing" ? positionFromScrollClock(clock) : timing?.offsetPx ?? clock?.offsetPx ?? playbackPositionRef.current;
+      content?.style.setProperty("--playback-offset", `${position}px`);
       setPlaybackPositionPx(position);
       playbackPositionRef.current = position;
-      if (Date.now() - lastReportedAt >= 100) {
+      const anchor = currentPlayerCenterAnchor(bundle)?.anchor;
+      const line = `${anchor?.textOffset}:${anchor?.lineEndOffset}`;
+      if (line !== lastLine || Date.now()-lastReportedAt >= 100) {
+        lastLine = line;
         lastReportedAt = Date.now();
         reportPlayerState(clock, position);
       }
       animationFrame = window.requestAnimationFrame(tick);
     };
-
-    animationFrame = window.requestAnimationFrame(tick);
-
-    return () => window.cancelAnimationFrame(animationFrame);
-  }, [activeScrollClockKey, bundle, joinResult, mode, playerMirrorY, reportPlayerState]);
-
-  useEffect(() => {
-    if (mode !== "control" || !activeScrollClockKey || hasPlayerSyncRatio) {
-      return;
-    }
-
-    const scrollEl = controlPreviewScrollRef.current;
-    const clock = scrollClockRef.current;
-    if (!scrollEl || !clock) {
-      return;
-    }
-
-    if (clock.state !== "playing") {
-      const offset = Math.max(0, clock.offsetPx);
-      scrollEl.scrollTop = offset;
-      setPlaybackPositionPx(offset);
-      playbackPositionRef.current = offset;
-      return;
-    }
-
-    let animationFrame = 0;
-    const tick = () => {
-      const position = positionFromScrollClock(clock);
-      scrollEl.scrollTop = position;
-      setPlaybackPositionPx(position);
-      playbackPositionRef.current = position;
-      animationFrame = window.requestAnimationFrame(tick);
-    };
-
     animationFrame = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [activeScrollClockKey, hasPlayerSyncRatio, mode]);
-
-  useEffect(() => {
-    if (mode !== "control" || activeScrollClockKey || hasPlayerSyncRatio || typeof primaryPlayerReportedPosition !== "number") {
-      return;
-    }
-    const offset = Math.max(0, primaryPlayerReportedPosition);
-    const animationFrame = window.requestAnimationFrame(() => {
-      const scrollEl = controlPreviewScrollRef.current;
-      if (scrollEl && Math.abs(scrollEl.scrollTop - offset) > 1) {
-        scrollEl.scrollTop = offset;
-      }
-      setPlaybackPositionPx(offset);
-      playbackPositionRef.current = offset;
-    });
-    return () => window.cancelAnimationFrame(animationFrame);
-  }, [activeScrollClockKey, hasPlayerSyncRatio, mode, primaryPlayerReportedPosition]);
+  }, [activeScrollClockKey, bundle, joinResult, mode, playerMirrorY, reportPlayerState, renderedRevision]);
 
   useEffect(() => {
     // Only the primary display knows the actual layout and drives the feedback loop.
     if (!isPrimaryPlayer || !roomState?.voiceState.active || !bundle) return;
     const match = roomState.voiceState.match;
+    if (!match) return;
     const adjust = () => {
       const clock = scrollClockRef.current;
       if (!clock || clock.state !== "playing") return; // Manual pause always wins.
@@ -1449,6 +1323,20 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPrimaryPlayer, mode, primaryPlaybackState?.reportedAt, primaryPlaybackState?.sourceDeviceId, activeScrollClockKey, bundle, playerMirrorY]);
 
+  useEffect(() => {
+    if (mode !== "player") return;
+    const content = document.querySelector<HTMLElement>(".player-stage .teleprompter-content");
+    return () => { if (content) releaseReadingMap(content); };
+  }, [mode, bundle]);
+
+  useLayoutEffect(() => {
+    lastReadingAnchorRef.current = undefined;
+    if (mode !== "player" || renderedRevision < 0) return;
+    playbackPositionRef.current = 0;
+    appliedClockRef.current = "";
+    document.querySelector<HTMLElement>(".player-stage .teleprompter-content")?.style.setProperty("--playback-offset", "0px");
+  }, [renderedRevision, mode]);
+
   useLayoutEffect(() => {
     if (mode !== "player" || !bundle) return;
     const content = document.querySelector<HTMLElement>(".player-stage .teleprompter-content");
@@ -1465,13 +1353,15 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
       const timing = scrollClockTimingRef.current;
       if (timing) { timing.offsetPx = position; timing.receivedAt = monotonicTime(); }
       const clock = scrollClockRef.current;
-      if (clock) reportPlayerState(clock, position);
+      reportPlayerState(clock, position);
     };
+    preserveReadingPosition();
     const observer = new ResizeObserver(preserveReadingPosition);
     observer.observe(content);
     window.addEventListener("resize", preserveReadingPosition);
-    return () => { observer.disconnect(); window.removeEventListener("resize", preserveReadingPosition); };
-  }, [bundle, mode, playerMirrorY, reportPlayerState]);
+    document.fonts?.addEventListener("loadingdone", preserveReadingPosition);
+    return () => { observer.disconnect(); window.removeEventListener("resize", preserveReadingPosition); document.fonts?.removeEventListener("loadingdone", preserveReadingPosition); };
+  }, [bundle, mode, playerFontScale, playerMirrorY, reportPlayerState]);
 
   useEffect(() => {
     return () => {
@@ -1617,11 +1507,12 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
   }
 
   function changePlayerFontScale(delta: number) {
-    setPlayerFontScale((value) => Math.min(MAX_PLAYER_FONT_SCALE, Math.max(MIN_PLAYER_FONT_SCALE, Number((value + delta).toFixed(2)))));
+    setPlayerFontScale((value) => Math.max(MIN_PLAYER_FONT_SCALE, Number((value + delta).toFixed(2))));
   }
 
   function setBoundedPlayerFontScale(nextScale: number) {
-    setPlayerFontScale(Math.min(MAX_PLAYER_FONT_SCALE, Math.max(MIN_PLAYER_FONT_SCALE, Number(nextScale.toFixed(2)))));
+    if (!Number.isFinite(nextScale) || nextScale <= 0) return;
+    setPlayerFontScale(Math.max(MIN_PLAYER_FONT_SCALE, Number(nextScale.toFixed(2))));
   }
 
   async function setPrimaryPlayer() {
@@ -1708,7 +1599,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           setVersionMessage={setVersionMessage}
           bundle={bundle}
           versions={versions}
-          playbackCenterRatio={playbackCenterRatio}
+          roomMarkdown={scriptDraft ? normalizeEditableDirectives(scriptDraft.markdown) : undefined}
           readingAnchor={primaryPlaybackState?.currentAnchor}
           speed={speed}
           isPlaying={isControlPlaying}
@@ -1725,7 +1616,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           markdownEditorRef={markdownEditorRef}
           onInvite={() => void invitePlayer()}
           onOpenQr={setExpandedQrLink}
-          onSaveDraft={() => void saveDraft()}
+          onSaveDraft={saveDraft}
           onSaveVersion={() => void saveVersion()}
           onRestoreVersion={(versionId) => void restoreVersion(versionId)}
           onTogglePlay={() => {
@@ -1744,7 +1635,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
           onPlayerMirrorXChange={setPlayerMirrorX}
           onPlayerMirrorYChange={setPlayerMirrorY}
           onToggleVoiceAssist={toggleVoiceAssist}
-          onGuideSeekRatio={seekPlaybackByRatio}
+          onSeekAnchor={(anchor) => jumpPlayback(currentControlOffset(), anchor)}
           onBeginMarkerEdit={beginMarkerEdit}
           onBeginCommentEdit={beginCommentEdit}
           pendingEditorAction={pendingEditorAction}
@@ -1959,7 +1850,7 @@ export function RoomClient({ roomCode, mode }: RoomClientProps) {
                 <section className="markdown-source-pane" aria-label="Markdown 原文编辑">
                   <div className="pane-heading">
                     <strong>文稿编辑</strong>
-                    <button className="text-save-button" type="button" onClick={saveDraft}>
+                    <button className="text-save-button" type="button" onClick={() => void saveDraft()}>
                       保存草稿
                     </button>
                   </div>

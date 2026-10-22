@@ -52,7 +52,8 @@ async function main() {
 
   const scrollClock = {
     scrollClockId: `clk_${crypto.randomUUID()}`,
-    scriptVersionId: "draft",
+    scriptVersionId: room.roomState.currentScriptVersionId ?? `draft:${room.roomState.scriptDraft.draftRevision}`,
+    draftRevision: room.roomState.scriptDraft.draftRevision,
     state: "playing",
     controlMode: "fixedSpeed",
     anchor: { type: "marker", markerId: "M001" },
