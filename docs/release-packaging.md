@@ -239,6 +239,6 @@ Run `npm run install:mac -- --dry-run` to inspect the destination, then `npm run
 
 ## Reading synchronization
 
-The primary display reports a normalized spoken-text character offset and a fraction of the current line at its viewport center. The controller maps that position to its editor DOM; guide dragging sends the same semantic anchor back. Font or viewport reflow preserves that anchor. Do not substitute total-height ratios or fixed paragraph heights. Voice matching supplies text positions; only the effective primary display adjusts the clock using actual layout. A manual pause must never be resumed by ASR callbacks.
+The primary display reports the normalized spoken-text range of the visual line at its viewport center (`textOffset`..`lineEndOffset`, plus the count of non-spoken graphemes at each edge). The controller highlights that range in its own editor DOM and draws the guide at the highlighted line with the most graphemes. Clicking a character in Done mode sends the same semantic anchor back; every jump keeps the current play state and speed. Font or viewport reflow preserves that anchor. Do not substitute total-height ratios or fixed paragraph heights. Voice matching supplies text positions; only the effective primary display adjusts the clock using actual layout. A manual pause must never be resumed by ASR callbacks.
 
 Players can bookmark `http://<control-machine>:<port>/join` and enter a room number. This remains a LAN service; the computer address may change when switching networks.
