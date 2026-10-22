@@ -43,6 +43,8 @@ Do not synchronize every scroll frame. The room synchronizes state, config, vers
    Defines M0-M5 development sequence.
 10. `10_cross_review_gate.md`  
    Records the cross-review result and the current development gate.
+11. [M6 reading highlight and edit/done plan](./11_m6_reading_highlight_plan.md)
+   Proposed next milestone: exact center-line character highlighting, read-only click-to-seek, and font-scale limit removal. Pending review; implementation tracked in Issue #2.
 
 ## Open-Gate Rules Before Product Coding
 
