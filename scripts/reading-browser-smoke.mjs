@@ -8,13 +8,14 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright')
 const base = process.env.TEST_BASE_URL ?? 'http://localhost:3107';
 const dir = await mkdtemp(join(tmpdir(), 'reading-smoke-'));
 await build({ stdin: { contents: `export * from './src/modules/playback-engine/reading-position'; export {parseMarkdown} from './src/modules/script-engine/parse';`, resolveDir: process.cwd() }, bundle: true, format: 'iife', globalName: 'ReadingTest', outfile: join(dir, 'reading.js') });
-const browser = await chromium.launch({ channel: 'chrome', headless: true });
+const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL ?? 'chrome', headless: true });
 try {
   const context = await browser.newContext();
   const player = await context.newPage();
   const control = await context.newPage();
   const errors = [];
   for (const page of [player, control]) page.on('pageerror', e => errors.push(e.message));
+  console.log('Browser', browser.version());
   const room = await (await fetch(`${base}/api/rooms`, {method:'POST'})).json();
   const markdown = '# 开场\n\n今天我们讲一个很多人都好奇的问题。\n这是加了换行的第二行。\n\n::notes{text="这条备注只在控制端显示"}\n\n' + Array.from({length:12}, (_,i)=>`第${i+1}段文字。这一段的长度不相同。${'欢迎大家仔细阅读这里的文字。'.repeat(i%4+1)}`).join('\n\n');
   await fetch(`${base}/api/rooms/${room.roomCode}/script/draft`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({deviceId:room.deviceId,markdown})});
@@ -67,11 +68,15 @@ try {
     return units.filter(u=>u.rect.width>0 && Math.min(u.rect.bottom,nearest.rect.bottom)-Math.max(u.rect.top,nearest.rect.top)>Math.min(u.rect.height,nearest.rect.height)*.35).map(u=>({text:u.text,start:u.start,end:u.end}));
   };
   const assertHighlight = async () => {
-    const expected=await player.evaluate(measure,{selector:'.teleprompter-content'});
     await control.waitForFunction(()=>document.querySelectorAll('.nike-reading-highlight span').length>0);
-    await new Promise(resolve=>setTimeout(resolve,150));
-    const actual=await control.evaluate(measure,{selector:'.nike-rich-editor-content',highlight:true});
+    // The player may still be settling (fonts, reload) — both sides must converge, not just agree once.
     const spoken=values=>values.filter(u=>u.end>u.start);
+    let expected, actual, settledAt=Date.now()+4000;
+    do {
+      await new Promise(resolve=>setTimeout(resolve,150));
+      expected=await player.evaluate(measure,{selector:'.teleprompter-content'});
+      actual=await control.evaluate(measure,{selector:'.nike-rich-editor-content',highlight:true});
+    } while(JSON.stringify(spoken(actual))!==JSON.stringify(spoken(expected)) && Date.now()<settledAt);
     assert.deepEqual(spoken(actual),spoken(expected),'independent player center and controller overlay spoken characters');
     if(JSON.stringify(actual)!==JSON.stringify(expected)) {
       console.log('PHASE_1_EDGE_LIMIT '+JSON.stringify({expected,actual}));
@@ -142,6 +147,8 @@ try {
   send('playback.setScrollClock',{scrollClock:runningClock});
   await waitState(s=>s?.scrollClock?.scrollClockId===runningClock.scrollClockId);
   const observedStart=observedClocks.length;
+  // Click-to-seek is accepted once the controller holds a report for the current clock (highlight visible).
+  await control.waitForFunction(()=>document.querySelectorAll('.nike-reading-highlight span').length>0);
   const beforeClick={...state.scrollClock};
   const target=await control.evaluate(()=>{
     const root=document.querySelector('.nike-rich-editor-content');
